@@ -10,18 +10,22 @@ from streamlit_calendar import calendar
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="NARRATIA | Sistema Judicial", layout="wide", initial_sidebar_state="expanded")
 
-# --- FUNCIONES ---
+# --- FUNCIONES PRINCIPALES ---
 def obtener_saludo():
     hora = datetime.now().hour
     return "Buenos días" if 0 <= hora < 12 else "Buenas tardes"
 
 def get_logo_src():
-    # Busca el logo sin importar si le pusiste .png o .jpg
+    # Usamos la ruta absoluta para que la nube de Streamlit lo encuentre obligatoriamente
+    ruta_base = os.path.dirname(os.path.abspath(__file__))
+    
     for ext in ['png', 'jpg', 'jpeg', 'PNG', 'JPG']:
-        if os.path.exists(f"logo.{ext}"):
-            with open(f"logo.{ext}", "rb") as f:
+        ruta_logo = os.path.join(ruta_base, f"logo.{ext}")
+        if os.path.exists(ruta_logo):
+            with open(ruta_logo, "rb") as f:
                 return f"data:image/{ext.lower()};base64,{base64.b64encode(f.read()).decode()}"
-    return "https://img.icons8.com/color/48/user.png" # Ícono por defecto si no encuentra el archivo
+                
+    return "https://img.icons8.com/color/48/user.png" # Ícono por defecto
 
 LOGO_URL = get_logo_src()
 
@@ -71,7 +75,9 @@ if not st.session_state['logged_in']:
     c1, c2, c3 = st.columns([1.5, 2, 1.5])
     with c2:
         st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-        st.markdown("<h1 style='color:#172b4d; margin-bottom: 5px;'>NARRATIA</h1>", unsafe_allow_html=True)
+        # Aquí también usamos el logo para la pantalla de inicio
+        st.markdown(f"<img src='{LOGO_URL}' style='width: 100px; margin-bottom: 15px;'>", unsafe_allow_html=True)
+        st.markdown("<h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px;'>NARRATIA</h1>", unsafe_allow_html=True)
         st.markdown("<p style='color:#6b778c; margin-bottom: 30px;'>Inicia sesión en tu espacio de trabajo</p>", unsafe_allow_html=True)
         with st.form("login_form"):
             user = st.text_input("Usuario")
@@ -100,7 +106,6 @@ if 'modo_edicion' not in st.session_state: st.session_state['modo_edicion'] = Fa
 if 'creando_tarea' not in st.session_state: st.session_state['creando_tarea'] = False
 if 'editando_tarea' not in st.session_state: st.session_state['editando_tarea'] = None
 
-# Estabilidad de las bases de datos de tareas
 if not os.path.exists(ARCHIVO_TAREAS):
     pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(ARCHIVO_TAREAS, index=False)
 else:
@@ -212,7 +217,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 with c1:
                     st.markdown(f"""
                     <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                        <img src='{LOGO_URL}' style='width: 22px; height: 22px; margin-right: 8px; border-radius: 4px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                        <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
                         <strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong>
                         <span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span>
                     </div>
@@ -406,7 +411,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 with col_top_left:
                                     st.markdown(f"""
                                     <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                                        <img src='{LOGO_URL}' style='width: 22px; height: 22px; margin-right: 8px; border-radius: 4px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                                        <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
                                         <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{row_t['Creador']}</span>
                                         <span style='font-size:12px; color:{border_prio_color}; font-weight:bold; margin-left:8px;'>[{row_t.get('Prioridad', 'Media')}]</span>
                                     </div>
