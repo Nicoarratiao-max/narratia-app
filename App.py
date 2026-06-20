@@ -62,8 +62,14 @@ if 'modo_edicion' not in st.session_state: st.session_state['modo_edicion'] = Fa
 if 'creando_tarea' not in st.session_state: st.session_state['creando_tarea'] = False
 if 'editando_tarea' not in st.session_state: st.session_state['editando_tarea'] = None
 
-if not os.path.exists(ARCHIVO_TAREAS):
-    pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios']).to_csv(ARCHIVO_TAREAS, index=False)
+# --- PARCHE DE ACTUALIZACIÓN (Si el CSV viejo no tiene la columna 'Prioridad', la agrega) ---
+if os.path.exists(ARCHIVO_TAREAS):
+    df_t_check = pd.read_csv(ARCHIVO_TAREAS)
+    if 'Prioridad' not in df_t_check.columns:
+        df_t_check['Prioridad'] = 'Media'
+        df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
+else:
+    pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(ARCHIVO_TAREAS, index=False)
 
 # --- FUNCIONES ---
 def procesar_ojv_completo(archivo):
@@ -148,7 +154,9 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
             try:
                 d_obj = datetime.strptime(str(r['Fecha_Vencimiento']), "%d/%m/%Y")
                 d_str = d_obj.strftime("%Y-%m-%d")
-                eventos_calendario.append({"title": f"{r['Titulo']}", "start": d_str, "backgroundColor": "transparent", "textColor": "#172b4d", "borderColor": "transparent"})
+                # Color del evento según prioridad
+                bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
+                eventos_calendario.append({"title": f"{r['Titulo']}", "start": d_str, "backgroundColor": bg_color, "textColor": "white", "borderColor": bg_color})
             except: pass
                 
     opciones_calendario = {"initialView": "dayGridMonth", "locale": "es", "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"}}
@@ -172,8 +180,11 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                     if tareas_dia.empty: st.write("Sin tareas para este día.")
                     else:
                         for _, td in tareas_dia.iterrows():
+                            # El punto muestra el estado de la tarea
                             color_dot = "#ffc400" if td['Estado'] == 'En progreso' else ("#57a15a" if td['Estado'] == 'Aprobada' else "#ff5630")
-                            st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
+                            # Añadimos un pequeño tag de prioridad
+                            color_prio_text = "#ff5630" if td.get('Prioridad') == 'Alta' else ("#ffc400" if td.get('Prioridad') == 'Media' else "#57a15a")
+                            st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong> <span style='font-size:10px; color:{color_prio_text}; font-weight:bold;'>({td.get('Prioridad', 'Media')})</span><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
                             if st.button("Ir al expediente ➔", key=f"cal_ir_{td['ID_Tarea']}"):
                                 st.session_state['causa_seleccionada'] = td['ROL']; st.session_state['menu_radio'] = "💼 Causas"; st.rerun()
                             st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
@@ -188,9 +199,13 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
         st.write("Lista de todas las tareas generadas en tus expedientes:")
         for idx, row in df_t.iterrows():
             with st.container(border=True):
+                # MEJORA: COLOR POR PRIORIDAD (Línea superior del recuadro)
+                prio_color = "#ff5630" if row.get('Prioridad') == "Alta" else ("#ffc400" if row.get('Prioridad') == "Media" else "#57a15a")
+                st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
+                
                 c1, c2, c3 = st.columns([4, 2, 1])
                 with c1:
-                    st.markdown(f"<strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong>", unsafe_allow_html=True)
+                    st.markdown(f"<strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong> <span style='font-size:12px; color:{prio_color}; font-weight:bold;'>[{row.get('Prioridad', 'Media')}]</span>", unsafe_allow_html=True)
                     st.markdown(f"<span style='color:#6b778c;'>{row['Descripcion'][:60]}...</span>", unsafe_allow_html=True)
                 with c2:
                     color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
@@ -208,10 +223,19 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         
         if st.session_state['cliente_seleccionado'] is None:
             st.title("👥 Gestión de Clientes")
+            st.markdown("Haz **clic en un cliente** para acceder a su ficha y ver sus causas entrecruzadas:")
             clientes_unicos = df_causas['Cliente'].dropna().unique().tolist()
-            cliente_elegido = st.selectbox("🔍 Buscar Ficha de Cliente:", [""] + clientes_unicos)
-            if cliente_elegido != "" and st.button("Abrir Ficha"):
-                st.session_state['cliente_seleccionado'] = cliente_elegido; st.rerun()
+            
+            # MEJORA: CLICK EN CLIENTE MEDIANTE BOTONES EN GRILLA
+            col1, col2, col3 = st.columns(3)
+            for idx, cliente in enumerate(clientes_unicos):
+                col = [col1, col2, col3][idx % 3]
+                if col.button(f"👤 {cliente}", key=f"btn_cli_{idx}", use_container_width=True):
+                    st.session_state['cliente_seleccionado'] = cliente
+                    st.rerun()
+            
+            st.write("---")
+            st.markdown("### Listado General (Datos)")
             st.dataframe(df_causas[['Cliente', 'RUT', 'Teléfono']].drop_duplicates(subset=['Cliente']).dropna(subset=['Cliente']), use_container_width=True)
         else:
             cli_actual = st.session_state['cliente_seleccionado']
@@ -359,6 +383,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 st.markdown("#### ✨ Crear Nueva Tarea")
                                 nuevo_titulo = st.text_input("Nomenclatura o Título")
                                 nueva_desc = st.text_area("Descripción detallada")
+                                # MEJORA: PRIORIDAD
+                                prio = st.selectbox("Prioridad", ["Alta", "Media", "Baja"], index=1)
                                 nueva_fecha = st.date_input("Fecha de vencimiento")
                                 c_guardar, c_cancelar = st.columns([1, 5])
                                 if c_guardar.form_submit_button("💾 Guardar"):
@@ -366,7 +392,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     nueva_t = {
                                         'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': usuario_actual.capitalize(),
                                         'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 'Fecha_Vencimiento': nueva_fecha.strftime("%d/%m/%Y"),
-                                        'Titulo': nuevo_titulo, 'Descripcion': nueva_desc, 'Estado': 'En progreso', 'Comentarios': '[]'
+                                        'Titulo': nuevo_titulo, 'Descripcion': nueva_desc, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': prio
                                     }
                                     df_t = pd.concat([df_t, pd.DataFrame([nueva_t])], ignore_index=True)
                                     df_t.to_csv(ARCHIVO_TAREAS, index=False); st.session_state['creando_tarea'] = False; st.rerun()
@@ -379,9 +405,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         st.write("<br>", unsafe_allow_html=True)
                         for idx_t, row_t in tareas_rol.iterrows():
                             with st.container(border=True):
+                                # MEJORA: COLOR POR PRIORIDAD (Línea superior del recuadro)
+                                prio_color = "#ff5630" if row_t.get('Prioridad') == "Alta" else ("#ffc400" if row_t.get('Prioridad') == "Media" else "#57a15a")
+                                st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
+                                
                                 col_top_left, col_top_right = st.columns([3, 1.8])
                                 with col_top_left:
-                                    st.markdown(f"<span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{row_t['Creador']}</span>", unsafe_allow_html=True)
+                                    st.markdown(f"<span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{row_t['Creador']}</span> <span style='font-size:12px; color:{prio_color}; font-weight:bold;'>[{row_t.get('Prioridad', 'Media')}]</span>", unsafe_allow_html=True)
                                     st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado por: {row_t['Creador']} • N° tarea {row_t['ID_Tarea']}</span>", unsafe_allow_html=True)
                                     if st.session_state.get('editando_tarea') == row_t['ID_Tarea']:
                                         with st.form(key=f"form_fecha_{row_t['ID_Tarea']}"):
@@ -435,12 +465,19 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 <div style="padding: 15px 4px 5px 4px;">{comentarios_html}</div>
                                 """, unsafe_allow_html=True)
 
+                                # MEJORA: ADJUNTOS EN COMENTARIOS
+                                archivo_subido = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"file_{row_t['ID_Tarea']}", label_visibility="collapsed")
+                                
                                 with st.form(key=f"form_coment_{row_t['ID_Tarea']}", clear_on_submit=True):
                                     col_inp, col_snd = st.columns([8, 1])
                                     nuevo_comentario = col_inp.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Agregar un comentario...")
                                     if col_snd.form_submit_button("Enviar"):
-                                        if nuevo_comentario.strip():
-                                            comentarios.append({"autor": usuario_actual.capitalize(), "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": nuevo_comentario.strip()})
+                                        if nuevo_comentario.strip() or archivo_subido:
+                                            texto_final = nuevo_comentario.strip()
+                                            if archivo_subido:
+                                                texto_final += f" <br><em>[📎 Archivo adjunto: {archivo_subido.name}]</em>"
+                                            
+                                            comentarios.append({"autor": usuario_actual.capitalize(), "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": texto_final})
                                             df_tareas.at[idx_t, 'Comentarios'] = json.dumps(comentarios)
                                             df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
 
