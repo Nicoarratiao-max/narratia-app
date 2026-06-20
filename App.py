@@ -3,11 +3,52 @@ import pandas as pd
 import os
 import json
 import uuid
+import base64
 from datetime import datetime
 from streamlit_calendar import calendar
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="NARRATIA | Sistema Judicial", layout="wide", initial_sidebar_state="expanded")
+
+# --- FUNCIONES ---
+def obtener_saludo():
+    hora = datetime.now().hour
+    return "Buenos días" if 0 <= hora < 12 else "Buenas tardes"
+
+def get_logo_src():
+    # Busca el logo sin importar si le pusiste .png o .jpg
+    for ext in ['png', 'jpg', 'jpeg', 'PNG', 'JPG']:
+        if os.path.exists(f"logo.{ext}"):
+            with open(f"logo.{ext}", "rb") as f:
+                return f"data:image/{ext.lower()};base64,{base64.b64encode(f.read()).decode()}"
+    return "https://img.icons8.com/color/48/user.png" # Ícono por defecto si no encuentra el archivo
+
+LOGO_URL = get_logo_src()
+
+def procesar_ojv_completo(archivo):
+    diccionario_hojas = pd.read_excel(archivo, sheet_name=None)
+    mapa = {'ROL': ['ROL', 'RIT', 'Rol', 'Rit'], 'TRIBUNAL': ['TRIBUNAL', 'Tribunal', 'Juzgado', 'Corte'], 'CARATULADO': ['CARATULA', 'Carátula', 'Caratulado', 'Causa']}
+    lista_final = []
+    for nombre_hoja, df_hoja in diccionario_hojas.items():
+        df_pro = pd.DataFrame()
+        for col_ideal, posibles in mapa.items():
+            for p in posibles:
+                if p in df_hoja.columns:
+                    df_pro[col_ideal] = df_hoja[p]; break
+        if not df_pro.empty and 'ROL' in df_pro.columns:
+            df_pro['Origen_OJV'] = nombre_hoja
+            lista_final.append(df_pro)
+    if lista_final:
+        df_consolidado = pd.concat(lista_final, ignore_index=True).dropna(subset=['ROL'])
+        df_consolidado['Estado'] = "Pendiente"
+        df_consolidado['Prioridad'] = "Normal"
+        df_consolidado['Tipo_Negocio'] = "Grupo Defensa"
+        cols_extra = ['Servicio', 'Teléfono', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']
+        for col in cols_extra:
+            if col not in df_consolidado.columns: df_consolidado[col] = "--"
+        df_consolidado.to_csv(ARCHIVO_BD, index=False)
+        return df_consolidado
+    return pd.DataFrame()
 
 # --- SISTEMA DE AUTENTICACIÓN (LOGIN) ---
 USUARIOS = {
@@ -70,36 +111,6 @@ else:
 
 if not os.path.exists(ARCHIVO_BD):
     pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']).to_csv(ARCHIVO_BD, index=False)
-
-# --- FUNCIONES ---
-def obtener_saludo():
-    hora = datetime.now().hour
-    return "Buenos días" if 0 <= hora < 12 else "Buenas tardes"
-
-def procesar_ojv_completo(archivo):
-    diccionario_hojas = pd.read_excel(archivo, sheet_name=None)
-    mapa = {'ROL': ['ROL', 'RIT', 'Rol', 'Rit'], 'TRIBUNAL': ['TRIBUNAL', 'Tribunal', 'Juzgado', 'Corte'], 'CARATULADO': ['CARATULA', 'Carátula', 'Caratulado', 'Causa']}
-    lista_final = []
-    for nombre_hoja, df_hoja in diccionario_hojas.items():
-        df_pro = pd.DataFrame()
-        for col_ideal, posibles in mapa.items():
-            for p in posibles:
-                if p in df_hoja.columns:
-                    df_pro[col_ideal] = df_hoja[p]; break
-        if not df_pro.empty and 'ROL' in df_pro.columns:
-            df_pro['Origen_OJV'] = nombre_hoja
-            lista_final.append(df_pro)
-    if lista_final:
-        df_consolidado = pd.concat(lista_final, ignore_index=True).dropna(subset=['ROL'])
-        df_consolidado['Estado'] = "Pendiente"
-        df_consolidado['Prioridad'] = "Normal"
-        df_consolidado['Tipo_Negocio'] = "Grupo Defensa"
-        cols_extra = ['Servicio', 'Teléfono', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']
-        for col in cols_extra:
-            if col not in df_consolidado.columns: df_consolidado[col] = "--"
-        df_consolidado.to_csv(ARCHIVO_BD, index=False)
-        return df_consolidado
-    return pd.DataFrame()
 
 # --- CSS DE ALTA FIDELIDAD ---
 st.markdown("""
@@ -201,7 +212,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 with c1:
                     st.markdown(f"""
                     <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                        <img src='logo.png' style='width: 22px; height: 22px; margin-right: 8px; border-radius: 4px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                        <img src='{LOGO_URL}' style='width: 22px; height: 22px; margin-right: 8px; border-radius: 4px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
                         <strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong>
                         <span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span>
                     </div>
@@ -395,7 +406,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 with col_top_left:
                                     st.markdown(f"""
                                     <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                                        <img src='logo.png' style='width: 22px; height: 22px; margin-right: 8px; border-radius: 4px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                                        <img src='{LOGO_URL}' style='width: 22px; height: 22px; margin-right: 8px; border-radius: 4px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
                                         <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{row_t['Creador']}</span>
                                         <span style='font-size:12px; color:{border_prio_color}; font-weight:bold; margin-left:8px;'>[{row_t.get('Prioridad', 'Media')}]</span>
                                     </div>
@@ -446,7 +457,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 <div style="padding: 15px 4px 5px 4px;">{comentarios_html}</div>
                                 """, unsafe_allow_html=True)
                                 
-                                # Adjunto de archivos en comentarios
                                 archivo_adjunto_coment = st.file_uploader("📎 Adjuntar documento al comentario", key=f"file_uploader_{row_t['ID_Tarea']}", label_visibility="collapsed")
                                 with st.form(key=f"form_coment_{row_t['ID_Tarea']}", clear_on_submit=True):
                                     col_inp, col_snd = st.columns([8, 1])
