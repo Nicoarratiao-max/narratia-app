@@ -80,6 +80,12 @@ if not st.session_state['logged_in']:
             box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
         }
         p, label, span, div { color: #172b4d !important; }
+        /* Botón de login fuerte */
+        [data-testid="stFormSubmitButton"] button {
+            background-color: #0052cc !important;
+            color: white !important;
+            border: none !important;
+        }
     </style>
     """, unsafe_allow_html=True)
     
@@ -98,7 +104,7 @@ if not st.session_state['logged_in']:
             user = st.text_input("Usuario")
             pwd = st.text_input("Contraseña", type="password")
             st.write("") 
-            submit = st.form_submit_button("Ingresar al Sistema", use_container_width=True, type="primary")
+            submit = st.form_submit_button("Ingresar al Sistema", use_container_width=True)
             
             if submit:
                 if user in USUARIOS and USUARIOS[user] == pwd:
@@ -145,6 +151,17 @@ st.markdown("""
     
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
     
+    /* FORZAR BOTONES VISIBLES SIEMPRE */
+    [data-testid="stButton"] button {
+        background-color: #ffffff !important;
+        color: #172b4d !important;
+        border: 1px solid #e0e4e8 !important;
+    }
+    [data-testid="stButton"] button:hover {
+        border-color: #0052cc !important;
+        color: #0052cc !important;
+    }
+    
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
     .stAppDeployButton {display:none;}
     
@@ -166,7 +183,6 @@ st.markdown("""
 
 # --- MENÚ LATERAL ---
 with st.sidebar:
-    # EL LOGO AHORA VA AQUÍ, REEMPLAZANDO EL TÍTULO "NARRATIA"
     st.markdown(f"""
     <div style='display: flex; justify-content: center; margin-bottom: 20px;'>
         <img src='{LOGO_URL}' style='width: 140px;'>
@@ -184,7 +200,6 @@ with st.sidebar:
 
 # --- CONTROLADOR DE VISTAS ---
 if st.session_state['menu_radio'] == "🏠 Inicio":
-    # SALUDO LIMPIO
     st.title(f"{obtener_saludo()}, {nombre_real_usuario}")
     
     total = len(pd.read_csv(ARCHIVO_BD)) if os.path.exists(ARCHIVO_BD) else 0
