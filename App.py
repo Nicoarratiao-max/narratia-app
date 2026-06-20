@@ -111,7 +111,7 @@ if not st.session_state['logged_in']:
 
 # --- ARQUITECTURA MULTI-USUARIO (DATOS INDEPENDIENTES) ---
 usuario_actual = st.session_state['username']
-nombre_real_usuario = NOMBRES_REALES.get(usuario_actual, usuario_actual.capitalize()) # Transforma el username al nombre real
+nombre_real_usuario = NOMBRES_REALES.get(usuario_actual, usuario_actual.capitalize())
 
 ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
@@ -166,8 +166,13 @@ st.markdown("""
 
 # --- MENÚ LATERAL ---
 with st.sidebar:
-    # ELIMINADO EL "Usuario: Narratia" DE ABAJO
-    st.markdown(f"## NARRATIA", unsafe_allow_html=True)
+    # EL LOGO AHORA VA AQUÍ, REEMPLAZANDO EL TÍTULO "NARRATIA"
+    st.markdown(f"""
+    <div style='display: flex; justify-content: center; margin-bottom: 20px;'>
+        <img src='{LOGO_URL}' style='width: 140px;'>
+    </div>
+    """, unsafe_allow_html=True)
+    
     st.write("---")
     menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Generador de contratos", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "📑 Smart documents", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
     menu = st.radio("Navegación", menu_opciones, index=menu_opciones.index(st.session_state['menu_radio']), key="radio_nav")
@@ -179,8 +184,7 @@ with st.sidebar:
 
 # --- CONTROLADOR DE VISTAS ---
 if st.session_state['menu_radio'] == "🏠 Inicio":
-    # LOGO ARRIBA DEL SALUDO Y NOMBRE REAL
-    st.markdown(f"<img src='{LOGO_URL}' style='height: 90px; margin-bottom: -15px;'>", unsafe_allow_html=True)
+    # SALUDO LIMPIO
     st.title(f"{obtener_saludo()}, {nombre_real_usuario}")
     
     total = len(pd.read_csv(ARCHIVO_BD)) if os.path.exists(ARCHIVO_BD) else 0
@@ -425,7 +429,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 if c_guardar.form_submit_button("💾 Guardar"):
                                     df_t = pd.read_csv(ARCHIVO_TAREAS)
                                     nueva_t = {
-                                        'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': usuario_actual, # Guarda el ID
+                                        'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': usuario_actual, 
                                         'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 'Fecha_Vencimiento': nueva_fecha.strftime("%d/%m/%Y"),
                                         'Titulo': nuevo_titulo, 'Descripcion': nueva_desc, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': prio_seleccionada
                                     }
