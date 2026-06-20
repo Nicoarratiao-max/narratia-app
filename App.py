@@ -16,16 +16,13 @@ def obtener_saludo():
     return "Buenos días" if 0 <= hora < 12 else "Buenas tardes"
 
 def get_logo_src():
-    # Usamos la ruta absoluta para que la nube de Streamlit lo encuentre obligatoriamente
     ruta_base = os.path.dirname(os.path.abspath(__file__))
-    
     for ext in ['png', 'jpg', 'jpeg', 'PNG', 'JPG']:
         ruta_logo = os.path.join(ruta_base, f"logo.{ext}")
         if os.path.exists(ruta_logo):
             with open(ruta_logo, "rb") as f:
                 return f"data:image/{ext.lower()};base64,{base64.b64encode(f.read()).decode()}"
-                
-    return "https://img.icons8.com/color/48/user.png" # Ícono por defecto
+    return "https://img.icons8.com/color/48/user.png"
 
 LOGO_URL = get_logo_src()
 
@@ -54,7 +51,7 @@ def procesar_ojv_completo(archivo):
         return df_consolidado
     return pd.DataFrame()
 
-# --- SISTEMA DE AUTENTICACIÓN (LOGIN) ---
+# --- SISTEMA DE AUTENTICACIÓN (LOGIN MEJORADO) ---
 USUARIOS = {
     "Narratia": "20911237",
     "Vfarfan": "vpfm2404"
@@ -64,25 +61,40 @@ if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'username' not in st.session_state: st.session_state['username'] = ""
 
 if not st.session_state['logged_in']:
+    # CSS específico y agresivo para la vista de login (Uniformidad y Anti-Modo Oscuro)
     st.markdown("""
     <style>
-        .stApp { background-color: #f4f5f7; }
+        [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-        .login-box { background: white; padding: 40px; border-radius: 12px; border: 1px solid #e0e4e8; box-shadow: 0 4px 10px rgba(0,0,0,0.05); text-align: center; }
+        [data-testid="stForm"] {
+            background-color: white !important;
+            border-radius: 16px !important;
+            border: 1px solid #e0e4e8 !important;
+            padding: 40px 30px !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
+        }
+        p, label, span, div { color: #172b4d !important; }
     </style>
     """, unsafe_allow_html=True)
-    st.markdown("<br><br><br><br>", unsafe_allow_html=True)
+    
+    st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1.5, 2, 1.5])
     with c2:
-        st.markdown("<div class='login-box'>", unsafe_allow_html=True)
-        # Aquí también usamos el logo para la pantalla de inicio
-        st.markdown(f"<img src='{LOGO_URL}' style='width: 100px; margin-bottom: 15px;'>", unsafe_allow_html=True)
-        st.markdown("<h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px;'>NARRATIA</h1>", unsafe_allow_html=True)
-        st.markdown("<p style='color:#6b778c; margin-bottom: 30px;'>Inicia sesión en tu espacio de trabajo</p>", unsafe_allow_html=True)
-        with st.form("login_form"):
+        # Usamos st.form como el contenedor principal unificado
+        with st.form("login_form", clear_on_submit=False):
+            st.markdown(f"""
+            <div style='text-align: center; margin-bottom: 20px;'>
+                <img src='{LOGO_URL}' style='width: 140px; margin-bottom: 15px;'>
+                <h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px; font-size: 36px; font-weight: 800;'>NARRATIA</h1>
+                <p style='color:#6b778c; font-size: 15px; margin:0;'>Inicia sesión en tu espacio de trabajo</p>
+            </div>
+            """, unsafe_allow_html=True)
+            
             user = st.text_input("Usuario")
             pwd = st.text_input("Contraseña", type="password")
+            st.write("") # Espacio
             submit = st.form_submit_button("Ingresar al Sistema", use_container_width=True, type="primary")
+            
             if submit:
                 if user in USUARIOS and USUARIOS[user] == pwd:
                     st.session_state['logged_in'] = True
@@ -90,7 +102,6 @@ if not st.session_state['logged_in']:
                     st.rerun()
                 else:
                     st.error("❌ Usuario o contraseña incorrectos.")
-        st.markdown("</div>", unsafe_allow_html=True)
     st.stop()
 
 # --- ARQUITECTURA MULTI-USUARIO (DATOS INDEPENDIENTES) ---
@@ -117,22 +128,34 @@ else:
 if not os.path.exists(ARCHIVO_BD):
     pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']).to_csv(ARCHIVO_BD, index=False)
 
-# --- CSS DE ALTA FIDELIDAD ---
+# --- CSS DE ALTA FIDELIDAD Y BLOQUEO DE MODO OSCURO ---
 st.markdown("""
 <style>
-    .stApp { background-color: #f4f5f7; }
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {background-color: transparent !important;}
+    /* FORZAR MODO CLARO (Evita que el modo nocturno del PC arruine el diseño) */
+    [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
+    [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
+    [data-testid="stHeader"] { background-color: transparent !important; }
+    
+    /* Forzar textos a colores legibles */
+    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
+    
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
     .stAppDeployButton {display:none;}
-    .info-card { background: white; border-radius: 12px; padding: 20px; border: 1px solid #e0e4e8; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    
+    .info-card { background: white !important; border-radius: 12px; padding: 20px; border: 1px solid #e0e4e8; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
     .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .info-title { font-weight: 600; font-size: 16px; color: #172b4d; }
-    .badge-active { background: #57a15a; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-    .badge-propio { background: #0052cc; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    
+    /* Proteger insignias del override de color */
+    .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    
     .info-group { margin-bottom: 12px; }
-    .info-label { font-size: 13px; color: #6b778c; margin-bottom: 2px; }
-    .info-value { font-size: 15px; color: #172b4d; }
+    .info-label { font-size: 13px; color: #6b778c !important; margin-bottom: 2px; }
+    .info-value { font-size: 15px; color: #172b4d !important; }
+    
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: white !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important; }
-    [data-testid="stForm"] { border: none; padding: 0; margin-top: 10px; }
+    [data-testid="stForm"] { border: none; padding: 0; margin-top: 10px; background-color: transparent !important; box-shadow: none !important;}
 </style>
 """, unsafe_allow_html=True)
 
