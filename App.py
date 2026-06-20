@@ -51,17 +51,23 @@ def procesar_ojv_completo(archivo):
         return df_consolidado
     return pd.DataFrame()
 
-# --- SISTEMA DE AUTENTICACIÓN (LOGIN MEJORADO) ---
+# --- SISTEMA DE AUTENTICACIÓN Y NOMBRES REALES ---
 USUARIOS = {
     "Narratia": "20911237",
-    "Vfarfan": "vpfm2404"
+    "Vfarfan": "vpfm2404",
+    "Gdonoso": "gdonoso123" # Cambia esta contraseña por la real de Gabriel
+}
+
+NOMBRES_REALES = {
+    "Narratia": "Nicolás Arratia",
+    "Vfarfan": "Valentina Farfán",
+    "Gdonoso": "Gabriel Donoso"
 }
 
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'username' not in st.session_state: st.session_state['username'] = ""
 
 if not st.session_state['logged_in']:
-    # CSS específico y agresivo para la vista de login (Uniformidad y Anti-Modo Oscuro)
     st.markdown("""
     <style>
         [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
@@ -80,7 +86,6 @@ if not st.session_state['logged_in']:
     st.markdown("<br><br><br>", unsafe_allow_html=True)
     c1, c2, c3 = st.columns([1.5, 2, 1.5])
     with c2:
-        # Usamos st.form como el contenedor principal unificado
         with st.form("login_form", clear_on_submit=False):
             st.markdown(f"""
             <div style='text-align: center; margin-bottom: 20px;'>
@@ -92,7 +97,7 @@ if not st.session_state['logged_in']:
             
             user = st.text_input("Usuario")
             pwd = st.text_input("Contraseña", type="password")
-            st.write("") # Espacio
+            st.write("") 
             submit = st.form_submit_button("Ingresar al Sistema", use_container_width=True, type="primary")
             
             if submit:
@@ -106,6 +111,8 @@ if not st.session_state['logged_in']:
 
 # --- ARQUITECTURA MULTI-USUARIO (DATOS INDEPENDIENTES) ---
 usuario_actual = st.session_state['username']
+nombre_real_usuario = NOMBRES_REALES.get(usuario_actual, usuario_actual.capitalize()) # Transforma el username al nombre real
+
 ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 
@@ -131,12 +138,11 @@ if not os.path.exists(ARCHIVO_BD):
 # --- CSS DE ALTA FIDELIDAD Y BLOQUEO DE MODO OSCURO ---
 st.markdown("""
 <style>
-    /* FORZAR MODO CLARO (Evita que el modo nocturno del PC arruine el diseño) */
+    /* FORZAR MODO CLARO */
     [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
     [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
     [data-testid="stHeader"] { background-color: transparent !important; }
     
-    /* Forzar textos a colores legibles */
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
     
     #MainMenu {visibility: hidden;} footer {visibility: hidden;}
@@ -146,7 +152,6 @@ st.markdown("""
     .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .info-title { font-weight: 600; font-size: 16px; color: #172b4d; }
     
-    /* Proteger insignias del override de color */
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     
@@ -161,7 +166,8 @@ st.markdown("""
 
 # --- MENÚ LATERAL ---
 with st.sidebar:
-    st.markdown(f"## NARRATIA\n<small style='color:#6b778c;'>Usuario: {usuario_actual}</small>", unsafe_allow_html=True)
+    # ELIMINADO EL "Usuario: Narratia" DE ABAJO
+    st.markdown(f"## NARRATIA", unsafe_allow_html=True)
     st.write("---")
     menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Generador de contratos", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "📑 Smart documents", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
     menu = st.radio("Navegación", menu_opciones, index=menu_opciones.index(st.session_state['menu_radio']), key="radio_nav")
@@ -173,7 +179,10 @@ with st.sidebar:
 
 # --- CONTROLADOR DE VISTAS ---
 if st.session_state['menu_radio'] == "🏠 Inicio":
-    st.title(f"{obtener_saludo()}, {usuario_actual.capitalize()}")
+    # LOGO ARRIBA DEL SALUDO Y NOMBRE REAL
+    st.markdown(f"<img src='{LOGO_URL}' style='height: 90px; margin-bottom: -15px;'>", unsafe_allow_html=True)
+    st.title(f"{obtener_saludo()}, {nombre_real_usuario}")
+    
     total = len(pd.read_csv(ARCHIVO_BD)) if os.path.exists(ARCHIVO_BD) else 0
     df_tareas_total = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
     tareas_activas = len(df_tareas_total[df_tareas_total['Estado'] == 'En progreso']) if not df_tareas_total.empty else 0
@@ -238,6 +247,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                 c1, c2, c3 = st.columns([4, 2, 1])
                 with c1:
+                    creador_nombre_real = NOMBRES_REALES.get(row['Creador'], row['Creador'])
                     st.markdown(f"""
                     <div style='display: flex; align-items: center; margin-bottom: 5px;'>
                         <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
@@ -415,7 +425,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 if c_guardar.form_submit_button("💾 Guardar"):
                                     df_t = pd.read_csv(ARCHIVO_TAREAS)
                                     nueva_t = {
-                                        'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': usuario_actual.capitalize(),
+                                        'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': usuario_actual, # Guarda el ID
                                         'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 'Fecha_Vencimiento': nueva_fecha.strftime("%d/%m/%Y"),
                                         'Titulo': nuevo_titulo, 'Descripcion': nueva_desc, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': prio_seleccionada
                                     }
@@ -432,14 +442,15 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 st.markdown(f"<div style='height: 5px; background-color: {border_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                                 col_top_left, col_top_right = st.columns([3, 1.8])
                                 with col_top_left:
+                                    creador_real = NOMBRES_REALES.get(row_t['Creador'], row_t['Creador'])
                                     st.markdown(f"""
                                     <div style='display: flex; align-items: center; margin-bottom: 5px;'>
                                         <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
-                                        <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{row_t['Creador']}</span>
+                                        <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{creador_real}</span>
                                         <span style='font-size:12px; color:{border_prio_color}; font-weight:bold; margin-left:8px;'>[{row_t.get('Prioridad', 'Media')}]</span>
                                     </div>
                                     """, unsafe_allow_html=True)
-                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado por: {row_t['Creador']} • N° tarea {row_t['ID_Tarea']}</span>", unsafe_allow_html=True)
+                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado por: {creador_real} • N° tarea {row_t['ID_Tarea']}</span>", unsafe_allow_html=True)
                                     if st.session_state.get('editando_tarea') == row_t['ID_Tarea']:
                                         with st.form(key=f"form_fecha_{row_t['ID_Tarea']}"):
                                             try: d_actual = datetime.strptime(row_t['Fecha_Vencimiento'], "%d/%m/%Y").date()
@@ -494,7 +505,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             texto_comentario_final = nuevo_comentario.strip()
                                             if archivo_adjunto_coment:
                                                 texto_comentario_final += f" <br><em>[📎 Archivo adjunto: {archivo_adjunto_coment.name}]</em>"
-                                            comentarios.append({"autor": usuario_actual.capitalize(), "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": texto_comentario_final})
+                                            comentarios.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": texto_comentario_final})
                                             df_tareas.at[idx_t, 'Comentarios'] = json.dumps(comentarios)
                                             df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
 
