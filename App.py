@@ -25,7 +25,14 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="expanded"
 )
-
+# --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE INVISIBLE) ---
+st.markdown("""
+<iframe src="javascript:void(0);" style="display:none;" onload="
+    setInterval(function(){
+        window.parent.document.dispatchEvent(new Event('mousemove'));
+    }, 50000);
+"></iframe>
+""", unsafe_allow_html=True)
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
     hora = datetime.now().hour
@@ -357,12 +364,14 @@ else:
         df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
         cambios = True
 
-    # Forzar a tu usuario (Narratia) a que pida el correo si no lo ha puesto
+    # EL MARTILLAZO: Forzar a tu usuario (Narratia) a que pida el correo sí o sí
     idx_narratia = df_temp[df_temp['Usuario'] == 'Narratia'].index
     if not idx_narratia.empty:
         correo_actual = str(df_temp.loc[idx_narratia[0], 'Correo'])
-        if correo_actual == "pendiente" or correo_actual == "nan":
+        # Si tu correo no tiene un "@", te devuelvo al estado de registro inicial
+        if "@" not in correo_actual:
             df_temp.loc[idx_narratia[0], 'Debe_Cambiar_Clave'] = True
+            df_temp.loc[idx_narratia[0], 'Correo'] = "pendiente"
             cambios = True
 
     if cambios:
@@ -445,8 +454,8 @@ if not st.session_state['logged_in']:
 # --- VERIFICACIÓN DE REGISTRO INICIAL (CLAVE Y CORREO) ---
 estado_usuario = df_usuarios[df_usuarios['Usuario'] == st.session_state['username']].iloc[0]
 
-# Si debe cambiar clave o no tiene correo, lo bloqueamos en esta pantalla
-if str(estado_usuario['Debe_Cambiar_Clave']).lower() == 'true' or str(estado_usuario['Correo']) == "pendiente" or pd.isna(estado_usuario['Correo']):
+# Si debe cambiar clave o no tiene un correo válido (con "@"), lo bloqueamos en esta pantalla
+if str(estado_usuario['Debe_Cambiar_Clave']).lower() == 'true' or "@" not in str(estado_usuario['Correo']):
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_x, col_y, col_z = st.columns([1, 1.2, 1])
     with col_y:
