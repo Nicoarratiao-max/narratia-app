@@ -333,13 +333,20 @@ ARCHIVO_USUARIOS = "base_usuarios.csv"
 # 1. Crear base maestra de usuarios si no existe
 if not os.path.exists(ARCHIVO_USUARIOS):
     datos_iniciales = {
-        "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes"],
-        "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123"],
-        "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés"],
-        "Correo": ["nicolas@jurisync.cl", "valentina@jurisync.cl", "gabriel@jurisync.cl", "miryam@jurisync.cl"],
-        "Debe_Cambiar_Clave": [False, True, True, True] # Tú (Narratia) no tienes que cambiarla, los demás sí.
+        "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes", "Jtrujillo"],
+        "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123"],
+        "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés", "José Trujillo"],
+        "Correo": ["pendiente", "pendiente", "pendiente", "pendiente", "pendiente"],
+        "Debe_Cambiar_Clave": [True, True, True, True, True] # Ahora TODOS deben registrarse al inicio
     }
     pd.DataFrame(datos_iniciales).to_csv(ARCHIVO_USUARIOS, index=False)
+else:
+    # Si la base ya existe pero José Trujillo no está, lo añadimos
+    df_temp = pd.read_csv(ARCHIVO_USUARIOS)
+    if "Jtrujillo" not in df_temp['Usuario'].values:
+        nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": "Jtrujillo123", "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
+        df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
+        df_temp.to_csv(ARCHIVO_USUARIOS, index=False)
 
 df_usuarios = pd.read_csv(ARCHIVO_USUARIOS)
 USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
@@ -393,52 +400,58 @@ if not st.session_state['logged_in']:
                         
         with tab_recuperar:
             with st.form("recuperar_form", clear_on_submit=True):
-                st.info("Ingresa tu usuario y correo. Si coinciden, el sistema generará una clave temporal de acceso.")
+                st.info("Ingresa tu usuario y correo. Si coinciden, el sistema generará una clave temporal.")
                 rec_usuario = st.text_input("Usuario")
                 rec_correo = st.text_input("Correo electrónico registrado")
                 
                 if st.form_submit_button("Recuperar Contraseña", use_container_width=True):
                     if rec_usuario in df_usuarios['Usuario'].values:
-                        correo_real = df_usuarios[df_usuarios['Usuario'] == rec_usuario]['Correo'].values[0]
-                        if rec_correo.lower() == str(correo_real).lower():
-                            # Se reinicia la clave y se fuerza el cambio
+                        correo_real = str(df_usuarios[df_usuarios['Usuario'] == rec_usuario]['Correo'].values[0])
+                        
+                        if correo_real == "pendiente":
+                            st.warning("⚠️ Esta cuenta aún no tiene un correo configurado. Pídele al administrador que la recupere manualmente.")
+                        elif rec_correo.lower() == correo_real.lower():
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = "Temp1234"
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = True
                             df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
-                            st.success("✅ Identidad verificada. Tu contraseña temporal es: **Temp1234**. Inicia sesión con ella y el sistema te pedirá crear una nueva.")
+                            st.success("✅ Identidad verificada. Tu contraseña temporal es: **Temp1234**. Inicia sesión con ella y te pediremos crear una nueva.")
                         else:
                             st.error("❌ El correo no coincide con nuestros registros de seguridad.")
                     else:
                         st.error("❌ Usuario no encontrado.")
     st.stop()
 
-# --- VERIFICACIÓN DE CAMBIO DE CLAVE OBLIGATORIO ---
-# Si el usuario ingresó, revisamos si debe cambiar su clave
+# --- VERIFICACIÓN DE REGISTRO INICIAL (CLAVE Y CORREO) ---
 estado_usuario = df_usuarios[df_usuarios['Usuario'] == st.session_state['username']].iloc[0]
-if estado_usuario['Debe_Cambiar_Clave']:
+
+if estado_usuario['Debe_Cambiar_Clave'] or str(estado_usuario['Correo']) == "pendiente" or pd.isna(estado_usuario['Correo']):
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_x, col_y, col_z = st.columns([1, 1.2, 1])
     with col_y:
         with st.container(border=True):
-            st.markdown("<h2 style='text-align:center; color:#172b4d;'>🔒 Actualización de Seguridad</h2>", unsafe_allow_html=True)
-            st.warning(f"Hola {estado_usuario['Nombre_Real']}, por políticas de seguridad de JuriSync debes actualizar tu contraseña inicial antes de acceder a tus causas.")
+            st.markdown("<h2 style='text-align:center; color:#172b4d;'>🔒 Configuración de Seguridad</h2>", unsafe_allow_html=True)
+            st.warning(f"Hola {estado_usuario['Nombre_Real']}, antes de acceder a la plataforma debes registrar un correo para recuperar tu cuenta y crear una nueva contraseña.")
             
             with st.form("form_cambio_clave"):
-                nueva_clave = st.text_input("Crea tu nueva contraseña personal", type="password")
+                nuevo_correo = st.text_input("Tu Correo Electrónico (obligatorio)", placeholder="ejemplo@correo.cl")
+                nueva_clave = st.text_input("Crea tu nueva contraseña", type="password")
                 confirma_clave = st.text_input("Confirma tu nueva contraseña", type="password")
                 st.write("")
                 
-                if st.form_submit_button("Guardar Contraseña y Entrar", type="primary", use_container_width=True):
-                    if len(nueva_clave) < 6:
+                if st.form_submit_button("Guardar Datos y Entrar", type="primary", use_container_width=True):
+                    if "@" not in nuevo_correo or "." not in nuevo_correo:
+                        st.error("⚠️ Debes ingresar un correo electrónico válido.")
+                    elif len(nueva_clave) < 6:
                         st.error("⚠️ La contraseña debe tener al menos 6 caracteres.")
                     elif nueva_clave != confirma_clave:
                         st.error("⚠️ Las contraseñas no coinciden. Intenta de nuevo.")
                     else:
-                        # Guardamos la nueva clave en la base de datos
+                        # Guardamos en la base de datos maestra
+                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Correo'] = nuevo_correo.lower()
                         df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Password'] = nueva_clave
                         df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Debe_Cambiar_Clave'] = False
                         df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
-                        st.success("✅ Contraseña actualizada con éxito.")
+                        st.success("✅ Cuenta configurada con éxito. Accediendo...")
                         st.rerun()
     st.stop()
 
