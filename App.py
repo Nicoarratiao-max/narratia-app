@@ -4,8 +4,19 @@ import os
 import json
 import uuid
 import base64
+import io
 from datetime import datetime
 from streamlit_calendar import calendar
+
+# Intentamos importar la librería para crear Word. 
+# Si no está, la app avisa en vez de caerse.
+try:
+    from docx import Document
+    from docx.shared import Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    DOCX_READY = True
+except ImportError:
+    DOCX_READY = False
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="JuriSync | Sistema Judicial", layout="wide", initial_sidebar_state="expanded")
@@ -79,6 +90,147 @@ def obtener_feriados_chile():
         {"title": "🇨🇱 Sábado Santo", "start": "2027-03-27", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"}
     ])
     return feriados
+
+# --- LÓGICA DE CREACIÓN DEL CONTRATO EN WORD ---
+def crear_contrato_word(datos):
+    if not DOCX_READY: return None
+    doc = Document()
+    
+    # Formato de fuente oficial
+    style = doc.styles['Normal']
+    font = style.font
+    font.name = 'Arial'
+    font.size = Pt(11)
+    
+    # TÍTULO
+    titulo = doc.add_paragraph()
+    titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r_tit = titulo.add_run("CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES\n")
+    r_tit.bold = True
+    
+    # FECHA Y COMPARECENCIA
+    hoy = datetime.now()
+    meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
+    fecha_str = f"{hoy.day} de {meses[hoy.month-1].lower()} del año {hoy.year}"
+    
+    intro = doc.add_paragraph()
+    intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    intro.add_run(f"En Santiago, República de Chile, a {fecha_str}, comparecen:\n\n")
+    intro.add_run(f"Por una parte, don/doña {datos['abogado_nombre']}, chileno/a, abogado, cédula nacional de identidad número {datos['abogado_rut']}, con domicilio profesional en {datos['abogado_domicilio']}, correo electrónico {datos['abogado_correo']}, en adelante \"EL ABOGADO\"; y,\n\n")
+    intro.add_run(f"Por otra parte, don/doña {datos['cliente_nombre']}, chileno/a, cédula nacional de identidad número {datos['cliente_rut']}, con domicilio en {datos['cliente_domicilio']}, número de contacto {datos['cliente_tel']}, correo electrónico {datos['cliente_correo']}, en adelante \"LA CLIENTE\" o \"EL CLIENTE\".\n\n")
+    intro.add_run("Ambas partes mayores de edad, quienes acreditan su identidad con las cédulas citadas y exponen que han convenido lo siguiente:")
+    
+    # CLÁUSULA 1: SERVICIO
+    p1 = doc.add_paragraph()
+    p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p1.add_run("CLÁUSULA PRIMERA: DEL SERVICIO PROFESIONAL. ").bold = True
+    p1.add_run(f"Por el presente acto e instrumento, La Cliente contrata los servicios profesionales de El Abogado, a quien encarga la gestión y representación jurídica integral en la tramitación de un {datos['tipo_servicio'].upper()}.\n")
+    p1.add_run("El servicio incluye:\n")
+    p1.add_run(datos['detalle_servicio'])
+    
+    # CLÁUSULA 2: HONORARIOS
+    p2 = doc.add_paragraph()
+    p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p2.add_run("CLÁUSULA SEGUNDA: HONORARIOS. ").bold = True
+    p2.add_run(f"Como remuneración por los servicios contratados, las partes acuerdan un honorario total de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
+    p2.add_run("Este monto cubre la defensa letrada durante todo el procedimiento, independiente del tiempo que este demore, hasta la dictación de la resolución de término o equivalente jurisdiccional.")
+    
+    # CLÁUSULA 3: FORMA DE PAGO
+    p3 = doc.add_paragraph()
+    p3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p3.add_run("CLÁUSULA TERCERA: FORMA DE PAGO. ").bold = True
+    p3.add_run(f"El monto total pactado será pagado en {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas de {datos['cuotas_monto']} cada una.\n")
+    p3.add_run("Considerando que el mes actual se destinará a la recopilación de antecedentes y preparación de la demanda, el calendario de pagos será el siguiente:\n")
+    
+    # Tabla de pagos generada automáticamente
+    table = doc.add_table(rows=1, cols=4)
+    table.style = 'Table Grid'
+    hdr_cells = table.rows[0].cells
+    hdr_cells[0].text = 'Cuota'
+    hdr_cells[1].text = 'Vencimiento'
+    hdr_cells[2].text = 'Monto'
+    hdr_cells[3].text = 'Estado'
+    
+    fecha_base = datos['fecha_inicio']
+    for i in range(datos['cuotas_cant']):
+        row_cells = table.add_row().cells
+        row_cells[0].text = f"{i+1:02d}"
+        
+        m = fecha_base.month + i
+        y = fecha_base.year + ((m - 1) // 12)
+        m = ((m - 1) % 12) + 1
+        
+        row_cells[1].text = f"{fecha_base.day:02d} de {meses[m-1]} de {y}"
+        row_cells[2].text = str(datos['cuotas_monto'])
+        row_cells[3].text = "PENDIENTE"
+        
+    p3_bis = doc.add_paragraph()
+    p3_bis.add_run("\nDatos para Transferencia:\n").bold = True
+    p3_bis.add_run(f"Titular: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nBanco: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nN° de Cuenta: {datos['num_cuenta']}\nCorreo: {datos['abogado_correo']}")
+
+    # CLÁUSULA 4: INCUMPLIMIENTO
+    p4 = doc.add_paragraph()
+    p4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p4.add_run("CLÁUSULA CUARTA: INCUMPLIMIENTO, ACELERACIÓN Y MULTA. ").bold = True
+    p4.add_run("Las partes elevan a la calidad de esencial el pago oportuno de los honorarios pactados. En consecuencia, se acuerdan las siguientes sanciones estrictas para el caso de mora o simple retardo:\n")
+    p4.add_run("Cláusula de Aceleración: ").bold = True
+    p4.add_run("El no pago íntegro y oportuno de una cualquiera de las cuotas pactadas, hará exigible de inmediato el monto total insoluto de la deuda.\n")
+    p4.add_run("Suspensión Inmediata y Renuncia: ").bold = True
+    p4.add_run("El atraso superior a 5 días corridos facultará a El Abogado para suspender de inmediato cualquier gestión y renunciar al patrocinio y poder.\n")
+    p4.add_run("Multa e Intereses: ").bold = True
+    p4.add_run("En caso de mora, la deuda devengará el interés máximo convencional. Adicionalmente, se aplicará una multa diaria a título de cláusula penal equivalente a 0,15 Unidades de Fomento (UF) por cada día de atraso, más los gastos de cobranza extrajudicial que correspondan.")
+
+    # CLÁUSULA 5: OBLIGACIONES
+    p5 = doc.add_paragraph()
+    p5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p5.add_run("CLÁUSULA QUINTA: OBLIGACIONES DEL ABOGADO Y DEL CLIENTE.\n").bold = True
+    p5.add_run("Del Abogado: ").bold = True
+    p5.add_run("Se obliga a actuar con la debida diligencia profesional en todas las gestiones del proceso. Se deja expresa constancia de que la obligación del abogado es de medios y no de resultados.\n")
+    p5.add_run("Del Cliente: ").bold = True
+    p5.add_run("Se obliga a entregar de forma íntegra, veraz y oportuna toda la documentación y antecedentes solicitados por El Abogado. La Cliente declara que los antecedentes aportados son fidedignos.")
+
+    num_clausula = 6
+    # CLÁUSULA 6 CONDICIONAL (Solo si es Liquidación Voluntaria)
+    if datos['tipo_servicio'] == "Liquidación voluntaria":
+        p6 = doc.add_paragraph()
+        p6.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p6.add_run("CLÁUSULA SEXTA: FIRMA DE DECLARACIONES JURADAS Y DOCUMENTOS ANEXOS. ").bold = True
+        p6.add_run("Como requisito esencial para la presentación de la Solicitud de Liquidación Voluntaria, La Cliente se obliga a firmar y entregar en este acto las siguientes Declaraciones Juradas, que serán entregadas una vez firmando el presente contrato, manifestando entender cabalmente su contenido y alcance legal:\n")
+        p6.add_run("- Declaración Jurada de Calidad de Allegado (si aplica).\n- Declaración Jurada de Bienes de Terceros (si aplica).\n- Consentimiento Informado sobre Derechos Hereditarios.\n- Declaración Jurada de Antecedentes Completos y Fehacientes.")
+        num_clausula += 1
+
+    numeros_letras = {6: "SEXTA", 7: "SÉPTIMA", 8: "OCTAVA"}
+    
+    # CLÁUSULA 7 o 6: DESISTIMIENTO
+    p7 = doc.add_paragraph()
+    p7.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p7.add_run(f"CLÁUSULA {numeros_letras[num_clausula]}: DESISTIMIENTO. ").bold = True
+    p7.add_run("En caso de desistimiento o término unilateral del contrato por parte de La Cliente, no habrá lugar a devolución de los dineros ya pagados, los que se imputarán a los servicios profesionales prestados.")
+    num_clausula += 1
+
+    # CLÁUSULA 8 o 7: DOMICILIO Y FIRMA
+    p8 = doc.add_paragraph()
+    p8.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p8.add_run(f"CLÁUSULA {numeros_letras[num_clausula]}: DOMICILIO Y JURISDICCIÓN. ").bold = True
+    p8.add_run("Para todos los efectos legales derivados del presente contrato, las partes fijan su domicilio en la ciudad indicada en la comparecencia y se someten a la jurisdicción de sus Tribunales de Justicia.\n\nEl presente instrumento se firma en dos ejemplares del mismo tenor y fecha, quedando uno en poder de cada parte.")
+
+    # FIRMAS ORDENADAS
+    doc.add_paragraph("\n\n\n")
+    table_firmas = doc.add_table(rows=1, cols=2)
+    
+    c_abog = table_firmas.cell(0, 0).paragraphs[0]
+    c_abog.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    c_abog.add_run("___________________________________\n")
+    c_abog.add_run(f"{datos['abogado_nombre'].upper()}\n")
+    c_abog.add_run(f"R.U.T.: {datos['abogado_rut']}")
+    
+    c_cli = table_firmas.cell(0, 1).paragraphs[0]
+    c_cli.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    c_cli.add_run("___________________________________\n")
+    c_cli.add_run(f"{datos['cliente_nombre'].upper()}\n")
+    c_cli.add_run(f"R.U.T.: {datos['cliente_rut']}")
+    
+    return doc
 
 # --- SISTEMA DE AUTENTICACIÓN Y NOMBRES REALES ---
 USUARIOS = {
@@ -356,56 +508,14 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
             box-shadow: 0 4px 15px rgba(0,0,0,0.05);
             font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
         }
-        .fc-theme-standard td, .fc-theme-standard th {
-            border-color: #e0e4e8;
-        }
-        .fc-col-header-cell {
-            background-color: #f8f9fa;
-            padding: 12px 0 !important;
-            color: #6b778c;
-            text-transform: capitalize;
-            font-size: 14px;
-        }
-        .fc-button-primary {
-            background-color: #ffffff !important;
-            color: #172b4d !important;
-            border: 1px solid #e0e4e8 !important;
-            border-radius: 8px !important;
-            text-transform: capitalize !important;
-            font-weight: 600 !important;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-        }
-        .fc-button-primary:hover {
-            background-color: #f4f5f7 !important;
-            border-color: #0052cc !important;
-            color: #0052cc !important;
-        }
-        .fc-button-active {
-            background-color: #0052cc !important;
-            color: white !important;
-            border-color: #0052cc !important;
-        }
-        .fc-toolbar-title {
-            color: #172b4d !important;
-            font-weight: 800 !important;
-            font-size: 1.8em !important;
-            text-transform: capitalize;
-        }
-        .fc-daygrid-day-number {
-            color: #172b4d !important;
-            font-weight: 700 !important;
-            padding: 8px !important;
-            text-decoration: none !important;
-        }
-        .fc-event {
-            border-radius: 6px !important;
-            border: none !important;
-            font-weight: 600 !important;
-            padding: 4px 6px !important;
-            margin-bottom: 4px !important;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
-            cursor: pointer;
-        }
+        .fc-theme-standard td, .fc-theme-standard th { border-color: #e0e4e8; }
+        .fc-col-header-cell { background-color: #f8f9fa; padding: 12px 0 !important; color: #6b778c; text-transform: capitalize; font-size: 14px; }
+        .fc-button-primary { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #e0e4e8 !important; border-radius: 8px !important; text-transform: capitalize !important; font-weight: 600 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
+        .fc-button-primary:hover { background-color: #f4f5f7 !important; border-color: #0052cc !important; color: #0052cc !important; }
+        .fc-button-active { background-color: #0052cc !important; color: white !important; border-color: #0052cc !important; }
+        .fc-toolbar-title { color: #172b4d !important; font-weight: 800 !important; font-size: 1.8em !important; text-transform: capitalize; }
+        .fc-daygrid-day-number { color: #172b4d !important; font-weight: 700 !important; padding: 8px !important; text-decoration: none !important; }
+        .fc-event { border-radius: 6px !important; border: none !important; font-weight: 600 !important; padding: 4px 6px !important; margin-bottom: 4px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; }
         .fc-event-title { font-size: 12px !important; }
     """
 
@@ -445,18 +555,14 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
     if df_t.empty:
         st.info("Aún no hay tareas creadas en el sistema.")
     else:
-        # 1. Filtramos solo las tareas que vencen HOY
         tareas_hoy = df_t[df_t['Fecha_Vencimiento'] == fecha_hoy].copy()
-        
         if tareas_hoy.empty:
             st.success("🎉 ¡Excelente! No tienes tareas pendientes para el día de hoy.")
         else:
-            # 2. Ordenamos por Prioridad (Alta -> Media -> Baja)
             orden_prioridades = {"Alta": 1, "Media": 2, "Baja": 3}
             tareas_hoy['Orden_Prio'] = tareas_hoy['Prioridad'].map(orden_prioridades).fillna(4)
             tareas_hoy = tareas_hoy.sort_values(by='Orden_Prio')
             
-            # 3. Mostramos las tareas ordenadas
             for idx, row in tareas_hoy.iterrows():
                 with st.container(border=True):
                     prio_color = "#ff5630" if row.get('Prioridad') == "Alta" else ("#ffc400" if row.get('Prioridad') == "Media" else "#57a15a")
@@ -480,6 +586,90 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
                     with c3:
                         st.button("Ir al expediente ➔", key=f"agenda_ir_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
 
+
+elif st.session_state['menu_radio'] == "📄 Generador de contratos":
+    st.title("📄 Generador Automático de Contratos")
+    
+    if not DOCX_READY:
+        st.error("⚠️ Falta el motor para generar documentos. Ve a tu archivo `requirements.txt` en GitHub, agrega la palabra `python-docx` en una línea nueva y guarda los cambios para que la app se actualice.")
+    else:
+        st.markdown("Rellena los módulos con los datos y el sistema armará el documento Word listito para firmar.")
+        
+        with st.form("form_generador"):
+            with st.container(border=True):
+                st.markdown("<h4 style='color:#172b4d;'>1. Datos del Servicio</h4>", unsafe_allow_html=True)
+                tipo_servicio = st.selectbox("Tipo de Procedimiento", ["Liquidación voluntaria", "Juicio ejecutivo", "Derecho de familia", "Derecho penal", "Derecho civil"])
+                detalle_servicio = st.text_area("¿Qué incluye el servicio? (Detalla aquí las acciones que cubrirá el contrato)", height=150, placeholder="Ej:\n- Estudio y análisis de antecedentes financieros...\n- Redacción y presentación de demanda...\n- Representación en audiencias...")
+            
+            c_abog, c_cli = st.columns(2)
+            with c_abog:
+                with st.container(border=True):
+                    st.markdown("<h4 style='color:#172b4d;'>2. Datos del Abogado</h4>", unsafe_allow_html=True)
+                    abog_nom = st.text_input("Nombre Completo Abogado", value="Eduardo Andrés Riquelme Zambrano")
+                    abog_rut = st.text_input("RUT Abogado", value="17.427.459-2")
+                    abog_dom = st.text_input("Domicilio Profesional", value="Carlos Antúnez número 2025, oficina 404, comuna de Providencia")
+                    abog_tel = st.text_input("Teléfono Abogado")
+                    abog_correo = st.text_input("Correo Electrónico", value="riquelme.abogadosmyr@gmail.com")
+            
+            with c_cli:
+                with st.container(border=True):
+                    st.markdown("<h4 style='color:#172b4d;'>3. Datos del Cliente</h4>", unsafe_allow_html=True)
+                    cli_nom = st.text_input("Nombre Completo Cliente")
+                    cli_rut = st.text_input("RUT Cliente")
+                    cli_dom = st.text_input("Domicilio Cliente")
+                    cli_tel = st.text_input("Teléfono Cliente")
+                    cli_correo = st.text_input("Correo Cliente")
+                    
+            with st.container(border=True):
+                st.markdown("<h4 style='color:#172b4d;'>4. Honorarios y Pago</h4>", unsafe_allow_html=True)
+                c_pago1, c_pago2 = st.columns(2)
+                with c_pago1:
+                    hon_num = st.text_input("Honorarios (Números, ej: $2.220.000)")
+                    hon_let = st.text_input("Honorarios (Letras, ej: dos millones doscientos...)")
+                    cuotas_c = st.number_input("Cantidad de Cuotas", min_value=1, max_value=60, value=12)
+                    cuotas_m = st.text_input("Monto por Cuota (ej: $185.000)")
+                    fecha_pago = st.date_input("Fecha de inicio de pagos")
+                with c_pago2:
+                    st.markdown("Datos para Transferencia")
+                    banco = st.text_input("Banco", value="Banco Falabella")
+                    tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
+                    num_cta = st.text_input("Número de Cuenta", value="019996291120")
+
+            btn_gen = st.form_submit_button("📄 Construir Contrato Word", type="primary", use_container_width=True)
+            
+        if btn_gen:
+            datos_contrato = {
+                'tipo_servicio': tipo_servicio, 'detalle_servicio': detalle_servicio,
+                'abogado_nombre': abog_nom, 'abogado_rut': abog_rut, 'abogado_domicilio': abog_dom, 'abogado_tel': abog_tel, 'abogado_correo': abog_correo,
+                'cliente_nombre': cli_nom, 'cliente_rut': cli_rut, 'cliente_domicilio': cli_dom, 'cliente_tel': cli_tel, 'cliente_correo': cli_correo,
+                'honorarios_num': hon_num, 'honorarios_letras': hon_let, 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m, 'fecha_inicio': fecha_pago,
+                'banco': banco, 'tipo_cuenta': tipo_cta, 'num_cuenta': num_cta
+            }
+            
+            # Llamamos a la función que arma el Word
+            doc = crear_contrato_word(datos_contrato)
+            
+            if doc:
+                # Guardamos el archivo en la memoria del sistema
+                bio = io.BytesIO()
+                doc.save(bio)
+                st.session_state['contrato_generado'] = bio.getvalue()
+                
+                # Le damos un nombre bonito al archivo
+                nombre_limpio = cli_nom.replace(' ', '_') if cli_nom else "Sin_Nombre"
+                st.session_state['nombre_archivo'] = f"Contrato_Servicios_{nombre_limpio}.docx"
+                st.rerun()
+
+    # Si la memoria tiene un contrato, mostramos el botón verde para descargarlo
+    if st.session_state.get('contrato_generado'):
+        st.success("✅ ¡El contrato ha sido redactado con éxito y está listo para descargar!")
+        st.download_button(
+            label="📥 Descargar Documento Word",
+            data=st.session_state['contrato_generado'],
+            file_name=st.session_state['nombre_archivo'],
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            type="primary"
+        )
 
 elif st.session_state['menu_radio'] == "☑️ Tareas":
     st.title("☑️ Gestor Global de Tareas")
