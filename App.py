@@ -191,8 +191,9 @@ with st.sidebar:
     st.write("---")
     menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Generador de contratos", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "📑 Smart documents", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
     
-    # Vincular directamente el estado de radio con st.session_state['menu_radio']
-    st.radio("Navegación", menu_opciones, key="menu_radio")
+    # Truco de Streamlit: Se usa un 'key' diferente y un 'index' calculado para que los botones de navegación funcionen
+    menu = st.radio("Navegación", menu_opciones, index=menu_opciones.index(st.session_state['menu_radio']), key="radio_nav")
+    st.session_state['menu_radio'] = menu
     
     st.write("---")
     if st.button("🚪 Cerrar Sesión", use_container_width=True): 
@@ -232,8 +233,8 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             st.metric("Causas Ingresadas", f"{cant_causas}")
             st.write("")
             if st.button("Ver Causas ➔", key="btn_ir_a_causas", use_container_width=True):
-                st.session_state.causa_seleccionada = None 
-                st.session_state.menu_radio = "💼 Causas"
+                st.session_state['causa_seleccionada'] = None 
+                st.session_state['menu_radio'] = "💼 Causas"
                 st.rerun()
                 
     with c2:
@@ -241,8 +242,8 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             st.metric("Total Clientes", f"{cant_clientes}")
             st.write("")
             if st.button("Ver Clientes ➔", key="btn_ir_a_clientes", use_container_width=True):
-                st.session_state.cliente_seleccionado = None 
-                st.session_state.menu_radio = "👥 Clientes"
+                st.session_state['cliente_seleccionado'] = None 
+                st.session_state['menu_radio'] = "👥 Clientes"
                 st.rerun()
                 
     with c3:
@@ -250,7 +251,7 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             st.metric("Tareas del Día", f"{tareas_del_dia}")
             st.write("")
             if st.button("Ver Tareas ➔", key="btn_ir_a_tareas", use_container_width=True):
-                st.session_state.menu_radio = "☑️ Tareas"
+                st.session_state['menu_radio'] = "☑️ Tareas"
                 st.rerun()
                 
     with c4:
@@ -296,8 +297,8 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                             prio_txt_color = "#ff5630" if td.get('Prioridad') == 'Alta' else ("#ffc400" if td.get('Prioridad') == 'Media' else "#57a15a")
                             st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong> <span style='font-size:11px; color:{prio_txt_color}; font-weight:bold;'>({td.get('Prioridad', 'Media')})</span><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
                             if st.button("Ir al expediente ➔", key=f"cal_ir_{td['ID_Tarea']}"):
-                                st.session_state.causa_seleccionada = td['ROL']
-                                st.session_state.menu_radio = "💼 Causas"
+                                st.session_state['causa_seleccionada'] = td['ROL']
+                                st.session_state['menu_radio'] = "💼 Causas"
                                 st.rerun()
                             st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
             except: st.write("Selecciona un día en el calendario.")
@@ -328,8 +329,8 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                     st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']} | Vence: {row['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
                 with c3:
                     if st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}"):
-                        st.session_state.causa_seleccionada = row['ROL']
-                        st.session_state.menu_radio = "💼 Causas"
+                        st.session_state['causa_seleccionada'] = row['ROL']
+                        st.session_state['menu_radio'] = "💼 Causas"
                         st.rerun()
 
 elif st.session_state['menu_radio'] == "👥 Clientes":
@@ -394,8 +395,8 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                             st.markdown(f"<div style='height:12px; width:12px; background:{color_punto}; border-radius:50%; float:right;'></div>", unsafe_allow_html=True)
                             st.write("<br><br>", unsafe_allow_html=True)
                             if st.button("Ir al expediente ➔", key=f"ficha_ir_{causa['ROL']}"):
-                                st.session_state.causa_seleccionada = causa['ROL']
-                                st.session_state.menu_radio = "💼 Causas"
+                                st.session_state['causa_seleccionada'] = causa['ROL']
+                                st.session_state['menu_radio'] = "💼 Causas"
                                 st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
