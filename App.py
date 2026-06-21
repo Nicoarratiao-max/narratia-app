@@ -51,6 +51,36 @@ def procesar_ojv_completo(archivo):
         return df_consolidado
     return pd.DataFrame()
 
+# --- GENERADOR DE FERIADOS CHILENOS ---
+def obtener_feriados_chile():
+    feriados = []
+    for anio in [2025, 2026, 2027]:
+        fijos = [
+            (f"{anio}-01-01", "Año Nuevo"), (f"{anio}-05-01", "Día del Trabajador"),
+            (f"{anio}-05-21", "Glorias Navales"), (f"{anio}-06-21", "Pueblos Indígenas"),
+            (f"{anio}-06-29", "San Pedro y San Pablo"), (f"{anio}-07-16", "Virgen del Carmen"),
+            (f"{anio}-08-15", "Asunción de la Virgen"), (f"{anio}-09-18", "Independencia Nacional"),
+            (f"{anio}-09-19", "Glorias del Ejército"), (f"{anio}-10-12", "Encuentro de Dos Mundos"),
+            (f"{anio}-10-31", "Iglesias Evangélicas"), (f"{anio}-11-01", "Todos los Santos"),
+            (f"{anio}-12-08", "Inmaculada Concepción"), (f"{anio}-12-25", "Navidad")
+        ]
+        for fecha, nombre in fijos:
+            feriados.append({
+                "title": f"🇨🇱 {nombre}", "start": fecha, "color": "#ffebe6", 
+                "textColor": "#bf2600", "allDay": True, "display": "block"
+            })
+    
+    # Días Santos Movibles
+    feriados.extend([
+        {"title": "🇨🇱 Viernes Santo", "start": "2025-04-18", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Sábado Santo", "start": "2025-04-19", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Viernes Santo", "start": "2026-04-03", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Sábado Santo", "start": "2026-04-04", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Viernes Santo", "start": "2027-03-26", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Sábado Santo", "start": "2027-03-27", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"}
+    ])
+    return feriados
+
 # --- SISTEMA DE AUTENTICACIÓN Y NOMBRES REALES ---
 USUARIOS = {
     "Narratia": "20911237",
@@ -72,6 +102,13 @@ if not st.session_state['logged_in']:
     <style>
         [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
+        
+        .block-container {
+            max-width: 1300px !important;
+            margin: 0 auto !important;
+            padding-top: 2rem !important;
+        }
+
         [data-testid="stForm"] {
             background-color: white !important;
             border-radius: 16px !important;
@@ -88,8 +125,8 @@ if not st.session_state['logged_in']:
     </style>
     """, unsafe_allow_html=True)
     
-    st.markdown("<br><br><br>", unsafe_allow_html=True)
-    c1, c2, c3 = st.columns([1.5, 2, 1.5])
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 1.2, 1])
     with c2:
         with st.form("login_form", clear_on_submit=False):
             st.markdown(f"""
@@ -140,7 +177,6 @@ else:
 if not os.path.exists(ARCHIVO_BD):
     pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']).to_csv(ARCHIVO_BD, index=False)
 
-
 # --- FUNCIONES CALLBACKS PARA NAVEGACIÓN SIN ERRORES ---
 def nav_causas():
     st.session_state.menu_radio = "💼 Causas"
@@ -157,14 +193,19 @@ def ir_a_expediente(rol_causa):
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = rol_causa
 
-
-# --- CSS DE ALTA FIDELIDAD Y BLOQUEO DE MODO OSCURO ---
+# --- CSS DE ALTA FIDELIDAD ---
 st.markdown("""
 <style>
+    .block-container {
+        max-width: 1350px !important;
+        margin: 0 auto !important;
+        padding-top: 3rem !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }
     [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
     [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
     [data-testid="stHeader"] { background-color: transparent !important; }
-    
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
     
     [data-testid="stButton"] button {
@@ -183,14 +224,11 @@ st.markdown("""
     .info-card { background: white !important; border-radius: 12px; padding: 20px; border: 1px solid #e0e4e8; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
     .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
     .info-title { font-weight: 600; font-size: 16px; color: #172b4d; }
-    
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-    
     .info-group { margin-bottom: 12px; }
     .info-label { font-size: 13px; color: #6b778c !important; margin-bottom: 2px; }
     .info-value { font-size: 15px; color: #172b4d !important; }
-    
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: white !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important; }
     [data-testid="stForm"] { border: none; padding: 0; margin-top: 10px; background-color: transparent !important; box-shadow: none !important;}
 </style>
@@ -270,7 +308,10 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
 elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas")
     col_cal, col_side = st.columns([3, 1])
-    eventos_calendario = []
+    
+    # Cargamos los feriados como base del calendario
+    eventos_calendario = obtener_feriados_chile()
+    
     df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
     
     if not df_t.empty:
@@ -279,12 +320,101 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 d_obj = datetime.strptime(str(r['Fecha_Vencimiento']), "%d/%m/%Y")
                 d_str = d_obj.strftime("%Y-%m-%d")
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
-                eventos_calendario.append({"title": f"{r['Titulo']}", "start": d_str, "backgroundColor": bg_color, "textColor": "white", "borderColor": bg_color})
+                
+                # Para evitar que el texto blanco se pierda en el amarillo, forzamos texto oscuro si es prioridad media
+                text_color = "white" if bg_color != "#ffc400" else "#172b4d"
+                
+                eventos_calendario.append({
+                    "title": f"📌 {r['Titulo']}", 
+                    "start": d_str, 
+                    "backgroundColor": bg_color, 
+                    "textColor": text_color, 
+                    "borderColor": bg_color
+                })
             except: pass
                 
-    opciones_calendario = {"initialView": "dayGridMonth", "locale": "es", "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"}}
+    # Configuración de FullCalendar 100% en Español
+    opciones_calendario = {
+        "initialView": "dayGridMonth", 
+        "locale": "es", 
+        "buttonText": {
+            "today": "Hoy",
+            "month": "Mes",
+            "week": "Semana",
+            "day": "Día",
+            "list": "Agenda"
+        },
+        "headerToolbar": {
+            "left": "prev,next today", 
+            "center": "title", 
+            "right": "dayGridMonth,timeGridWeek,listMonth"
+        }
+    }
+    
+    # Inyección de CSS para suavizar y embellecer el Calendario (menos cuadrado, sombras suaves)
+    css_calendario_moderno = """
+        .fc {
+            background-color: white;
+            border-radius: 16px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        }
+        .fc-theme-standard td, .fc-theme-standard th {
+            border-color: #e0e4e8;
+        }
+        .fc-col-header-cell {
+            background-color: #f8f9fa;
+            padding: 12px 0 !important;
+            color: #6b778c;
+            text-transform: capitalize;
+            font-size: 14px;
+        }
+        .fc-button-primary {
+            background-color: #ffffff !important;
+            color: #172b4d !important;
+            border: 1px solid #e0e4e8 !important;
+            border-radius: 8px !important;
+            text-transform: capitalize !important;
+            font-weight: 600 !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+        }
+        .fc-button-primary:hover {
+            background-color: #f4f5f7 !important;
+            border-color: #0052cc !important;
+            color: #0052cc !important;
+        }
+        .fc-button-active {
+            background-color: #0052cc !important;
+            color: white !important;
+            border-color: #0052cc !important;
+        }
+        .fc-toolbar-title {
+            color: #172b4d !important;
+            font-weight: 800 !important;
+            font-size: 1.8em !important;
+            text-transform: capitalize;
+        }
+        .fc-daygrid-day-number {
+            color: #172b4d !important;
+            font-weight: 700 !important;
+            padding: 8px !important;
+            text-decoration: none !important;
+        }
+        .fc-event {
+            border-radius: 6px !important;
+            border: none !important;
+            font-weight: 600 !important;
+            padding: 4px 6px !important;
+            margin-bottom: 4px !important;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+            cursor: pointer;
+        }
+        .fc-event-title { font-size: 12px !important; }
+    """
+
     with col_cal:
-        calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, key="calendario_app")
+        calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, custom_css=css_calendario_moderno, key="calendario_app")
         
     with col_side:
         with st.container(border=True):
