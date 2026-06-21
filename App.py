@@ -327,26 +327,26 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
     doc.save(bio)
     return bio.getvalue()
 
-# --- SISTEMA DE CONTROL DE ACCESO ---
-USUARIOS = {
-    "Narratia": "20911237", 
-    "Vfarfan": "vpfm2404", 
-    "Gdonoso": "gdonoso123",
-    "Mcortes": "Mcortes123",
-    "Jtrujillo": "Jtrujillo123"
-}
+# --- SISTEMA DE CONTROL DE ACCESO AVANZADO ---
+ARCHIVO_USUARIOS = "base_usuarios.csv"
 
-NOMBRES_REALES = {
-    "Narratia": "Nicolás Arratia Oyarzo", 
-    "Vfarfan": "Valentina Farfán Muñoz", 
-    "Gdonoso": "Juan Gabriel Donoso Cabello",
-    "Mcortes": "Miryam Cortés Salinas",
-    "Jtrujillo": "José Trujillo Cañete"
-}
+# 1. Crear base maestra de usuarios si no existe
+if not os.path.exists(ARCHIVO_USUARIOS):
+    datos_iniciales = {
+        "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes"],
+        "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123"],
+        "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés"],
+        "Correo": ["nicolas@jurisync.cl", "valentina@jurisync.cl", "gabriel@jurisync.cl", "miryam@jurisync.cl"],
+        "Debe_Cambiar_Clave": [False, True, True, True] # Tú (Narratia) no tienes que cambiarla, los demás sí.
+    }
+    pd.DataFrame(datos_iniciales).to_csv(ARCHIVO_USUARIOS, index=False)
+
+df_usuarios = pd.read_csv(ARCHIVO_USUARIOS)
+USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
+NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 
 if 'logged_in' not in st.session_state: 
     st.session_state['logged_in'] = False
-    
 if 'username' not in st.session_state: 
     st.session_state['username'] = ""
 
@@ -367,27 +367,79 @@ if not st.session_state['logged_in']:
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_a, col_b, col_c = st.columns([1, 1.2, 1])
     with col_b:
-        with st.form("login_form", clear_on_submit=False):
-            st.markdown(f"""
-            <div style='text-align: center; margin-bottom: 20px;'>
-                <img src='{LOGO_URL}' style='width: 140px; margin-bottom: 5px;'>
-                <h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px; font-size: 32px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h1>
-                <p style='color:#6b778c; font-size: 15px; margin:0;'>Inicia sesión en tu espacio de trabajo</p>
-            </div>
-            """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style='text-align: center; margin-bottom: 20px;'>
+            <img src='{LOGO_URL}' style='width: 140px; margin-bottom: 5px;'>
+            <h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px; font-size: 32px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h1>
+            <p style='color:#6b778c; font-size: 15px; margin:0;'>Espacio de trabajo seguro</p>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        tab_iniciar, tab_recuperar = st.tabs(["🔐 Iniciar Sesión", "🆘 Olvidé mi contraseña"])
+        
+        with tab_iniciar:
+            with st.form("login_form", clear_on_submit=False):
+                input_usuario = st.text_input("Usuario", placeholder="Tu nombre de usuario")
+                input_password = st.text_input("Contraseña", type="password", placeholder="••••••••")
+                st.write("") 
+                
+                if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
+                    if input_usuario in USUARIOS_DICT and USUARIOS_DICT[input_usuario] == input_password:
+                        st.session_state['logged_in'] = True
+                        st.session_state['username'] = input_usuario
+                        st.rerun()
+                    else:
+                        st.error("❌ Usuario o contraseña incorrectos.")
+                        
+        with tab_recuperar:
+            with st.form("recuperar_form", clear_on_submit=True):
+                st.info("Ingresa tu usuario y correo. Si coinciden, el sistema generará una clave temporal de acceso.")
+                rec_usuario = st.text_input("Usuario")
+                rec_correo = st.text_input("Correo electrónico registrado")
+                
+                if st.form_submit_button("Recuperar Contraseña", use_container_width=True):
+                    if rec_usuario in df_usuarios['Usuario'].values:
+                        correo_real = df_usuarios[df_usuarios['Usuario'] == rec_usuario]['Correo'].values[0]
+                        if rec_correo.lower() == str(correo_real).lower():
+                            # Se reinicia la clave y se fuerza el cambio
+                            df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = "Temp1234"
+                            df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = True
+                            df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
+                            st.success("✅ Identidad verificada. Tu contraseña temporal es: **Temp1234**. Inicia sesión con ella y el sistema te pedirá crear una nueva.")
+                        else:
+                            st.error("❌ El correo no coincide con nuestros registros de seguridad.")
+                    else:
+                        st.error("❌ Usuario no encontrado.")
+    st.stop()
+
+# --- VERIFICACIÓN DE CAMBIO DE CLAVE OBLIGATORIO ---
+# Si el usuario ingresó, revisamos si debe cambiar su clave
+estado_usuario = df_usuarios[df_usuarios['Usuario'] == st.session_state['username']].iloc[0]
+if estado_usuario['Debe_Cambiar_Clave']:
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    col_x, col_y, col_z = st.columns([1, 1.2, 1])
+    with col_y:
+        with st.container(border=True):
+            st.markdown("<h2 style='text-align:center; color:#172b4d;'>🔒 Actualización de Seguridad</h2>", unsafe_allow_html=True)
+            st.warning(f"Hola {estado_usuario['Nombre_Real']}, por políticas de seguridad de JuriSync debes actualizar tu contraseña inicial antes de acceder a tus causas.")
             
-            input_usuario = st.text_input("Usuario", placeholder="Tu nombre de usuario")
-            input_password = st.text_input("Contraseña", type="password", placeholder="••••••••")
-            st.write("") 
-            
-            boton_ingresar = st.form_submit_button("Ingresar al Sistema", use_container_width=True)
-            if boton_ingresar:
-                if input_usuario in USUARIOS and USUARIOS[input_usuario] == input_password:
-                    st.session_state['logged_in'] = True
-                    st.session_state['username'] = input_usuario
-                    st.rerun()
-                else:
-                    st.error("❌ Usuario o contraseña incorrectos.")
+            with st.form("form_cambio_clave"):
+                nueva_clave = st.text_input("Crea tu nueva contraseña personal", type="password")
+                confirma_clave = st.text_input("Confirma tu nueva contraseña", type="password")
+                st.write("")
+                
+                if st.form_submit_button("Guardar Contraseña y Entrar", type="primary", use_container_width=True):
+                    if len(nueva_clave) < 6:
+                        st.error("⚠️ La contraseña debe tener al menos 6 caracteres.")
+                    elif nueva_clave != confirma_clave:
+                        st.error("⚠️ Las contraseñas no coinciden. Intenta de nuevo.")
+                    else:
+                        # Guardamos la nueva clave en la base de datos
+                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Password'] = nueva_clave
+                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Debe_Cambiar_Clave'] = False
+                        df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
+                        st.success("✅ Contraseña actualizada con éxito.")
+                        st.rerun()
     st.stop()
 
 # --- ARQUITECTURA DE ARCHIVOS DE DATOS LOCALES ---
