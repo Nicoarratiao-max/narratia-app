@@ -444,84 +444,73 @@ def limpiar_causa():
     st.session_state.causa_seleccionada = None
 
 # --- ESTILOS CSS ENCUADRE DE ALTA FIDELIDAD ---
-with st.sidebar:
-    st.markdown(f"""
-    <div style='text-align: center; margin-bottom: 25px;'>
-        <img src='{LOGO_URL}' style='width: 80px;'>
-        <h2 style='color:#c9d1d9; margin-top: 10px; font-weight: 800; letter-spacing: 1px;'>Legaliz</h2>
-    </div>
-    """, unsafe_allow_html=True)
-
-    # Definición del orden exacto que tenías
-    opciones_flujo = [
-        "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
-        "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
-        "💼 Causas", "👥 Clientes", "✈️ Mensajería", "⚙️ Automatizaciones", 
-        "📊 Informes", "📥 Excel", "📈 Marketing"
-    ]
-
-    # Generamos los "cuadraditos" con botones
-    for opcion in opciones_flujo:
-        # Esto hace que el botón se vea como un bloque uniforme
-        if st.button(opcion, use_container_width=True, key=f"btn_{opcion}"):
-            st.session_state['menu_radio'] = opcion
-            resetear_vistas()
-            st.rerun()
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
+st.markdown("""
+<style>
+    /* Fondo principal y barra lateral */
+    [data-testid="stAppViewContainer"] { background-color: #0d1117 !important; }
+    [data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d !important; }
     
-    # Bloque Usuario Fijo Abajo
-    st.markdown(f"""
-    <div style='padding: 10px; background: #21262d; border-radius: 8px; border: 1px solid #30363d;'>
-        <div style='display: flex; align-items: center;'>
-            <div style='background:#58a6ff; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; margin-right:10px;'>
-                {nombre_real_usuario[0]}
-            </div>
-            <div>
-                <div style='font-size:14px; font-weight:bold; color:#c9d1d9;'>{nombre_real_usuario}</div>
-                <div style='font-size:11px; color:#8b949e;'>Supervisor_general</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    /* Títulos y texto general */
+    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #e6edf3 !important; }
     
-    st.write("")
-    if st.button("🚪 Cerrar Sesión", use_container_width=True): 
-        for key in list(st.session_state.keys()): 
-            del st.session_state[key]
-        st.rerun()
+    /* Estilo del menú lateral */
+    [data-testid="stSidebarNav"] { padding-top: 20px; }
+    
+    /* Tarjetas de contenido */
+    .dash-card { background: #161b22 !important; border-radius: 12px; padding: 15px; border: 1px solid #30363d !important; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+    .dash-header { border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #8b949e; letter-spacing: 0.5px; text-transform: uppercase; }
+    
+    /* Botones */
+    [data-testid="stButton"] button { 
+        background-color: #21262d !important; 
+        color: #c9d1d9 !important; 
+        border: 1px solid #30363d !important; 
+        border-radius: 6px !important; 
+    }
+    [data-testid="stButton"] button:hover { 
+        border-color: #58a6ff !important; 
+        color: #58a6ff !important; 
+    }
+    
+    /* Sidebar Radio (Menú) */
+    div[role="radiogroup"] label { color: #c9d1d9 !important; font-weight: 500 !important; }
+    
+    /* Inputs */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select {
+        background-color: #0d1117 !important;
+        border: 1px solid #30363d !important;
+        color: #c9d1d9 !important;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # --- RENDER DE BARRA LATERAL ---
 with st.sidebar:
     st.markdown(f"""
     <div style='text-align: center; margin-bottom: 25px;'>
         <img src='{LOGO_URL}' style='width: 80px;'>
-        <h2 style='color:#c9d1d9; margin-top: 10px; font-weight: 800; letter-spacing: 1px;'>Legaliz</h2>
+        <h2 style='color:#c9d1d9; margin-top: 10px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h2>
     </div>
     """, unsafe_allow_html=True)
-
-    # Definición del orden exacto que tenías
+    
+    # Menú unificado para no romper el flujo
     opciones_flujo = [
-        "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
-        "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
-        "💼 Causas", "👥 Clientes", "✈️ Mensajería", "⚙️ Automatizaciones", 
-        "📊 Informes", "📥 Excel", "📈 Marketing"
+        "🏠 Inicio", "💼 Causas", "👥 Clientes", "📋 Agenda", "☑️ Tareas",
+        "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
+        "📅 Calendario", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", 
+        "📥 Excel", "📈 Marketing"
     ]
-
-    # Generamos los "cuadraditos" con botones
-    for opcion in opciones_flujo:
-        # Esto hace que el botón se vea como un bloque uniforme
-        if st.button(opcion, use_container_width=True, key=f"btn_{opcion}"):
-            st.session_state['menu_radio'] = opcion
-            resetear_vistas()
-            st.rerun()
-
+    
+    # Navegación limpia sin títulos intermedios
+    st.radio("Navegación", opciones_flujo, key="menu_radio", on_change=resetear_vistas, label_visibility="collapsed")
+    
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Bloque Usuario Fijo Abajo
-    st.markdown(f"""
-    <div style='padding: 10px; background: #21262d; border-radius: 8px; border: 1px solid #30363d;'>
-        <div style='display: flex; align-items: center;'>
+    # Usuario y Cierre de Sesión (Fijo abajo)
+    with st.container():
+        st.write("---")
+        st.markdown(f"""
+        <div style='display: flex; align-items: center; padding: 10px; background: #21262d; border-radius: 8px;'>
             <div style='background:#58a6ff; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; margin-right:10px;'>
                 {nombre_real_usuario[0]}
             </div>
@@ -530,14 +519,12 @@ with st.sidebar:
                 <div style='font-size:11px; color:#8b949e;'>Supervisor_general</div>
             </div>
         </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.write("")
-    if st.button("🚪 Cerrar Sesión", use_container_width=True): 
-        for key in list(st.session_state.keys()): 
-            del st.session_state[key]
-        st.rerun()
+        """, unsafe_allow_html=True)
+        st.write("")
+        if st.button("🚪 Cerrar Sesión", use_container_width=True): 
+            for key in list(st.session_state.keys()): 
+                del st.session_state[key]
+            st.rerun()
 
 # --- CONTROLADOR DE PESTAÑAS (VISTAS INDIVIDUALES EXPLICITAS) ---
 
