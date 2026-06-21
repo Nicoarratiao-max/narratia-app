@@ -330,24 +330,45 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
 # --- SISTEMA DE CONTROL DE ACCESO AVANZADO ---
 ARCHIVO_USUARIOS = "base_usuarios.csv"
 
-# 1. Crear base maestra de usuarios si no existe
+# 1. Crear base maestra de usuarios si no existe o forzar actualización
 if not os.path.exists(ARCHIVO_USUARIOS):
     datos_iniciales = {
-        "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes", "Jtrujillo"],
-        "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123"],
-        "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés", "José Trujillo"],
-        "Correo": ["pendiente", "pendiente", "pendiente", "pendiente", "pendiente"],
-        "Debe_Cambiar_Clave": [True, True, True, True, True] # Ahora TODOS deben registrarse al inicio
+        "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes", "Jtrujillo", "Eriquelme"],
+        "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123", "Eriquelme123"],
+        "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés", "José Trujillo", "Eduardo Riquelme"],
+        "Correo": ["pendiente", "pendiente", "pendiente", "pendiente", "pendiente", "pendiente"],
+        "Debe_Cambiar_Clave": [True, True, True, True, True, True] # TODOS deben registrarse
     }
     pd.DataFrame(datos_iniciales).to_csv(ARCHIVO_USUARIOS, index=False)
 else:
-    # Si la base ya existe pero José Trujillo no está, lo añadimos
+    # TRUCO: Forzar la actualización si la base vieja ya existe y se quedó pegada
     df_temp = pd.read_csv(ARCHIVO_USUARIOS)
+    cambios = False
+    
+    # Añadir a Eduardo si no está
+    if "Eriquelme" not in df_temp['Usuario'].values:
+        nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": "Eriquelme123", "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
+        df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
+        cambios = True
+
+    # Añadir a José si no está
     if "Jtrujillo" not in df_temp['Usuario'].values:
         nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": "Jtrujillo123", "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
         df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
+        cambios = True
+
+    # Forzar a tu usuario (Narratia) a que pida el correo si no lo ha puesto
+    idx_narratia = df_temp[df_temp['Usuario'] == 'Narratia'].index
+    if not idx_narratia.empty:
+        correo_actual = str(df_temp.loc[idx_narratia[0], 'Correo'])
+        if correo_actual == "pendiente" or correo_actual == "nan":
+            df_temp.loc[idx_narratia[0], 'Debe_Cambiar_Clave'] = True
+            cambios = True
+
+    if cambios:
         df_temp.to_csv(ARCHIVO_USUARIOS, index=False)
 
+# Cargar la base final para operar
 df_usuarios = pd.read_csv(ARCHIVO_USUARIOS)
 USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
 NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
@@ -391,7 +412,7 @@ if not st.session_state['logged_in']:
                 st.write("") 
                 
                 if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
-                    if input_usuario in USUARIOS_DICT and USUARIOS_DICT[input_usuario] == input_password:
+                    if input_usuario in USUARIOS_DICT and str(USUARIOS_DICT[input_usuario]) == str(input_password):
                         st.session_state['logged_in'] = True
                         st.session_state['username'] = input_usuario
                         st.rerun()
@@ -408,9 +429,9 @@ if not st.session_state['logged_in']:
                     if rec_usuario in df_usuarios['Usuario'].values:
                         correo_real = str(df_usuarios[df_usuarios['Usuario'] == rec_usuario]['Correo'].values[0])
                         
-                        if correo_real == "pendiente":
+                        if correo_real == "pendiente" or correo_real == "nan":
                             st.warning("⚠️ Esta cuenta aún no tiene un correo configurado. Pídele al administrador que la recupere manualmente.")
-                        elif rec_correo.lower() == correo_real.lower():
+                        elif rec_correo.strip().lower() == correo_real.lower():
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = "Temp1234"
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = True
                             df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
@@ -424,7 +445,8 @@ if not st.session_state['logged_in']:
 # --- VERIFICACIÓN DE REGISTRO INICIAL (CLAVE Y CORREO) ---
 estado_usuario = df_usuarios[df_usuarios['Usuario'] == st.session_state['username']].iloc[0]
 
-if estado_usuario['Debe_Cambiar_Clave'] or str(estado_usuario['Correo']) == "pendiente" or pd.isna(estado_usuario['Correo']):
+# Si debe cambiar clave o no tiene correo, lo bloqueamos en esta pantalla
+if str(estado_usuario['Debe_Cambiar_Clave']).lower() == 'true' or str(estado_usuario['Correo']) == "pendiente" or pd.isna(estado_usuario['Correo']):
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_x, col_y, col_z = st.columns([1, 1.2, 1])
     with col_y:
@@ -447,11 +469,11 @@ if estado_usuario['Debe_Cambiar_Clave'] or str(estado_usuario['Correo']) == "pen
                         st.error("⚠️ Las contraseñas no coinciden. Intenta de nuevo.")
                     else:
                         # Guardamos en la base de datos maestra
-                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Correo'] = nuevo_correo.lower()
+                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Correo'] = nuevo_correo.strip().lower()
                         df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Password'] = nueva_clave
                         df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Debe_Cambiar_Clave'] = False
                         df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
-                        st.success("✅ Cuenta configurada con éxito. Accediendo...")
+                        st.success("✅ Cuenta configurada con éxito. Actualizando sistema...")
                         st.rerun()
     st.stop()
 
