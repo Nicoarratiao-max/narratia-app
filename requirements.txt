@@ -3,3 +3,4 @@ pandas
 openpyxl
 streamlit-calendar
 python-docx
+beautifulsoup4 lxml
