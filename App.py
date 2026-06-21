@@ -33,6 +33,14 @@ st.markdown("""
     }, 50000);
 "></iframe>
 """, unsafe_allow_html=True)
+# --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE INVISIBLE) ---
+st.markdown("""
+<iframe src="javascript:void(0);" style="display:none;" onload="
+    setInterval(function(){
+        window.parent.document.dispatchEvent(new Event('mousemove'));
+    }, 50000);
+"></iframe>
+""", unsafe_allow_html=True)
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
     hora = datetime.now().hour
@@ -739,24 +747,39 @@ with st.sidebar:
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Bloque Usuario Fijo Abajo (Limpio, sin "Supervisor general")
-    st.markdown(f"""
-    <div style='padding: 10px; background: #ebecf0; border-radius: 8px; border: 1px solid #dfe1e6;'>
-        <div style='display: flex; align-items: center;'>
-            <div style='background:#0052cc; color:white; width:38px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; margin-right:10px;'>
-                {nombre_real_usuario[0]}
-            </div>
-            <div>
-                <div style='font-size:14px; font-weight:bold; color:#172b4d;'>{nombre_real_usuario}</div>
-            </div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-    
+    # --- MENÚ DE PERFIL Y SEGURIDAD ---
+    with st.expander(f"👤 {nombre_real_usuario} (Mi Perfil)"):
+        st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
+        with st.form("form_perfil"):
+            df_usr = pd.read_csv(ARCHIVO_USUARIOS)
+            mi_correo = str(df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'].values[0])
+            if mi_correo == "nan" or mi_correo == "pendiente": 
+                mi_correo = ""
+            
+            upd_correo = st.text_input("Correo de Recuperación", value=mi_correo, placeholder="ejemplo@correo.cl")
+            upd_clave = st.text_input("Nueva Contraseña", type="password", placeholder="Dejar en blanco para mantener actual")
+            
+            if st.form_submit_button("💾 Guardar Datos", use_container_width=True):
+                cambios = False
+                if upd_correo.strip() != "" and "@" in upd_correo:
+                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'] = upd_correo.strip().lower()
+                    cambios = True
+                if upd_clave.strip() != "":
+                    if len(upd_clave) >= 6:
+                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = upd_clave
+                        cambios = True
+                    else:
+                        st.error("La clave debe tener mínimo 6 caracteres")
+                
+                if cambios:
+                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = False
+                    df_usr.to_csv(ARCHIVO_USUARIOS, index=False)
+                    st.success("¡Datos actualizados correctamente!")
+                    st.rerun()
+
     st.write("")
-    if st.button("🚪 Cerrar Sesión", use_container_width=True): 
-        for key in list(st.session_state.keys()): 
-            del st.session_state[key]
+    if st.button("🚪 Cerrar Sesión", use_container_width=True):
+        for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
 # --- CONTROLADOR DE PESTAÑAS (VISTAS INDIVIDUALES EXPLICITAS) ---
