@@ -8,7 +8,7 @@ from datetime import datetime
 from streamlit_calendar import calendar
 
 # --- CONFIGURACIÓN ---
-st.set_page_config(page_title="NARRATIA | Sistema Judicial", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="JuriSync | Sistema Judicial", layout="wide", initial_sidebar_state="expanded")
 
 # --- FUNCIONES PRINCIPALES ---
 def obtener_saludo():
@@ -77,7 +77,7 @@ if not st.session_state['logged_in']:
             border-radius: 16px !important;
             border: 1px solid #e0e4e8 !important;
             padding: 40px 30px !important;
-            box-shadow: 0 4px 15 rgba(0,0,0,0.05) !important;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
         }
         p, label, span, div { color: #172b4d !important; }
         [data-testid="stFormSubmitButton"] button {
@@ -94,8 +94,8 @@ if not st.session_state['logged_in']:
         with st.form("login_form", clear_on_submit=False):
             st.markdown(f"""
             <div style='text-align: center; margin-bottom: 20px;'>
-                <img src='{LOGO_URL}' style='width: 140px; margin-bottom: 15px;'>
-                <h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px; font-size: 36px; font-weight: 800;'>NARRATIA</h1>
+                <img src='{LOGO_URL}' style='width: 140px; margin-bottom: 5px;'>
+                <h1 style='color:#172b4d; margin-top: 0; margin-bottom: 5px; font-size: 32px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h1>
                 <p style='color:#6b778c; font-size: 15px; margin:0;'>Inicia sesión en tu espacio de trabajo</p>
             </div>
             """, unsafe_allow_html=True)
@@ -190,8 +190,10 @@ with st.sidebar:
     
     st.write("---")
     menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Generador de contratos", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "📑 Smart documents", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
-    menu = st.radio("Navegación", menu_opciones, index=menu_opciones.index(st.session_state['menu_radio']), key="radio_nav")
-    st.session_state['menu_radio'] = menu
+    
+    # Vincular directamente el estado de radio con st.session_state['menu_radio']
+    st.radio("Navegación", menu_opciones, key="menu_radio")
+    
     st.write("---")
     if st.button("🚪 Cerrar Sesión", use_container_width=True): 
         for key in list(st.session_state.keys()): del st.session_state[key]
@@ -203,18 +205,15 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     st.write("Bienvenido a tu panel de control de gestión judicial unificada.")
     st.write("<br>", unsafe_allow_html=True)
 
-    # Carga masiva e independiente de datos
     df_causas_totales = pd.read_csv(ARCHIVO_BD) if os.path.exists(ARCHIVO_BD) else pd.DataFrame()
     df_tareas_totales = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
     
-    # Cálculos dinámicos en tiempo real
     cant_causas = len(df_causas_totales) if not df_causas_totales.empty else 0
     cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty else 0
     
     fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
     tareas_del_dia = len(df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]) if not df_tareas_totales.empty else 0
     
-    # Conteo efectivo de documentos subidos al sistema de comentarios
     documentos_efectivos = 0
     if not df_tareas_totales.empty and 'Comentarios' in df_tareas_totales.columns:
         for bloque_comentario in df_tareas_totales['Comentarios'].dropna():
@@ -226,7 +225,6 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             except:
                 pass
 
-    # Renderizado estricto del Grid de métricas con redirecciones cruzadas
     c1, c2, c3, c4 = st.columns(4)
     
     with c1:
@@ -234,8 +232,8 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             st.metric("Causas Ingresadas", f"{cant_causas}")
             st.write("")
             if st.button("Ver Causas ➔", key="btn_ir_a_causas", use_container_width=True):
-                st.session_state['causa_seleccionada'] = None # Resetea selección profunda
-                st.session_state['menu_radio'] = "💼 Causas"
+                st.session_state.causa_seleccionada = None 
+                st.session_state.menu_radio = "💼 Causas"
                 st.rerun()
                 
     with c2:
@@ -243,8 +241,8 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             st.metric("Total Clientes", f"{cant_clientes}")
             st.write("")
             if st.button("Ver Clientes ➔", key="btn_ir_a_clientes", use_container_width=True):
-                st.session_state['cliente_seleccionado'] = None # Resetea selección profunda
-                st.session_state['menu_radio'] = "👥 Clientes"
+                st.session_state.cliente_seleccionado = None 
+                st.session_state.menu_radio = "👥 Clientes"
                 st.rerun()
                 
     with c3:
@@ -252,7 +250,7 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             st.metric("Tareas del Día", f"{tareas_del_dia}")
             st.write("")
             if st.button("Ver Tareas ➔", key="btn_ir_a_tareas", use_container_width=True):
-                st.session_state['menu_radio'] = "☑️ Tareas"
+                st.session_state.menu_radio = "☑️ Tareas"
                 st.rerun()
                 
     with c4:
@@ -298,8 +296,8 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                             prio_txt_color = "#ff5630" if td.get('Prioridad') == 'Alta' else ("#ffc400" if td.get('Prioridad') == 'Media' else "#57a15a")
                             st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong> <span style='font-size:11px; color:{prio_txt_color}; font-weight:bold;'>({td.get('Prioridad', 'Media')})</span><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
                             if st.button("Ir al expediente ➔", key=f"cal_ir_{td['ID_Tarea']}"):
-                                st.session_state['causa_seleccionada'] = td['ROL']
-                                st.session_state['menu_radio'] = "💼 Causas"
+                                st.session_state.causa_seleccionada = td['ROL']
+                                st.session_state.menu_radio = "💼 Causas"
                                 st.rerun()
                             st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
             except: st.write("Selecciona un día en el calendario.")
@@ -330,8 +328,8 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                     st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']} | Vence: {row['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
                 with c3:
                     if st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}"):
-                        st.session_state['causa_seleccionada'] = row['ROL']
-                        st.session_state['menu_radio'] = "💼 Causas"
+                        st.session_state.causa_seleccionada = row['ROL']
+                        st.session_state.menu_radio = "💼 Causas"
                         st.rerun()
 
 elif st.session_state['menu_radio'] == "👥 Clientes":
@@ -375,7 +373,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     </div>
                     <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Nombre:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('Cliente','--')}</div>
                     <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Rut cliente:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('RUT','--')}</div>
-                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Clave única:</div><div style="color:#172b4d; font-size:15px; margin-bottom:20px; display:flex; justify-content:space-between;"><span>🛡️ {datos.get('Clave_unica','*****')}</span><span style="color:#6b778c;">👁️‍عون</span></div>
+                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Clave única:</div><div style="color:#172b4d; font-size:15px; margin-bottom:20px; display:flex; justify-content:space-between;"><span>🛡️ {datos.get('Clave_unica','*****')}</span><span style="color:#6b778c;">👁️‍🗨️</span></div>
                     <div style="color:#172b4d; font-size:15px; margin-bottom:12px;">📞 {datos.get('Teléfono','--')}</div>
                     <div style="color:#172b4d; font-size:15px; margin-bottom:12px;">📄 {datos.get('Correo','--')}</div>
                     <div style="color:#172b4d; font-size:15px; margin-bottom:30px;">📍 {datos.get('Direccion','--')}</div>
@@ -396,8 +394,8 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                             st.markdown(f"<div style='height:12px; width:12px; background:{color_punto}; border-radius:50%; float:right;'></div>", unsafe_allow_html=True)
                             st.write("<br><br>", unsafe_allow_html=True)
                             if st.button("Ir al expediente ➔", key=f"ficha_ir_{causa['ROL']}"):
-                                st.session_state['causa_seleccionada'] = causa['ROL']
-                                st.session_state['menu_radio'] = "💼 Causas"
+                                st.session_state.causa_seleccionada = causa['ROL']
+                                st.session_state.menu_radio = "💼 Causas"
                                 st.rerun()
                 st.markdown("</div>", unsafe_allow_html=True)
 
