@@ -8,6 +8,7 @@ import io
 from datetime import datetime
 from streamlit_calendar import calendar
 
+# Intentamos importar la librería para crear Word. 
 try:
     from docx import Document
     from docx.shared import Pt
@@ -75,6 +76,7 @@ def obtener_feriados_chile():
         ]
         for fecha, nombre in fijos:
             feriados.append({"title": f"🇨🇱 {nombre}", "start": fecha, "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"})
+    
     feriados.extend([
         {"title": "🇨🇱 Viernes Santo", "start": "2025-04-18", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
         {"title": "🇨🇱 Sábado Santo", "start": "2025-04-19", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
@@ -251,7 +253,7 @@ if not st.session_state['logged_in']:
                     st.error("❌ Usuario o contraseña incorrectos.")
     st.stop()
 
-# --- ARQUITECTURA MULTI-USUARIO ---
+# --- ARQUITECTURA DE DATOS LOCALES ---
 usuario_actual = st.session_state['username']
 nombre_real_usuario = NOMBRES_REALES.get(usuario_actual, usuario_actual.capitalize())
 
@@ -259,7 +261,7 @@ ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 
-# --- DEFENSA ANTI ERRORES (PANTALLA ROSADA) ---
+# Creación/verificación de archivos seguros
 if not os.path.exists(ARCHIVO_TAREAS):
     pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(ARCHIVO_TAREAS, index=False)
 else:
@@ -279,7 +281,17 @@ else:
 if not os.path.exists(ARCHIVO_CONTRATOS):
     pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios']).to_csv(ARCHIVO_CONTRATOS, index=False)
 
-# --- INICIALIZACIÓN DE ESTADOS GLOBALES ---
+
+# --- CALLBACK PARA RESETEAR LA NAVEGACIÓN ---
+def resetear_vistas():
+    # Esto limpia las carpetas abiertas si el usuario cambia de sección en el menú
+    st.session_state.causa_seleccionada = None
+    st.session_state.cliente_seleccionado = None
+    st.session_state.modo_edicion = False
+    st.session_state.creando_tarea = False
+    st.session_state.editando_tarea = None
+
+# Estados iniciales
 if 'menu_radio' not in st.session_state: st.session_state['menu_radio'] = "🏠 Inicio"
 if 'causa_seleccionada' not in st.session_state: st.session_state['causa_seleccionada'] = None
 if 'cliente_seleccionado' not in st.session_state: st.session_state['cliente_seleccionado'] = None
@@ -287,22 +299,18 @@ if 'modo_edicion' not in st.session_state: st.session_state['modo_edicion'] = Fa
 if 'creando_tarea' not in st.session_state: st.session_state['creando_tarea'] = False
 if 'editando_tarea' not in st.session_state: st.session_state['editando_tarea'] = None
 
-# --- FUNCIONES CALLBACKS ---
+# Funciones de botones directos
 def nav_causas():
     st.session_state.menu_radio = "💼 Causas"
-    st.session_state.causa_seleccionada = None
+    resetear_vistas()
 def nav_clientes():
     st.session_state.menu_radio = "👥 Clientes"
-    st.session_state.cliente_seleccionado = None
-def nav_tareas():
-    st.session_state.menu_radio = "☑️ Tareas"
+    resetear_vistas()
 def ir_a_expediente(rol_causa):
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = rol_causa
-def limpiar_causa():
-    st.session_state.causa_seleccionada = None
 
-# --- CSS DE ALTA FIDELIDAD ---
+# --- CSS ALTA FIDELIDAD ---
 st.markdown("""
 <style>
     .block-container { max-width: 1350px !important; margin: 0 auto !important; padding-top: 3rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
@@ -331,10 +339,11 @@ with st.sidebar:
         <h2 style='color:#172b4d; margin-top: 5px; margin-bottom: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h2>
     </div>
     """, unsafe_allow_html=True)
-    
     st.write("---")
-    menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
-    st.radio("Navegación", menu_opciones, key="menu_radio")
+    
+    menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "☑️ Tareas", "💼 Causas", "👥 Clientes", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
+    st.radio("Navegación", menu_opciones, key="menu_radio", on_change=resetear_vistas)
+    
     st.write("---")
     if st.button("🚪 Cerrar Sesión", use_container_width=True): 
         for key in list(st.session_state.keys()): del st.session_state[key]
@@ -346,8 +355,8 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     st.write("Panel de control unificado. Aquí tienes un resumen de tu actividad judicial.")
     st.write("<br>", unsafe_allow_html=True)
 
-    df_causas_totales = pd.read_csv(ARCHIVO_BD) if os.path.exists(ARCHIVO_BD) else pd.DataFrame()
-    df_tareas_totales = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
+    df_causas_totales = pd.read_csv(ARCHIVO_BD)
+    df_tareas_totales = pd.read_csv(ARCHIVO_TAREAS)
     
     cant_causas = len(df_causas_totales) if not df_causas_totales.empty else 0
     cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty and 'Cliente' in df_causas_totales.columns else 0
@@ -360,26 +369,19 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             try:
                 lista_comentarios = json.loads(bloque_comentario)
                 for com in lista_comentarios:
-                    if "[📎 Archivo adjunto:" in com.get('texto', ''):
-                        documentos_efectivos += 1
+                    if "[📎 Archivo adjunto:" in com.get('texto', ''): documentos_efectivos += 1
             except: pass
 
     # MÉTRICAS PRINCIPALES
     c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
-    with c2:
-        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
-    with c4:
-        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
+    with c1: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
+    with c2: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
+    with c3: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
+    with c4: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
 
     st.write("<br>", unsafe_allow_html=True)
 
-    # GRID ESTILO CASETRACKING
     grid_izq, grid_der = st.columns([1.2, 1])
-    
     with grid_izq:
         st.markdown("<div class='dash-card'><div class='dash-header'>ÚLTIMAS CAUSAS INGRESADAS</div>", unsafe_allow_html=True)
         if df_causas_totales.empty:
@@ -407,7 +409,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas")
     col_cal, col_side = st.columns([3, 1])
     eventos_calendario = obtener_feriados_chile()
-    df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
+    df_t = pd.read_csv(ARCHIVO_TAREAS)
     if not df_t.empty:
         for idx, r in df_t.iterrows():
             try:
@@ -464,7 +466,7 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
     st.title("📋 Agenda Diaria")
     fecha_hoy = datetime.now().strftime("%d/%m/%Y")
     st.markdown(f"<p style='color:#6b778c; font-size:16px; margin-bottom: 25px;'>Tareas programadas para hoy: <strong>{fecha_hoy}</strong></p>", unsafe_allow_html=True)
-    df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
+    df_t = pd.read_csv(ARCHIVO_TAREAS)
     if df_t.empty:
         st.info("Aún no hay tareas creadas en el sistema.")
     else:
@@ -492,7 +494,7 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
 
 elif st.session_state['menu_radio'] == "☑️ Tareas":
     st.title("☑️ Gestor Global de Tareas")
-    df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
+    df_t = pd.read_csv(ARCHIVO_TAREAS)
     if df_t.empty: st.info("No hay tareas creadas en el sistema.")
     else:
         for idx, row in df_t.iterrows():
@@ -519,7 +521,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.error("⚠️ Falta el motor para generar documentos. Ve a tu archivo `requirements.txt` en GitHub, agrega la palabra `python-docx` en una línea nueva y guarda los cambios.")
         else:
             st.markdown("Rellena los módulos para generar el documento Word automático.")
-            with st.form("form_generador", clear_on_submit=True):
+            with st.form("form_generador", clear_on_submit=False):
                 with st.container(border=True):
                     st.markdown("<h4 style='color:#172b4d;'>1. Datos del Servicio</h4>", unsafe_allow_html=True)
                     tipo_servicio = st.selectbox("Tipo de Procedimiento", ["Liquidación voluntaria", "Juicio ejecutivo", "Derecho de familia", "Derecho penal", "Derecho civil"])
@@ -529,35 +531,35 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 with c_abog:
                     with st.container(border=True):
                         st.markdown("<h4 style='color:#172b4d;'>2. Datos del Abogado</h4>", unsafe_allow_html=True)
-                        abog_nom = st.text_input("Nombre Completo Abogado")
-                        abog_rut = st.text_input("RUT Abogado")
-                        abog_dom = st.text_input("Domicilio Profesional")
-                        abog_tel = st.text_input("Teléfono Abogado")
-                        abog_correo = st.text_input("Correo Electrónico")
+                        abog_nom = st.text_input("Nombre Completo Abogado", placeholder="Ej: Eduardo Riquelme Zambrano")
+                        abog_rut = st.text_input("RUT Abogado", placeholder="Ej: 17.427.459-2")
+                        abog_dom = st.text_input("Domicilio Profesional", placeholder="Ej: Carlos Antúnez 2025, Providencia")
+                        abog_tel = st.text_input("Teléfono Abogado", placeholder="Ej: +569 1234 5678")
+                        abog_correo = st.text_input("Correo Electrónico", placeholder="Ej: abogado@correo.cl")
                 
                 with c_cli:
                     with st.container(border=True):
                         st.markdown("<h4 style='color:#172b4d;'>3. Datos del Cliente</h4>", unsafe_allow_html=True)
-                        cli_nom = st.text_input("Nombre Completo Cliente")
-                        cli_rut = st.text_input("RUT Cliente")
-                        cli_dom = st.text_input("Domicilio Cliente")
-                        cli_tel = st.text_input("Teléfono Cliente")
-                        cli_correo = st.text_input("Correo Cliente")
+                        cli_nom = st.text_input("Nombre Completo Cliente", placeholder="Ej: Natalia Vásquez Lagos")
+                        cli_rut = st.text_input("RUT Cliente", placeholder="Ej: 17.578.045-9")
+                        cli_dom = st.text_input("Domicilio Cliente", placeholder="Ej: Camino Huape Km 12, Malloa")
+                        cli_tel = st.text_input("Teléfono Cliente", placeholder="Ej: +569 8765 4321")
+                        cli_correo = st.text_input("Correo Cliente", placeholder="Ej: cliente@correo.cl")
                         
                 with st.container(border=True):
                     st.markdown("<h4 style='color:#172b4d;'>4. Honorarios y Pago</h4>", unsafe_allow_html=True)
                     c_pago1, c_pago2 = st.columns(2)
                     with c_pago1:
-                        hon_num = st.text_input("Honorarios (Números, ej: $2.220.000)")
-                        hon_let = st.text_input("Honorarios (Letras, ej: dos millones doscientos...)")
+                        hon_num = st.text_input("Honorarios (Números)", placeholder="Ej: $2.220.000")
+                        hon_let = st.text_input("Honorarios (Letras)", placeholder="Ej: dos millones doscientos veinte mil pesos")
                         cuotas_c = st.number_input("Cantidad de Cuotas", min_value=1, max_value=60, value=12)
-                        cuotas_m = st.text_input("Monto por Cuota (ej: $185.000)")
+                        cuotas_m = st.text_input("Monto por Cuota", placeholder="Ej: $185.000")
                         fecha_pago = st.date_input("Fecha de inicio de pagos")
                     with c_pago2:
                         st.markdown("Datos para Transferencia")
-                        banco = st.text_input("Banco")
+                        banco = st.text_input("Banco", placeholder="Ej: Banco Falabella")
                         tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
-                        num_cta = st.text_input("Número de Cuenta")
+                        num_cta = st.text_input("Número de Cuenta", placeholder="Ej: 019996291120")
 
                 btn_gen = st.form_submit_button("📄 Construir Contrato Word", type="primary", use_container_width=True)
                 
@@ -578,7 +580,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     nombre_limpio = cli_nom.replace(' ', '_') if cli_nom else "Sin_Nombre"
                     st.session_state['nombre_archivo'] = f"Contrato_Servicios_{nombre_limpio}.docx"
                     
-                    # Registrar en base de datos de contratos
                     df_contratos = pd.read_csv(ARCHIVO_CONTRATOS)
                     nuevo_c = {'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'Cliente': cli_nom, 'Servicio': tipo_servicio, 'Honorarios': hon_num}
                     df_contratos = pd.concat([df_contratos, pd.DataFrame([nuevo_c])], ignore_index=True)
@@ -591,7 +592,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
 
     with tab_reg:
         st.markdown("### Registro Histórico de Contratos")
-        df_contratos_reg = pd.read_csv(ARCHIVO_CONTRATOS) if os.path.exists(ARCHIVO_CONTRATOS) else pd.DataFrame()
+        df_contratos_reg = pd.read_csv(ARCHIVO_CONTRATOS)
         if df_contratos_reg.empty:
             st.info("No hay contratos registrados aún.")
         else:
@@ -681,7 +682,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             st.session_state['editando_tarea'] = None
             st.title("💼 Gestión de Causas")
             
-            # FILTROS ESTILO CAUSAS
             c_f1, c_f2 = st.columns(2)
             trib_unicos = df_causas['TRIBUNAL'].dropna().unique().tolist()
             neg_unicos = df_causas['Tipo_Negocio'].dropna().unique().tolist()
@@ -708,6 +708,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             
             col_back, col_title = st.columns([1, 10])
             with col_back:
+                def limpiar_causa(): st.session_state.causa_seleccionada = None
                 if st.button("⬅ Volver al Listado", on_click=limpiar_causa): pass
                 
             with col_title:
@@ -847,7 +848,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 <div style="padding: 15px 4px 5px 4px;">{comentarios_html}</div>
                                 """, unsafe_allow_html=True)
                                 
-                                archivo_adjunto_coment = st.file_uploader("📎 Adjuntar documento", key=f"file_uploader_{row_t['ID_Tarea']}", label_visibility="collapsed")
+                                archivo_adjunto_coment = st.file_uploader("📎 Adjuntar documento al comentario", key=f"file_uploader_{row_t['ID_Tarea']}", label_visibility="collapsed")
                                 with st.form(key=f"form_coment_{row_t['ID_Tarea']}", clear_on_submit=True):
                                     col_inp, col_snd = st.columns([8, 1])
                                     nuevo_comentario = col_inp.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Agregar un comentario...")
