@@ -236,13 +236,15 @@ def crear_contrato_word(datos):
 USUARIOS = {
     "Narratia": "20911237",
     "Vfarfan": "vpfm2404",
-    "Gdonoso": "gdonoso123"
+    "Gdonoso": "gdonoso123",
+    "Mcortes": "Mcortes123"
 }
 
 NOMBRES_REALES = {
     "Narratia": "Nicolás Arratia",
     "Vfarfan": "Valentina Farfán",
-    "Gdonoso": "Gabriel Donoso"
+    "Gdonoso": "Gabriel Donoso",
+    "Mcortes": "Miryam Cortés"
 }
 
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
