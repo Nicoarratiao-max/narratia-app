@@ -232,8 +232,8 @@ def crear_contrato_word(datos):
     return doc
 
 # --- SISTEMA DE AUTENTICACIÓN ---
-USUARIOS = {"Narratia": "20911237", "Vfarfan": "vpfm2404", "Gdonoso": "gdonoso123"}
-NOMBRES_REALES = {"Narratia": "Nicolás Arratia", "Vfarfan": "Valentina Farfán", "Gdonoso": "Gabriel Donoso"}
+USUARIOS = {"Narratia": "20911237", "Vfarfan": "vpfm2404", "Gdonoso": "gdonoso123","Mcortes": "Mcortes123"}
+NOMBRES_REALES = {"Narratia": "Nicolás Arratia Oyarzo", "Vfarfan": "Valentina Farfán Muñoz", "Gdonoso": "Juan Gabriel Donoso Cabello", "Mcortes": "Miryam Cortés Salinas"}
 
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'username' not in st.session_state: st.session_state['username'] = ""
