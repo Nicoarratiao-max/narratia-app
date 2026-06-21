@@ -446,40 +446,57 @@ def limpiar_causa():
 # --- ESTILOS CSS ENCUADRE DE ALTA FIDELIDAD ---
 st.markdown("""
 <style>
-    /* Fondo principal y barra lateral */
-    [data-testid="stAppViewContainer"] { background-color: #0d1117 !important; }
-    [data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d !important; }
+    /* Fondo principal: Gris azulado profundo (no negro puro) */
+    [data-testid="stAppViewContainer"] { 
+        background-color: #0d1117 !important; 
+    }
     
-    /* Títulos y texto general */
-    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #e6edf3 !important; }
+    /* Sidebar: Un tono apenas más oscuro para dar profundidad */
+    [data-testid="stSidebar"] { 
+        background-color: #161b22 !important; 
+        border-right: 1px solid #30363d !important; 
+    }
     
-    /* Estilo del menú lateral */
-    [data-testid="stSidebarNav"] { padding-top: 20px; }
-    
-    /* Tarjetas de contenido */
-    .dash-card { background: #161b22 !important; border-radius: 12px; padding: 15px; border: 1px solid #30363d !important; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-    .dash-header { border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #8b949e; letter-spacing: 0.5px; text-transform: uppercase; }
-    
-    /* Botones */
-    [data-testid="stButton"] button { 
-        background-color: #21262d !important; 
+    /* Texto: Blanco apagado para evitar el brillo que fatiga */
+    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { 
         color: #c9d1d9 !important; 
+    }
+    
+    /* Tarjetas: Fondo gris oscuro con un borde sutil */
+    .dash-card { 
+        background-color: #21262d !important; 
+        border-radius: 10px; 
+        padding: 18px; 
         border: 1px solid #30363d !important; 
-        border-radius: 6px !important; 
-    }
-    [data-testid="stButton"] button:hover { 
-        border-color: #58a6ff !important; 
-        color: #58a6ff !important; 
+        margin-bottom: 15px; 
+        box-shadow: 0 4px 6px rgba(0,0,0,0.2); 
     }
     
-    /* Sidebar Radio (Menú) */
-    div[role="radiogroup"] label { color: #c9d1d9 !important; font-weight: 500 !important; }
-    
-    /* Inputs */
-    .stTextInput input, .stTextArea textarea, .stSelectbox select {
+    /* Inputs y Campos de texto: Contraste suave */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input {
         background-color: #0d1117 !important;
         border: 1px solid #30363d !important;
-        color: #c9d1d9 !important;
+        color: #e6edf3 !important;
+    }
+    
+    /* Placeholder: Que sea visible pero no intrusivo */
+    ::placeholder {
+        color: #484f58 !important;
+    }
+    
+    /* Botones estilo "cuadraditos": Uniformes y elegantes */
+    [data-testid="stButton"] button { 
+        background-color: #30363d !important; 
+        color: #c9d1d9 !important; 
+        border: 1px solid #484f58 !important; 
+        border-radius: 6px !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
+    }
+    [data-testid="stButton"] button:hover { 
+        background-color: #3b434d !important;
+        border-color: #58a6ff !important;
+        color: #ffffff !important;
     }
 </style>
 """, unsafe_allow_html=True)
