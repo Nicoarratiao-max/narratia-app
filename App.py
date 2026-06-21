@@ -446,20 +446,41 @@ def limpiar_causa():
 # --- ESTILOS CSS ENCUADRE DE ALTA FIDELIDAD ---
 st.markdown("""
 <style>
-    .block-container { max-width: 1350px !important; margin: 0 auto !important; padding-top: 3rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
-    [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
-    [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
-    [data-testid="stHeader"] { background-color: transparent !important; }
-    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
+    /* Fondo principal y barra lateral */
+    [data-testid="stAppViewContainer"] { background-color: #0d1117 !important; }
+    [data-testid="stSidebar"] { background-color: #161b22 !important; border-right: 1px solid #30363d !important; }
     
-    .dash-card { background: white !important; border-radius: 12px; padding: 15px; border: 1px solid #e0e4e8; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    .dash-header { border-bottom: 2px solid #e0e4e8; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #6b778c; letter-spacing: 0.5px; text-transform: uppercase; }
-    .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-    .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    /* Títulos y texto general */
+    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #e6edf3 !important; }
     
-    [data-testid="stVerticalBlockBorderWrapper"] { background-color: white !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; }
-    [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #e0e4e8 !important; }
-    [data-testid="stButton"] button:hover { border-color: #0052cc !important; color: #0052cc !important; }
+    /* Estilo del menú lateral */
+    [data-testid="stSidebarNav"] { padding-top: 20px; }
+    
+    /* Tarjetas de contenido */
+    .dash-card { background: #161b22 !important; border-radius: 12px; padding: 15px; border: 1px solid #30363d !important; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+    .dash-header { border-bottom: 1px solid #30363d; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #8b949e; letter-spacing: 0.5px; text-transform: uppercase; }
+    
+    /* Botones */
+    [data-testid="stButton"] button { 
+        background-color: #21262d !important; 
+        color: #c9d1d9 !important; 
+        border: 1px solid #30363d !important; 
+        border-radius: 6px !important; 
+    }
+    [data-testid="stButton"] button:hover { 
+        border-color: #58a6ff !important; 
+        color: #58a6ff !important; 
+    }
+    
+    /* Sidebar Radio (Menú) */
+    div[role="radiogroup"] label { color: #c9d1d9 !important; font-weight: 500 !important; }
+    
+    /* Inputs */
+    .stTextInput input, .stTextArea textarea, .stSelectbox select {
+        background-color: #0d1117 !important;
+        border: 1px solid #30363d !important;
+        color: #c9d1d9 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
