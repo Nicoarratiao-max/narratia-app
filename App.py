@@ -8,8 +8,6 @@ import io
 from datetime import datetime
 from streamlit_calendar import calendar
 
-# Intentamos importar la librería para crear Word. 
-# Si no está, la app avisa en vez de caerse.
 try:
     from docx import Document
     from docx.shared import Pt
@@ -76,11 +74,7 @@ def obtener_feriados_chile():
             (f"{anio}-12-08", "Inmaculada Concepción"), (f"{anio}-12-25", "Navidad")
         ]
         for fecha, nombre in fijos:
-            feriados.append({
-                "title": f"🇨🇱 {nombre}", "start": fecha, "color": "#ffebe6", 
-                "textColor": "#bf2600", "allDay": True, "display": "block"
-            })
-    
+            feriados.append({"title": f"🇨🇱 {nombre}", "start": fecha, "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"})
     feriados.extend([
         {"title": "🇨🇱 Viernes Santo", "start": "2025-04-18", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
         {"title": "🇨🇱 Sábado Santo", "start": "2025-04-19", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
@@ -95,20 +89,16 @@ def obtener_feriados_chile():
 def crear_contrato_word(datos):
     if not DOCX_READY: return None
     doc = Document()
-    
-    # Formato de fuente oficial
     style = doc.styles['Normal']
     font = style.font
     font.name = 'Arial'
     font.size = Pt(11)
     
-    # TÍTULO
     titulo = doc.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r_tit = titulo.add_run("CONTRATO DE PRESTACIÓN DE SERVICIOS PROFESIONALES\n")
     r_tit.bold = True
     
-    # FECHA Y COMPARECENCIA
     hoy = datetime.now()
     meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     fecha_str = f"{hoy.day} de {meses[hoy.month-1].lower()} del año {hoy.year}"
@@ -120,7 +110,6 @@ def crear_contrato_word(datos):
     intro.add_run(f"Por otra parte, don/doña {datos['cliente_nombre']}, chileno/a, cédula nacional de identidad número {datos['cliente_rut']}, con domicilio en {datos['cliente_domicilio']}, número de contacto {datos['cliente_tel']}, correo electrónico {datos['cliente_correo']}, en adelante \"LA CLIENTE\" o \"EL CLIENTE\".\n\n")
     intro.add_run("Ambas partes mayores de edad, quienes acreditan su identidad con las cédulas citadas y exponen que han convenido lo siguiente:")
     
-    # CLÁUSULA 1: SERVICIO
     p1 = doc.add_paragraph()
     p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p1.add_run("CLÁUSULA PRIMERA: DEL SERVICIO PROFESIONAL. ").bold = True
@@ -128,21 +117,18 @@ def crear_contrato_word(datos):
     p1.add_run("El servicio incluye:\n")
     p1.add_run(datos['detalle_servicio'])
     
-    # CLÁUSULA 2: HONORARIOS
     p2 = doc.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p2.add_run("CLÁUSULA SEGUNDA: HONORARIOS. ").bold = True
     p2.add_run(f"Como remuneración por los servicios contratados, las partes acuerdan un honorario total de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
     p2.add_run("Este monto cubre la defensa letrada durante todo el procedimiento, independiente del tiempo que este demore, hasta la dictación de la resolución de término o equivalente jurisdiccional.")
     
-    # CLÁUSULA 3: FORMA DE PAGO
     p3 = doc.add_paragraph()
     p3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p3.add_run("CLÁUSULA TERCERA: FORMA DE PAGO. ").bold = True
     p3.add_run(f"El monto total pactado será pagado en {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas de {datos['cuotas_monto']} cada una.\n")
     p3.add_run("Considerando que el mes actual se destinará a la recopilación de antecedentes y preparación de la demanda, el calendario de pagos será el siguiente:\n")
     
-    # Tabla de pagos generada automáticamente
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
     hdr_cells = table.rows[0].cells
@@ -155,11 +141,9 @@ def crear_contrato_word(datos):
     for i in range(datos['cuotas_cant']):
         row_cells = table.add_row().cells
         row_cells[0].text = f"{i+1:02d}"
-        
         m = fecha_base.month + i
         y = fecha_base.year + ((m - 1) // 12)
         m = ((m - 1) % 12) + 1
-        
         row_cells[1].text = f"{fecha_base.day:02d} de {meses[m-1]} de {y}"
         row_cells[2].text = str(datos['cuotas_monto'])
         row_cells[3].text = "PENDIENTE"
@@ -168,7 +152,6 @@ def crear_contrato_word(datos):
     p3_bis.add_run("\nDatos para Transferencia:\n").bold = True
     p3_bis.add_run(f"Titular: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nBanco: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nN° de Cuenta: {datos['num_cuenta']}\nCorreo: {datos['abogado_correo']}")
 
-    # CLÁUSULA 4: INCUMPLIMIENTO
     p4 = doc.add_paragraph()
     p4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p4.add_run("CLÁUSULA CUARTA: INCUMPLIMIENTO, ACELERACIÓN Y MULTA. ").bold = True
@@ -180,7 +163,6 @@ def crear_contrato_word(datos):
     p4.add_run("Multa e Intereses: ").bold = True
     p4.add_run("En caso de mora, la deuda devengará el interés máximo convencional. Adicionalmente, se aplicará una multa diaria a título de cláusula penal equivalente a 0,15 Unidades de Fomento (UF) por cada día de atraso, más los gastos de cobranza extrajudicial que correspondan.")
 
-    # CLÁUSULA 5: OBLIGACIONES
     p5 = doc.add_paragraph()
     p5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p5.add_run("CLÁUSULA QUINTA: OBLIGACIONES DEL ABOGADO Y DEL CLIENTE.\n").bold = True
@@ -190,7 +172,6 @@ def crear_contrato_word(datos):
     p5.add_run("Se obliga a entregar de forma íntegra, veraz y oportuna toda la documentación y antecedentes solicitados por El Abogado. La Cliente declara que los antecedentes aportados son fidedignos.")
 
     num_clausula = 6
-    # CLÁUSULA 6 CONDICIONAL (Solo si es Liquidación Voluntaria)
     if datos['tipo_servicio'] == "Liquidación voluntaria":
         p6 = doc.add_paragraph()
         p6.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -201,23 +182,19 @@ def crear_contrato_word(datos):
 
     numeros_letras = {6: "SEXTA", 7: "SÉPTIMA", 8: "OCTAVA"}
     
-    # CLÁUSULA 7 o 6: DESISTIMIENTO
     p7 = doc.add_paragraph()
     p7.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p7.add_run(f"CLÁUSULA {numeros_letras[num_clausula]}: DESISTIMIENTO. ").bold = True
     p7.add_run("En caso de desistimiento o término unilateral del contrato por parte de La Cliente, no habrá lugar a devolución de los dineros ya pagados, los que se imputarán a los servicios profesionales prestados.")
     num_clausula += 1
 
-    # CLÁUSULA 8 o 7: DOMICILIO Y FIRMA
     p8 = doc.add_paragraph()
     p8.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p8.add_run(f"CLÁUSULA {numeros_letras[num_clausula]}: DOMICILIO Y JURISDICCIÓN. ").bold = True
     p8.add_run("Para todos los efectos legales derivados del presente contrato, las partes fijan su domicilio en la ciudad indicada en la comparecencia y se someten a la jurisdicción de sus Tribunales de Justicia.\n\nEl presente instrumento se firma en dos ejemplares del mismo tenor y fecha, quedando uno en poder de cada parte.")
 
-    # FIRMAS ORDENADAS
     doc.add_paragraph("\n\n\n")
     table_firmas = doc.add_table(rows=1, cols=2)
-    
     c_abog = table_firmas.cell(0, 0).paragraphs[0]
     c_abog.alignment = WD_ALIGN_PARAGRAPH.CENTER
     c_abog.add_run("___________________________________\n")
@@ -233,19 +210,8 @@ def crear_contrato_word(datos):
     return doc
 
 # --- SISTEMA DE AUTENTICACIÓN Y NOMBRES REALES ---
-USUARIOS = {
-    "Narratia": "20911237",
-    "Vfarfan": "vpfm2404",
-    "Gdonoso": "gdonoso123",
-    "Mcortes": "Mcortes123"
-}
-
-NOMBRES_REALES = {
-    "Narratia": "Nicolás Arratia",
-    "Vfarfan": "Valentina Farfán",
-    "Gdonoso": "Gabriel Donoso",
-    "Mcortes": "Miryam Cortés"
-}
+USUARIOS = {"Narratia": "20911237", "Vfarfan": "vpfm2404", "Gdonoso": "gdonoso123"}
+NOMBRES_REALES = {"Narratia": "Nicolás Arratia", "Vfarfan": "Valentina Farfán", "Gdonoso": "Gabriel Donoso"}
 
 if 'logged_in' not in st.session_state: st.session_state['logged_in'] = False
 if 'username' not in st.session_state: st.session_state['username'] = ""
@@ -255,26 +221,10 @@ if not st.session_state['logged_in']:
     <style>
         [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
         #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-        
-        .block-container {
-            max-width: 1300px !important;
-            margin: 0 auto !important;
-            padding-top: 2rem !important;
-        }
-
-        [data-testid="stForm"] {
-            background-color: white !important;
-            border-radius: 16px !important;
-            border: 1px solid #e0e4e8 !important;
-            padding: 40px 30px !important;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important;
-        }
+        .block-container { max-width: 1300px !important; margin: 0 auto !important; padding-top: 2rem !important; }
+        [data-testid="stForm"] { background-color: white !important; border-radius: 16px !important; border: 1px solid #e0e4e8 !important; padding: 40px 30px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
         p, label, span, div { color: #172b4d !important; }
-        [data-testid="stFormSubmitButton"] button {
-            background-color: #0052cc !important;
-            color: white !important;
-            border: none !important;
-        }
+        [data-testid="stFormSubmitButton"] button { background-color: #0052cc !important; color: white !important; border: none !important; }
     </style>
     """, unsafe_allow_html=True)
     
@@ -289,13 +239,10 @@ if not st.session_state['logged_in']:
                 <p style='color:#6b778c; font-size: 15px; margin:0;'>Inicia sesión en tu espacio de trabajo</p>
             </div>
             """, unsafe_allow_html=True)
-            
             user = st.text_input("Usuario")
             pwd = st.text_input("Contraseña", type="password")
             st.write("") 
-            submit = st.form_submit_button("Ingresar al Sistema", use_container_width=True)
-            
-            if submit:
+            if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
                 if user in USUARIOS and USUARIOS[user] == pwd:
                     st.session_state['logged_in'] = True
                     st.session_state['username'] = user
@@ -304,21 +251,15 @@ if not st.session_state['logged_in']:
                     st.error("❌ Usuario o contraseña incorrectos.")
     st.stop()
 
-# --- ARQUITECTURA MULTI-USUARIO (DATOS INDEPENDIENTES) ---
+# --- ARQUITECTURA MULTI-USUARIO ---
 usuario_actual = st.session_state['username']
 nombre_real_usuario = NOMBRES_REALES.get(usuario_actual, usuario_actual.capitalize())
 
 ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
+ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 
-# --- INICIALIZACIÓN DE ESTADOS GLOBALES DE NAVEGACIÓN ---
-if 'menu_radio' not in st.session_state: st.session_state['menu_radio'] = "🏠 Inicio"
-if 'causa_seleccionada' not in st.session_state: st.session_state['causa_seleccionada'] = None
-if 'cliente_seleccionado' not in st.session_state: st.session_state['cliente_seleccionado'] = None
-if 'modo_edicion' not in st.session_state: st.session_state['modo_edicion'] = False
-if 'creando_tarea' not in st.session_state: st.session_state['creando_tarea'] = False
-if 'editando_tarea' not in st.session_state: st.session_state['editando_tarea'] = None
-
+# --- DEFENSA ANTI ERRORES (PANTALLA ROSADA) ---
 if not os.path.exists(ARCHIVO_TAREAS):
     pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(ARCHIVO_TAREAS, index=False)
 else:
@@ -329,59 +270,54 @@ else:
 
 if not os.path.exists(ARCHIVO_BD):
     pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']).to_csv(ARCHIVO_BD, index=False)
+else:
+    df_c_check = pd.read_csv(ARCHIVO_BD)
+    if 'Cliente' not in df_c_check.columns:
+        df_c_check['Cliente'] = pd.Series(dtype='str')
+        df_c_check.to_csv(ARCHIVO_BD, index=False)
 
-# --- FUNCIONES CALLBACKS PARA NAVEGACIÓN SIN ERRORES ---
+if not os.path.exists(ARCHIVO_CONTRATOS):
+    pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios']).to_csv(ARCHIVO_CONTRATOS, index=False)
+
+# --- INICIALIZACIÓN DE ESTADOS GLOBALES ---
+if 'menu_radio' not in st.session_state: st.session_state['menu_radio'] = "🏠 Inicio"
+if 'causa_seleccionada' not in st.session_state: st.session_state['causa_seleccionada'] = None
+if 'cliente_seleccionado' not in st.session_state: st.session_state['cliente_seleccionado'] = None
+if 'modo_edicion' not in st.session_state: st.session_state['modo_edicion'] = False
+if 'creando_tarea' not in st.session_state: st.session_state['creando_tarea'] = False
+if 'editando_tarea' not in st.session_state: st.session_state['editando_tarea'] = None
+
+# --- FUNCIONES CALLBACKS ---
 def nav_causas():
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = None
-
 def nav_clientes():
     st.session_state.menu_radio = "👥 Clientes"
     st.session_state.cliente_seleccionado = None
-
 def nav_tareas():
     st.session_state.menu_radio = "☑️ Tareas"
-
 def ir_a_expediente(rol_causa):
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = rol_causa
+def limpiar_causa():
+    st.session_state.causa_seleccionada = None
 
 # --- CSS DE ALTA FIDELIDAD ---
 st.markdown("""
 <style>
-    .block-container {
-        max-width: 1350px !important;
-        margin: 0 auto !important;
-        padding-top: 3rem !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
-    }
+    .block-container { max-width: 1350px !important; margin: 0 auto !important; padding-top: 3rem !important; padding-left: 2rem !important; padding-right: 2rem !important; }
     [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
     [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
     [data-testid="stHeader"] { background-color: transparent !important; }
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
-    
-    [data-testid="stButton"] button {
-        background-color: #ffffff !important;
-        color: #172b4d !important;
-        border: 1px solid #e0e4e8 !important;
-    }
-    [data-testid="stButton"] button:hover {
-        border-color: #0052cc !important;
-        color: #0052cc !important;
-    }
-    
-    #MainMenu {visibility: hidden;} footer {visibility: hidden;}
-    .stAppDeployButton {display:none;}
-    
+    [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #e0e4e8 !important; }
+    [data-testid="stButton"] button:hover { border-color: #0052cc !important; color: #0052cc !important; }
+    #MainMenu {visibility: hidden;} footer {visibility: hidden;} .stAppDeployButton {display:none;}
     .info-card { background: white !important; border-radius: 12px; padding: 20px; border: 1px solid #e0e4e8; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    .info-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-    .info-title { font-weight: 600; font-size: 16px; color: #172b4d; }
+    .dash-card { background: white !important; border-radius: 12px; padding: 15px; border: 1px solid #e0e4e8; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
+    .dash-header { border-bottom: 2px solid #e0e4e8; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #6b778c; letter-spacing: 0.5px; }
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-    .info-group { margin-bottom: 12px; }
-    .info-label { font-size: 13px; color: #6b778c !important; margin-bottom: 2px; }
-    .info-value { font-size: 15px; color: #172b4d !important; }
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: white !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important; }
     [data-testid="stForm"] { border: none; padding: 0; margin-top: 10px; background-color: transparent !important; box-shadow: none !important;}
 </style>
@@ -397,10 +333,8 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     
     st.write("---")
-    menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Generador de contratos", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "📑 Smart documents", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
-    
+    menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", "💼 Causas", "👥 Clientes", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", "📥 Excel", "📈 Marketing"]
     st.radio("Navegación", menu_opciones, key="menu_radio")
-    
     st.write("---")
     if st.button("🚪 Cerrar Sesión", use_container_width=True): 
         for key in list(st.session_state.keys()): del st.session_state[key]
@@ -409,15 +343,14 @@ with st.sidebar:
 # --- CONTROLADOR DE VISTAS ---
 if st.session_state['menu_radio'] == "🏠 Inicio":
     st.title(f"{obtener_saludo()}, {nombre_real_usuario}")
-    st.write("Bienvenido a tu panel de control de gestión judicial unificada.")
+    st.write("Panel de control unificado. Aquí tienes un resumen de tu actividad judicial.")
     st.write("<br>", unsafe_allow_html=True)
 
     df_causas_totales = pd.read_csv(ARCHIVO_BD) if os.path.exists(ARCHIVO_BD) else pd.DataFrame()
     df_tareas_totales = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
     
     cant_causas = len(df_causas_totales) if not df_causas_totales.empty else 0
-    cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty else 0
-    
+    cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty and 'Cliente' in df_causas_totales.columns else 0
     fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
     tareas_del_dia = len(df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]) if not df_tareas_totales.empty else 0
     
@@ -429,87 +362,69 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
                 for com in lista_comentarios:
                     if "[📎 Archivo adjunto:" in com.get('texto', ''):
                         documentos_efectivos += 1
-            except:
-                pass
+            except: pass
 
+    # MÉTRICAS PRINCIPALES
     c1, c2, c3, c4 = st.columns(4)
-    
     with c1:
-        with st.container(border=True):
-            st.metric("Causas Ingresadas", f"{cant_causas}")
-            st.write("")
-            st.button("Ver Causas ➔", key="btn_ir_a_causas", use_container_width=True, on_click=nav_causas)
-                
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
     with c2:
-        with st.container(border=True):
-            st.metric("Total Clientes", f"{cant_clientes}")
-            st.write("")
-            st.button("Ver Clientes ➔", key="btn_ir_a_clientes", use_container_width=True, on_click=nav_clientes)
-                
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
     with c3:
-        with st.container(border=True):
-            st.metric("Tareas del Día", f"{tareas_del_dia}")
-            st.write("")
-            st.button("Ver Tareas ➔", key="btn_ir_a_tareas", use_container_width=True, on_click=nav_tareas)
-                
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
     with c4:
-        with st.container(border=True):
-            st.metric("Adjuntos Totales", f"{documentos_efectivos}")
-            st.write("")
-            st.markdown("<p style='font-size:13px; color:#6b778c; text-align:center; padding-top:6px;'>Archivos en Sistema</p>", unsafe_allow_html=True)
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
+
+    st.write("<br>", unsafe_allow_html=True)
+
+    # GRID ESTILO CASETRACKING
+    grid_izq, grid_der = st.columns([1.2, 1])
+    
+    with grid_izq:
+        st.markdown("<div class='dash-card'><div class='dash-header'>ÚLTIMAS CAUSAS INGRESADAS</div>", unsafe_allow_html=True)
+        if df_causas_totales.empty:
+            st.info("No hay causas recientes.")
+        else:
+            ultimas = df_causas_totales.tail(4)[::-1]
+            for _, c in ultimas.iterrows():
+                st.markdown(f"<div style='border-bottom:1px solid #f4f5f7; padding:8px 0;'><strong style='color:#172b4d; font-size:14px;'>{c.get('CARATULADO', 'Sin nombre')}</strong><br><span style='color:#6b778c; font-size:12px;'>Rol: {c.get('ROL','--')} | {c.get('Tipo_Negocio','--')}</span></div>", unsafe_allow_html=True)
+            st.button("Ver todas las causas", on_click=nav_causas, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with grid_der:
+        st.markdown("<div class='dash-card'><div class='dash-header'>TAREAS PARA HOY</div>", unsafe_allow_html=True)
+        if tareas_del_dia == 0:
+            st.info("No hay tareas pendientes para hoy.")
+        else:
+            t_hoy = df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]
+            for _, t in t_hoy.iterrows():
+                color_t = "#ff5630" if t.get('Prioridad') == 'Alta' else "#ffc400"
+                st.markdown(f"<div style='border-left:3px solid {color_t}; padding-left:10px; margin-bottom:10px;'><strong style='color:#172b4d; font-size:14px;'>{t['Titulo']}</strong><br><span style='color:#6b778c; font-size:12px;'>Causa: {t['ROL']}</span></div>", unsafe_allow_html=True)
+            st.button("Ir a Agenda", on_click=lambda: st.session_state.update({'menu_radio': '📋 Agenda'}), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas")
     col_cal, col_side = st.columns([3, 1])
-    
     eventos_calendario = obtener_feriados_chile()
-    
     df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
-    
     if not df_t.empty:
         for idx, r in df_t.iterrows():
             try:
                 d_obj = datetime.strptime(str(r['Fecha_Vencimiento']), "%d/%m/%Y")
                 d_str = d_obj.strftime("%Y-%m-%d")
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
-                
                 text_color = "white" if bg_color != "#ffc400" else "#172b4d"
-                
-                eventos_calendario.append({
-                    "title": f"📌 {r['Titulo']}", 
-                    "start": d_str, 
-                    "backgroundColor": bg_color, 
-                    "textColor": text_color, 
-                    "borderColor": bg_color
-                })
+                eventos_calendario.append({"title": f"📌 {r['Titulo']}", "start": d_str, "backgroundColor": bg_color, "textColor": text_color, "borderColor": bg_color})
             except: pass
                 
     opciones_calendario = {
-        "initialView": "dayGridMonth", 
-        "locale": "es", 
-        "firstDay": 1, 
-        "buttonText": {
-            "today": "Hoy",
-            "month": "Mes",
-            "week": "Semana",
-            "day": "Día",
-            "list": "Agenda"
-        },
-        "headerToolbar": {
-            "left": "prev,next today", 
-            "center": "title", 
-            "right": "dayGridMonth,timeGridWeek,listMonth"
-        }
+        "initialView": "dayGridMonth", "locale": "es", "firstDay": 1, 
+        "buttonText": {"today": "Hoy", "month": "Mes", "week": "Semana", "day": "Día", "list": "Agenda"},
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek,listMonth"}
     }
-    
     css_calendario_moderno = """
-        .fc {
-            background-color: white;
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-        }
+        .fc { background-color: white; border-radius: 16px; padding: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; }
         .fc-theme-standard td, .fc-theme-standard th { border-color: #e0e4e8; }
         .fc-col-header-cell { background-color: #f8f9fa; padding: 12px 0 !important; color: #6b778c; text-transform: capitalize; font-size: 14px; }
         .fc-button-primary { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #e0e4e8 !important; border-radius: 8px !important; text-transform: capitalize !important; font-weight: 600 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
@@ -541,7 +456,6 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                             color_dot = "#ffc400" if td['Estado'] == 'En progreso' else ("#57a15a" if td['Estado'] == 'Aprobada' else "#ff5630")
                             prio_txt_color = "#ff5630" if td.get('Prioridad') == 'Alta' else ("#ffc400" if td.get('Prioridad') == 'Media' else "#57a15a")
                             st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong> <span style='font-size:11px; color:{prio_txt_color}; font-weight:bold;'>({td.get('Prioridad', 'Media')})</span><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
-                            
                             st.button("Ir al expediente ➔", key=f"cal_ir_{td['ID_Tarea']}", on_click=ir_a_expediente, args=(td['ROL'],))
                             st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
             except: st.write("Selecciona un día en el calendario.")
@@ -549,11 +463,8 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
 elif st.session_state['menu_radio'] == "📋 Agenda":
     st.title("📋 Agenda Diaria")
     fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-    
     st.markdown(f"<p style='color:#6b778c; font-size:16px; margin-bottom: 25px;'>Tareas programadas para hoy: <strong>{fecha_hoy}</strong></p>", unsafe_allow_html=True)
-    
     df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
-    
     if df_t.empty:
         st.info("Aún no hay tareas creadas en el sistema.")
     else:
@@ -564,22 +475,13 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
             orden_prioridades = {"Alta": 1, "Media": 2, "Baja": 3}
             tareas_hoy['Orden_Prio'] = tareas_hoy['Prioridad'].map(orden_prioridades).fillna(4)
             tareas_hoy = tareas_hoy.sort_values(by='Orden_Prio')
-            
             for idx, row in tareas_hoy.iterrows():
                 with st.container(border=True):
                     prio_color = "#ff5630" if row.get('Prioridad') == "Alta" else ("#ffc400" if row.get('Prioridad') == "Media" else "#57a15a")
                     st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
-                    
                     c1, c2, c3 = st.columns([4, 2, 1])
                     with c1:
-                        creador_nombre_real = NOMBRES_REALES.get(row['Creador'], row['Creador'])
-                        st.markdown(f"""
-                        <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                            <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
-                            <strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong>
-                            <span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span>
-                        </div>
-                        """, unsafe_allow_html=True)
+                        st.markdown(f"<div style='display: flex; align-items: center; margin-bottom: 5px;'><img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror=\"this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';\"><strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong><span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span></div>", unsafe_allow_html=True)
                         st.markdown(f"<span style='color:#6b778c;'>{str(row['Descripcion'])[:80]}...</span>", unsafe_allow_html=True)
                     with c2:
                         color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
@@ -587,91 +489,6 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
                         st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']}</span>", unsafe_allow_html=True)
                     with c3:
                         st.button("Ir al expediente ➔", key=f"agenda_ir_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
-
-
-elif st.session_state['menu_radio'] == "📄 Generador de contratos":
-    st.title("📄 Generador Automático de Contratos")
-    
-    if not DOCX_READY:
-        st.error("⚠️ Falta el motor para generar documentos. Ve a tu archivo `requirements.txt` en GitHub, agrega la palabra `python-docx` en una línea nueva y guarda los cambios para que la app se actualice.")
-    else:
-        st.markdown("Rellena los módulos con los datos y el sistema armará el documento Word listito para firmar.")
-        
-        with st.form("form_generador"):
-            with st.container(border=True):
-                st.markdown("<h4 style='color:#172b4d;'>1. Datos del Servicio</h4>", unsafe_allow_html=True)
-                tipo_servicio = st.selectbox("Tipo de Procedimiento", ["Liquidación voluntaria", "Juicio ejecutivo", "Derecho de familia", "Derecho penal", "Derecho civil"])
-                detalle_servicio = st.text_area("¿Qué incluye el servicio? (Detalla aquí las acciones que cubrirá el contrato)", height=150, placeholder="Ej:\n- Estudio y análisis de antecedentes financieros...\n- Redacción y presentación de demanda...\n- Representación en audiencias...")
-            
-            c_abog, c_cli = st.columns(2)
-            with c_abog:
-                with st.container(border=True):
-                    st.markdown("<h4 style='color:#172b4d;'>2. Datos del Abogado</h4>", unsafe_allow_html=True)
-                    abog_nom = st.text_input("Nombre Completo Abogado", value="Eduardo Andrés Riquelme Zambrano")
-                    abog_rut = st.text_input("RUT Abogado", value="17.427.459-2")
-                    abog_dom = st.text_input("Domicilio Profesional", value="Carlos Antúnez número 2025, oficina 404, comuna de Providencia")
-                    abog_tel = st.text_input("Teléfono Abogado")
-                    abog_correo = st.text_input("Correo Electrónico", value="riquelme.abogadosmyr@gmail.com")
-            
-            with c_cli:
-                with st.container(border=True):
-                    st.markdown("<h4 style='color:#172b4d;'>3. Datos del Cliente</h4>", unsafe_allow_html=True)
-                    cli_nom = st.text_input("Nombre Completo Cliente")
-                    cli_rut = st.text_input("RUT Cliente")
-                    cli_dom = st.text_input("Domicilio Cliente")
-                    cli_tel = st.text_input("Teléfono Cliente")
-                    cli_correo = st.text_input("Correo Cliente")
-                    
-            with st.container(border=True):
-                st.markdown("<h4 style='color:#172b4d;'>4. Honorarios y Pago</h4>", unsafe_allow_html=True)
-                c_pago1, c_pago2 = st.columns(2)
-                with c_pago1:
-                    hon_num = st.text_input("Honorarios (Números, ej: $2.220.000)")
-                    hon_let = st.text_input("Honorarios (Letras, ej: dos millones doscientos...)")
-                    cuotas_c = st.number_input("Cantidad de Cuotas", min_value=1, max_value=60, value=12)
-                    cuotas_m = st.text_input("Monto por Cuota (ej: $185.000)")
-                    fecha_pago = st.date_input("Fecha de inicio de pagos")
-                with c_pago2:
-                    st.markdown("Datos para Transferencia")
-                    banco = st.text_input("Banco", value="Banco Falabella")
-                    tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
-                    num_cta = st.text_input("Número de Cuenta", value="019996291120")
-
-            btn_gen = st.form_submit_button("📄 Construir Contrato Word", type="primary", use_container_width=True)
-            
-        if btn_gen:
-            datos_contrato = {
-                'tipo_servicio': tipo_servicio, 'detalle_servicio': detalle_servicio,
-                'abogado_nombre': abog_nom, 'abogado_rut': abog_rut, 'abogado_domicilio': abog_dom, 'abogado_tel': abog_tel, 'abogado_correo': abog_correo,
-                'cliente_nombre': cli_nom, 'cliente_rut': cli_rut, 'cliente_domicilio': cli_dom, 'cliente_tel': cli_tel, 'cliente_correo': cli_correo,
-                'honorarios_num': hon_num, 'honorarios_letras': hon_let, 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m, 'fecha_inicio': fecha_pago,
-                'banco': banco, 'tipo_cuenta': tipo_cta, 'num_cuenta': num_cta
-            }
-            
-            # Llamamos a la función que arma el Word
-            doc = crear_contrato_word(datos_contrato)
-            
-            if doc:
-                # Guardamos el archivo en la memoria del sistema
-                bio = io.BytesIO()
-                doc.save(bio)
-                st.session_state['contrato_generado'] = bio.getvalue()
-                
-                # Le damos un nombre bonito al archivo
-                nombre_limpio = cli_nom.replace(' ', '_') if cli_nom else "Sin_Nombre"
-                st.session_state['nombre_archivo'] = f"Contrato_Servicios_{nombre_limpio}.docx"
-                st.rerun()
-
-    # Si la memoria tiene un contrato, mostramos el botón verde para descargarlo
-    if st.session_state.get('contrato_generado'):
-        st.success("✅ ¡El contrato ha sido redactado con éxito y está listo para descargar!")
-        st.download_button(
-            label="📥 Descargar Documento Word",
-            data=st.session_state['contrato_generado'],
-            file_name=st.session_state['nombre_archivo'],
-            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            type="primary"
-        )
 
 elif st.session_state['menu_radio'] == "☑️ Tareas":
     st.title("☑️ Gestor Global de Tareas")
@@ -684,14 +501,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                 c1, c2, c3 = st.columns([4, 2, 1])
                 with c1:
-                    creador_nombre_real = NOMBRES_REALES.get(row['Creador'], row['Creador'])
-                    st.markdown(f"""
-                    <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                        <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
-                        <strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong>
-                        <span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.markdown(f"<div style='display: flex; align-items: center; margin-bottom: 5px;'><img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror=\"this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';\"><strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong><span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span></div>", unsafe_allow_html=True)
                     st.markdown(f"<span style='color:#6b778c;'>{str(row['Descripcion'])[:60]}...</span>", unsafe_allow_html=True)
                 with c2:
                     color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
@@ -700,6 +510,97 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 with c3:
                     st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
 
+elif st.session_state['menu_radio'] == "📄 Contratos":
+    st.title("📄 Gestión de Contratos")
+    tab_gen, tab_reg = st.tabs(["Generar Nuevo Contrato", "Registro Histórico"])
+    
+    with tab_gen:
+        if not DOCX_READY:
+            st.error("⚠️ Falta el motor para generar documentos. Ve a tu archivo `requirements.txt` en GitHub, agrega la palabra `python-docx` en una línea nueva y guarda los cambios.")
+        else:
+            st.markdown("Rellena los módulos para generar el documento Word automático.")
+            with st.form("form_generador", clear_on_submit=True):
+                with st.container(border=True):
+                    st.markdown("<h4 style='color:#172b4d;'>1. Datos del Servicio</h4>", unsafe_allow_html=True)
+                    tipo_servicio = st.selectbox("Tipo de Procedimiento", ["Liquidación voluntaria", "Juicio ejecutivo", "Derecho de familia", "Derecho penal", "Derecho civil"])
+                    detalle_servicio = st.text_area("¿Qué incluye el servicio?", height=150, placeholder="- Estudio y análisis de antecedentes...\n- Redacción y presentación de demanda...")
+                
+                c_abog, c_cli = st.columns(2)
+                with c_abog:
+                    with st.container(border=True):
+                        st.markdown("<h4 style='color:#172b4d;'>2. Datos del Abogado</h4>", unsafe_allow_html=True)
+                        abog_nom = st.text_input("Nombre Completo Abogado")
+                        abog_rut = st.text_input("RUT Abogado")
+                        abog_dom = st.text_input("Domicilio Profesional")
+                        abog_tel = st.text_input("Teléfono Abogado")
+                        abog_correo = st.text_input("Correo Electrónico")
+                
+                with c_cli:
+                    with st.container(border=True):
+                        st.markdown("<h4 style='color:#172b4d;'>3. Datos del Cliente</h4>", unsafe_allow_html=True)
+                        cli_nom = st.text_input("Nombre Completo Cliente")
+                        cli_rut = st.text_input("RUT Cliente")
+                        cli_dom = st.text_input("Domicilio Cliente")
+                        cli_tel = st.text_input("Teléfono Cliente")
+                        cli_correo = st.text_input("Correo Cliente")
+                        
+                with st.container(border=True):
+                    st.markdown("<h4 style='color:#172b4d;'>4. Honorarios y Pago</h4>", unsafe_allow_html=True)
+                    c_pago1, c_pago2 = st.columns(2)
+                    with c_pago1:
+                        hon_num = st.text_input("Honorarios (Números, ej: $2.220.000)")
+                        hon_let = st.text_input("Honorarios (Letras, ej: dos millones doscientos...)")
+                        cuotas_c = st.number_input("Cantidad de Cuotas", min_value=1, max_value=60, value=12)
+                        cuotas_m = st.text_input("Monto por Cuota (ej: $185.000)")
+                        fecha_pago = st.date_input("Fecha de inicio de pagos")
+                    with c_pago2:
+                        st.markdown("Datos para Transferencia")
+                        banco = st.text_input("Banco")
+                        tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
+                        num_cta = st.text_input("Número de Cuenta")
+
+                btn_gen = st.form_submit_button("📄 Construir Contrato Word", type="primary", use_container_width=True)
+                
+            if btn_gen:
+                datos_contrato = {
+                    'tipo_servicio': tipo_servicio, 'detalle_servicio': detalle_servicio,
+                    'abogado_nombre': abog_nom, 'abogado_rut': abog_rut, 'abogado_domicilio': abog_dom, 'abogado_tel': abog_tel, 'abogado_correo': abog_correo,
+                    'cliente_nombre': cli_nom, 'cliente_rut': cli_rut, 'cliente_domicilio': cli_dom, 'cliente_tel': cli_tel, 'cliente_correo': cli_correo,
+                    'honorarios_num': hon_num, 'honorarios_letras': hon_let, 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m, 'fecha_inicio': fecha_pago,
+                    'banco': banco, 'tipo_cuenta': tipo_cta, 'num_cuenta': num_cta
+                }
+                
+                doc = crear_contrato_word(datos_contrato)
+                if doc:
+                    bio = io.BytesIO()
+                    doc.save(bio)
+                    st.session_state['contrato_generado'] = bio.getvalue()
+                    nombre_limpio = cli_nom.replace(' ', '_') if cli_nom else "Sin_Nombre"
+                    st.session_state['nombre_archivo'] = f"Contrato_Servicios_{nombre_limpio}.docx"
+                    
+                    # Registrar en base de datos de contratos
+                    df_contratos = pd.read_csv(ARCHIVO_CONTRATOS)
+                    nuevo_c = {'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'Cliente': cli_nom, 'Servicio': tipo_servicio, 'Honorarios': hon_num}
+                    df_contratos = pd.concat([df_contratos, pd.DataFrame([nuevo_c])], ignore_index=True)
+                    df_contratos.to_csv(ARCHIVO_CONTRATOS, index=False)
+                    st.rerun()
+
+        if st.session_state.get('contrato_generado'):
+            st.success("✅ ¡El contrato ha sido redactado con éxito y está listo para descargar!")
+            st.download_button(label="📥 Descargar Documento Word", data=st.session_state['contrato_generado'], file_name=st.session_state['nombre_archivo'], mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+
+    with tab_reg:
+        st.markdown("### Registro Histórico de Contratos")
+        df_contratos_reg = pd.read_csv(ARCHIVO_CONTRATOS) if os.path.exists(ARCHIVO_CONTRATOS) else pd.DataFrame()
+        if df_contratos_reg.empty:
+            st.info("No hay contratos registrados aún.")
+        else:
+            st.dataframe(df_contratos_reg, use_container_width=True)
+
+elif st.session_state['menu_radio'] in ["💰 Contabilidad", "📝 Trámites"]:
+    st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
+    st.info("🚧 Módulo en construcción. Pronto disponible en JuriSync.")
+
 elif st.session_state['menu_radio'] == "👥 Clientes":
     if not os.path.exists(ARCHIVO_BD): st.info("Importa datos en 'Excel'.")
     else:
@@ -707,7 +608,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         if st.session_state['cliente_seleccionado'] is None:
             st.title("👥 Gestión de Clientes")
             st.markdown("Haz clic en cualquier celda o botón de cliente para acceder de inmediato a su ficha unificada:")
-            clientes_unicos = df_causas['Cliente'].dropna().unique().tolist()
+            clientes_unicos = df_causas['Cliente'].dropna().unique().tolist() if 'Cliente' in df_causas.columns else []
             
             c_grid1, c_grid2, c_grid3 = st.columns(3)
             for i_cli, cli_nom in enumerate(clientes_unicos):
@@ -716,15 +617,13 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     st.session_state['cliente_seleccionado'] = cli_nom
                     st.rerun()
             st.write("<br>", unsafe_allow_html=True)
-            st.dataframe(df_causas[['Cliente', 'RUT', 'Teléfono']].drop_duplicates(subset=['Cliente']).dropna(subset=['Cliente']), use_container_width=True)
+            if 'Cliente' in df_causas.columns:
+                st.dataframe(df_causas[['Cliente', 'RUT', 'Teléfono']].drop_duplicates(subset=['Cliente']).dropna(subset=['Cliente']), use_container_width=True)
         else:
             cli_actual = st.session_state['cliente_seleccionado']
             df_cli = df_causas[df_causas['Cliente'] == cli_actual]
             datos = df_cli.iloc[0]
-            
-            def back_to_cli():
-                st.session_state.cliente_seleccionado = None
-            if st.button("⬅ Volver al listado", key="back_to_cli_list", on_click=back_to_cli): pass
+            if st.button("⬅ Volver al listado", key="back_to_cli_list", on_click=nav_clientes): pass
             
             st.markdown(f"""
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
@@ -760,13 +659,12 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     with st.container(border=True):
                         col_card1, col_card2 = st.columns([5, 1])
                         with col_card1:
-                            st.markdown(f"<div><strong style='color:#172b4d; font-size:16px;'>{causa['CARATULADO']}</strong><br><span style='color:#42526e; font-size:14px;'>Rol: {causa['ROL']}</span><br><span style='color:#42526e; font-size:14px;'>👥 {causa.get('Servicio', 'Ejecutivo')}</span><br><span style='color:#42526e; font-size:14px;'>🏛️ {causa.get('TRIBUNAL', 'Sin Tribunal')}</span></div>", unsafe_allow_html=True)
+                            st.markdown(f"<div><strong style='color:#172b4d; font-size:16px;'>{causa.get('CARATULADO','--')}</strong><br><span style='color:#42526e; font-size:14px;'>Rol: {causa.get('ROL','--')}</span><br><span style='color:#42526e; font-size:14px;'>👥 {causa.get('Servicio', 'Ejecutivo')}</span><br><span style='color:#42526e; font-size:14px;'>🏛️ {causa.get('TRIBUNAL', 'Sin Tribunal')}</span></div>", unsafe_allow_html=True)
                         with col_card2:
-                            color_punto = "#57a15a" if causa['Tipo_Negocio'] == "Grupo Defensa" else "#ff5630"
+                            color_punto = "#57a15a" if causa.get('Tipo_Negocio') == "Grupo Defensa" else "#ff5630"
                             st.markdown(f"<div style='height:12px; width:12px; background:{color_punto}; border-radius:50%; float:right;'></div>", unsafe_allow_html=True)
                             st.write("<br><br>", unsafe_allow_html=True)
-                            
-                            st.button("Ir al expediente ➔", key=f"ficha_ir_{causa['ROL']}", on_click=ir_a_expediente, args=(causa['ROL'],))
+                            st.button("Ir al expediente ➔", key=f"ficha_ir_{causa.get('ROL')}", on_click=ir_a_expediente, args=(causa.get('ROL'),))
                 st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state['menu_radio'] == "💼 Causas":
@@ -781,11 +679,28 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             st.session_state['modo_edicion'] = False
             st.session_state['creando_tarea'] = False
             st.session_state['editando_tarea'] = None
-            rol = st.selectbox("🔍 Buscar ROL:", [""] + df_causas['ROL'].astype(str).tolist())
-            if rol != "" and st.button("Abrir Expediente"): 
+            st.title("💼 Gestión de Causas")
+            
+            # FILTROS ESTILO CAUSAS
+            c_f1, c_f2 = st.columns(2)
+            trib_unicos = df_causas['TRIBUNAL'].dropna().unique().tolist()
+            neg_unicos = df_causas['Tipo_Negocio'].dropna().unique().tolist()
+            
+            filtro_trib = c_f1.multiselect("Filtrar por Tribunal", trib_unicos, placeholder="Selecciona tribunal...")
+            filtro_neg = c_f2.multiselect("Filtrar por Tipo de Negocio", neg_unicos, placeholder="Selecciona negocio...")
+            
+            df_filtrado = df_causas.copy()
+            if filtro_trib: df_filtrado = df_filtrado[df_filtrado['TRIBUNAL'].isin(filtro_trib)]
+            if filtro_neg: df_filtrado = df_filtrado[df_filtrado['Tipo_Negocio'].isin(filtro_neg)]
+            
+            rol = st.selectbox("🔍 O Buscar ROL Específico:", [""] + df_filtrado['ROL'].astype(str).tolist())
+            if rol != "" and st.button("Abrir Expediente", type="primary"): 
                 st.session_state['causa_seleccionada'] = rol
                 st.rerun()
-            st.dataframe(df_causas[['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'Tipo_Negocio']], use_container_width=True)
+                
+            st.markdown("### Listado General")
+            st.dataframe(df_filtrado[['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'Tipo_Negocio']], use_container_width=True)
+            
         else:
             rol_actual = st.session_state['causa_seleccionada']
             idx = df_causas[df_causas['ROL'] == rol_actual].index[0]
@@ -793,13 +708,12 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             
             col_back, col_title = st.columns([1, 10])
             with col_back:
-                def back_to_causas():
-                    st.session_state.causa_seleccionada = None
-                if st.button("⬅ Volver", on_click=back_to_causas): pass
+                if st.button("⬅ Volver al Listado", on_click=limpiar_causa): pass
                 
             with col_title:
-                st.markdown(f"<h2>Causa {c_data['CARATULADO']}</h2>", unsafe_allow_html=True)
+                st.markdown(f"<h2>Causa {c_data.get('CARATULADO','')}</h2>", unsafe_allow_html=True)
             st.write("")
+            
             col_izq, col_der = st.columns([2.5, 1.2])
             with col_der:
                 col_btn1, col_btn2 = st.columns([2, 1])
@@ -809,18 +723,18 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 if st.session_state['modo_edicion']:
                     with st.form("form_edicion_derecha"):
                         st.markdown("#### Editar Causa")
-                        n_tribunal = st.text_input("Tribunal", c_data['TRIBUNAL'])
-                        n_serv = st.text_input("Servicio", c_data['Servicio'])
-                        n_negocio = st.selectbox("Tipo de Negocio", ["Grupo Defensa", "Propio"], index=0 if c_data['Tipo_Negocio'] == "Grupo Defensa" else 1)
+                        n_tribunal = st.text_input("Tribunal", c_data.get('TRIBUNAL',''))
+                        n_serv = st.text_input("Servicio", c_data.get('Servicio',''))
+                        n_negocio = st.selectbox("Tipo de Negocio", ["Grupo Defensa", "Propio"], index=0 if c_data.get('Tipo_Negocio') == "Grupo Defensa" else 1)
                         st.markdown("#### Editar Cliente")
-                        n_cliente = st.text_input("Nombre", c_data['Cliente'])
-                        n_rut = st.text_input("RUT", c_data['RUT'])
-                        n_tel = st.text_input("Teléfono", c_data['Teléfono'])
-                        n_correo = st.text_input("Correo", c_data['Correo'])
-                        n_dir = st.text_input("Dirección", c_data['Direccion'])
-                        n_clave = st.text_input("Clave Única", c_data['Clave_unica'])
-                        n_sac = st.text_input("SAC Asignado", c_data['SAC'])
-                        n_suc = st.text_input("Sucursal", c_data['Sucursal'])
+                        n_cliente = st.text_input("Nombre", c_data.get('Cliente',''))
+                        n_rut = st.text_input("RUT", c_data.get('RUT',''))
+                        n_tel = st.text_input("Teléfono", c_data.get('Teléfono',''))
+                        n_correo = st.text_input("Correo", c_data.get('Correo',''))
+                        n_dir = st.text_input("Dirección", c_data.get('Direccion',''))
+                        n_clave = st.text_input("Clave Única", c_data.get('Clave_unica',''))
+                        n_sac = st.text_input("SAC Asignado", c_data.get('SAC',''))
+                        n_suc = st.text_input("Sucursal", c_data.get('Sucursal',''))
                         if st.form_submit_button("💾 Guardar Cambios"):
                             df_causas.at[idx, 'TRIBUNAL'] = n_tribunal; df_causas.at[idx, 'Servicio'] = n_serv; df_causas.at[idx, 'Tipo_Negocio'] = n_negocio
                             df_causas.at[idx, 'Cliente'] = n_cliente; df_causas.at[idx, 'RUT'] = n_rut; df_causas.at[idx, 'Teléfono'] = n_tel
@@ -828,20 +742,20 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             df_causas.at[idx, 'SAC'] = n_sac; df_causas.at[idx, 'Sucursal'] = n_suc
                             df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['modo_edicion'] = False; st.rerun()
                 else:
-                    badge_class = "badge-active" if c_data['Tipo_Negocio'] == "Grupo Defensa" else "badge-propio"
+                    badge_class = "badge-active" if c_data.get('Tipo_Negocio') == "Grupo Defensa" else "badge-propio"
                     st.markdown(f"""
                     <div class="info-card">
-                        <div class="info-header"><span class="info-title">Información de la causa</span><span class="{badge_class}">{c_data['Tipo_Negocio']}</span></div>
-                        <div class="info-group"><div class="info-label">Causa:</div><div class="info-value">{c_data['CARATULADO']}</div></div>
+                        <div class="info-header"><span class="info-title">Información de la causa</span><span class="{badge_class}">{c_data.get('Tipo_Negocio','')}</span></div>
+                        <div class="info-group"><div class="info-label">Causa:</div><div class="info-value">{c_data.get('CARATULADO','')}</div></div>
                         <div class="info-group"><div class="info-label">Rol:</div><div class="info-value">{rol_actual}</div></div>
-                        <div class="info-group"><div class="info-label">Tribunal:</div><div class="info-value">{c_data['TRIBUNAL']}</div></div>
-                        <div class="info-group"><div class="info-label">Servicio:</div><div class="info-value">{c_data['Servicio']}</div></div>
+                        <div class="info-group"><div class="info-label">Tribunal:</div><div class="info-value">{c_data.get('TRIBUNAL','')}</div></div>
+                        <div class="info-group"><div class="info-label">Servicio:</div><div class="info-value">{c_data.get('Servicio','')}</div></div>
                     </div>
                     <div class="info-card">
                         <div class="info-header"><span class="info-title">Información del cliente</span></div>
-                        <div class="info-group"><div class="info-label">Nombre:</div><div class="info-value">{c_data['Cliente']}</div></div>
-                        <div class="info-group"><div class="info-label">RUT:</div><div class="info-value">{c_data['RUT']}</div></div>
-                        <div class="info-group"><div class="info-label">Teléfono:</div><div class="info-value">{c_data['Teléfono']}</div></div>
+                        <div class="info-group"><div class="info-label">Nombre:</div><div class="info-value">{c_data.get('Cliente','')}</div></div>
+                        <div class="info-group"><div class="info-label">RUT:</div><div class="info-value">{c_data.get('RUT','')}</div></div>
+                        <div class="info-group"><div class="info-label">Teléfono:</div><div class="info-value">{c_data.get('Teléfono','')}</div></div>
                     </div>
                     """, unsafe_allow_html=True)
             with col_izq:
@@ -906,10 +820,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     st.write("")
                                     if row_t['Estado'] == 'En progreso':
                                         btn_cols = st.columns([1, 1, 1.5, 0.5])
-                                        if btn_cols[0].button("❌", key=f"rec_{row_t['ID_Tarea']}"):
-                                            df_tareas.at[idx_t, 'Estado'] = 'Rechazada'; df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                        if btn_cols[1].button("✅", key=f"apr_{row_t['ID_Tarea']}"):
-                                            df_tareas.at[idx_t, 'Estado'] = 'Aprobada'; df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        if btn_cols[0].button("❌", key=f"rec_{row_t['ID_Tarea']}"): df_tareas.at[idx_t, 'Estado'] = 'Rechazada'; df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        if btn_cols[1].button("✅", key=f"apr_{row_t['ID_Tarea']}"): df_tareas.at[idx_t, 'Estado'] = 'Aprobada'; df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
                                         btn_cols[2].markdown("<div style='background:#ffc400; color:#172b4d; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>En progreso</div>", unsafe_allow_html=True)
                                         if btn_cols[3].button("✏️", key=f"edit_btn_{row_t['ID_Tarea']}"): st.session_state['editando_tarea'] = row_t['ID_Tarea']; st.rerun()
                                     elif row_t['Estado'] == 'Aprobada':
@@ -935,15 +847,14 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 <div style="padding: 15px 4px 5px 4px;">{comentarios_html}</div>
                                 """, unsafe_allow_html=True)
                                 
-                                archivo_adjunto_coment = st.file_uploader("📎 Adjuntar documento al comentario", key=f"file_uploader_{row_t['ID_Tarea']}", label_visibility="collapsed")
+                                archivo_adjunto_coment = st.file_uploader("📎 Adjuntar documento", key=f"file_uploader_{row_t['ID_Tarea']}", label_visibility="collapsed")
                                 with st.form(key=f"form_coment_{row_t['ID_Tarea']}", clear_on_submit=True):
                                     col_inp, col_snd = st.columns([8, 1])
                                     nuevo_comentario = col_inp.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Agregar un comentario...")
                                     if col_snd.form_submit_button("Enviar"):
                                         if nuevo_comentario.strip() or archivo_adjunto_coment:
                                             texto_comentario_final = nuevo_comentario.strip()
-                                            if archivo_adjunto_coment:
-                                                texto_comentario_final += f" <br><em>[📎 Archivo adjunto: {archivo_adjunto_coment.name}]</em>"
+                                            if archivo_adjunto_coment: texto_comentario_final += f" <br><em>[📎 Archivo adjunto: {archivo_adjunto_coment.name}]</em>"
                                             comentarios.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": texto_comentario_final})
                                             df_tareas.at[idx_t, 'Comentarios'] = json.dumps(comentarios)
                                             df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
@@ -955,5 +866,5 @@ elif st.session_state['menu_radio'] == "📥 Excel":
         procesar_ojv_completo(archivo); st.success("Base actualizada.")
 
 else:
-    st.title(f"Módulo: {st.session_state['menu_radio'].split(' ')[1]}")
-    st.info("En construcción.")
+    st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
+    st.info("🚧 Módulo en construcción.")
