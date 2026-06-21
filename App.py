@@ -70,7 +70,6 @@ def obtener_feriados_chile():
                 "textColor": "#bf2600", "allDay": True, "display": "block"
             })
     
-    # Días Santos Movibles
     feriados.extend([
         {"title": "🇨🇱 Viernes Santo", "start": "2025-04-18", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
         {"title": "🇨🇱 Sábado Santo", "start": "2025-04-19", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
@@ -334,7 +333,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
     opciones_calendario = {
         "initialView": "dayGridMonth", 
         "locale": "es", 
-        "firstDay": 1, # Aquí está el ajuste para empezar en Lunes
+        "firstDay": 1, 
         "buttonText": {
             "today": "Hoy",
             "month": "Mes",
@@ -435,6 +434,53 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                             st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
             except: st.write("Selecciona un día en el calendario.")
 
+elif st.session_state['menu_radio'] == "📋 Agenda":
+    st.title("📋 Agenda Diaria")
+    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    
+    st.markdown(f"<p style='color:#6b778c; font-size:16px; margin-bottom: 25px;'>Tareas programadas para hoy: <strong>{fecha_hoy}</strong></p>", unsafe_allow_html=True)
+    
+    df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
+    
+    if df_t.empty:
+        st.info("Aún no hay tareas creadas en el sistema.")
+    else:
+        # 1. Filtramos solo las tareas que vencen HOY
+        tareas_hoy = df_t[df_t['Fecha_Vencimiento'] == fecha_hoy].copy()
+        
+        if tareas_hoy.empty:
+            st.success("🎉 ¡Excelente! No tienes tareas pendientes para el día de hoy.")
+        else:
+            # 2. Ordenamos por Prioridad (Alta -> Media -> Baja)
+            orden_prioridades = {"Alta": 1, "Media": 2, "Baja": 3}
+            tareas_hoy['Orden_Prio'] = tareas_hoy['Prioridad'].map(orden_prioridades).fillna(4)
+            tareas_hoy = tareas_hoy.sort_values(by='Orden_Prio')
+            
+            # 3. Mostramos las tareas ordenadas
+            for idx, row in tareas_hoy.iterrows():
+                with st.container(border=True):
+                    prio_color = "#ff5630" if row.get('Prioridad') == "Alta" else ("#ffc400" if row.get('Prioridad') == "Media" else "#57a15a")
+                    st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
+                    
+                    c1, c2, c3 = st.columns([4, 2, 1])
+                    with c1:
+                        creador_nombre_real = NOMBRES_REALES.get(row['Creador'], row['Creador'])
+                        st.markdown(f"""
+                        <div style='display: flex; align-items: center; margin-bottom: 5px;'>
+                            <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                            <strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong>
+                            <span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        st.markdown(f"<span style='color:#6b778c;'>{str(row['Descripcion'])[:80]}...</span>", unsafe_allow_html=True)
+                    with c2:
+                        color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
+                        st.markdown(f"<span style='background:{color_bd}; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:bold; color:black;'>{row['Estado']}</span>", unsafe_allow_html=True)
+                        st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']}</span>", unsafe_allow_html=True)
+                    with c3:
+                        st.button("Ir al expediente ➔", key=f"agenda_ir_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
+
+
 elif st.session_state['menu_radio'] == "☑️ Tareas":
     st.title("☑️ Gestor Global de Tareas")
     df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
@@ -454,7 +500,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                         <span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span>
                     </div>
                     """, unsafe_allow_html=True)
-                    st.markdown(f"<span style='color:#6b778c;'>{row['Descripcion'][:60]}...</span>", unsafe_allow_html=True)
+                    st.markdown(f"<span style='color:#6b778c;'>{str(row['Descripcion'])[:60]}...</span>", unsafe_allow_html=True)
                 with c2:
                     color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
                     st.markdown(f"<span style='background:{color_bd}; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:bold; color:black;'>{row['Estado']}</span>", unsafe_allow_html=True)
