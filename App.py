@@ -26,7 +26,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- FUNCIONES DE SALUDO Y LOGO ---
+# --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
     hora = datetime.now().hour
     if 0 <= hora < 12:
@@ -43,7 +43,25 @@ def get_logo_src():
             with open(ruta_logo, "rb") as f:
                 contenido_b64 = base64.b64encode(f.read()).decode()
                 return f"data:image/{ext.lower()};base64,{contenido_b64}"
-    return "https://img.icons8.com/color/48/user.png"
+                
+    svg_logo = """
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <path d="M 18 50 A 32 32 0 0 1 82 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="82,50 72,38 92,38" fill="#0052cc"/>
+        <path d="M 82 55 A 32 32 0 0 1 18 55" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="18,55 8,67 28,67" fill="#0052cc"/>
+        <rect x="46" y="22" width="8" height="48" fill="#172b4d" rx="2"/>
+        <rect x="38" y="70" width="24" height="6" fill="#172b4d" rx="3"/>
+        <rect x="42" y="18" width="16" height="4" fill="#172b4d" rx="2"/>
+        <path d="M 22 35 L 78 35" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
+        <path d="M 22 35 L 12 55 L 32 55 Z" fill="none" stroke="#172b4d" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M 12 55 Q 22 62 32 55 Z" fill="#172b4d"/>
+        <path d="M 78 35 L 68 55 L 88 55 Z" fill="none" stroke="#172b4d" stroke-width="2" stroke-linejoin="round"/>
+        <path d="M 68 55 Q 78 62 88 55 Z" fill="#172b4d"/>
+    </svg>
+    """
+    b64_svg = base64.b64encode(svg_logo.encode('utf-8')).decode('utf-8')
+    return f"data:image/svg+xml;base64,{b64_svg}"
 
 LOGO_URL = get_logo_src()
 
@@ -176,7 +194,6 @@ def crear_contrato_word(datos):
     p3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p3.add_run("\nCLÁUSULA TERCERA: CONDICIONES Y FORMA DE PAGO. ").bold = True
     p3.add_run(f"La suma total de los honorarios fijados será prorrateada y pagada en un total de {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas por un valor individual de {datos['cuotas_monto']} cada una.\n")
-    p3.add_run("El calendario de vencimientos de las mensualidades respectivas queda fijado bajo la siguiente distribución de fechas:\n")
     
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
@@ -261,7 +278,9 @@ def crear_contrato_word(datos):
 
 # --- MOTOR DE CREACIÓN DE INFORME IA EN WORD ---
 def crear_informe_ia_word(rol, cliente, texto_informe):
-    if not DOCX_READY: return None
+    if not DOCX_READY: 
+        return None
+        
     doc = Document()
     style = doc.styles['Normal']
     style.font.name = 'Arial'
@@ -276,18 +295,18 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
     meta = doc.add_paragraph()
     meta.add_run(f"Causa Rol: ").bold = True
     meta.add_run(f"{rol}\n")
-    meta.add_run(f"Cliente: ").bold = True
+    meta.add_run(f"Cliente Titular: ").bold = True
     meta.add_run(f"{cliente}\n")
-    meta.add_run(f"Fecha de Emisión: ").bold = True
+    meta.add_run(f"Fecha de Emisión del Reporte: ").bold = True
     meta.add_run(f"{datetime.now().strftime('%d/%m/%Y')}\n")
     
-    doc.add_paragraph("\nESTIMADO CLIENTE:\nA continuación, se detalla el análisis resumido del estado de su procedimiento judicial, traducido a términos sencillos para su correcta comprensión:\n")
+    doc.add_paragraph("\nESTIMADO CLIENTE:\nA continuación, se detalla el análisis y resumen ejecutivo del estado actual de su procedimiento judicial, redactado en términos claros para su correcta comprensión:\n")
     
     p_inf = doc.add_paragraph()
     p_inf.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p_inf.add_run(texto_informe)
     
-    doc.add_paragraph("\n\n___________________________________\nJuriSync - Inteligencia Legal")
+    doc.add_paragraph("\n\nAnte cualquier duda, nuestro equipo queda a su entera disposición.\n\n___________________________________\nEquipo Legal - JuriSync")
     
     bio = io.BytesIO()
     doc.save(bio)
@@ -873,7 +892,6 @@ elif st.session_state['menu_radio'] in ["⚙️ Automatizaciones", "📊 Informe
                 st.error("⚠️ Debes seleccionar una causa y pegar el texto del Ebook para que la IA pueda procesarlo.")
             else:
                 with st.spinner("🧠 La IA está traduciendo los hitos procesales y estructurando el informe..."):
-                    # Extraer el nombre del cliente de la base de datos
                     nombre_cliente_ia = df_causas_ia[df_causas_ia['ROL'] == rol_seleccionado_ia]['Cliente'].values[0]
                     
                     # Simulación del procesamiento de IA enfocado en lenguaje claro para el cliente chileno
@@ -1037,7 +1055,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             
         st.markdown("### Expedientes Activos")
         
-        # Renderizado Visual Estilo Lista Elegante
         with st.container(height=600):
             if df_filtrado.empty:
                 st.info("No hay causas que coincidan con la búsqueda.")
@@ -1502,7 +1519,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
             except: 
                 st.write("Selecciona un día en el calendario.")
 
-# 14. RESTO DE PESTAÑAS
+# 14. RESTO DE PESTAÑAS (EN DESARROLLO / PRÓXIMAS)
 else:
     st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
-    st.info("🚧 Módulo en desarrollo. Estará disponible en futuras actualizaciones.")
+    st.info("🚧 Módulo en desarrollo. Estará disponible en futuras actualizaciones de JuriSync.")
