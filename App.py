@@ -5,6 +5,8 @@ import json
 import uuid
 import base64
 import io
+import requests
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from streamlit_calendar import calendar
 
@@ -94,10 +96,21 @@ def obtener_feriados_chile():
         ]
         for fecha, nombre in fijos:
             feriados.append({"title": f"🇨🇱 {nombre}", "start": fecha, "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"})
+    
+    feriados.extend([
+        {"title": "🇨🇱 Viernes Santo", "start": "2025-04-18", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Sábado Santo", "start": "2025-04-19", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Viernes Santo", "start": "2026-04-03", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Sábado Santo", "start": "2026-04-04", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Viernes Santo", "start": "2027-03-26", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"},
+        {"title": "🇨🇱 Sábado Santo", "start": "2027-03-27", "color": "#ffebe6", "textColor": "#bf2600", "allDay": True, "display": "block"}
+    ])
     return feriados
 
 def crear_contrato_word(datos):
-    if not DOCX_READY: return None
+    if not DOCX_READY: 
+        return None
+        
     doc = Document()
     style = doc.styles['Normal']
     font = style.font
@@ -233,6 +246,11 @@ ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
 # Verificaciones y creación de archivos locales si no existen
 if not os.path.exists(ARCHIVO_TAREAS):
     pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(ARCHIVO_TAREAS, index=False)
+else:
+    df_t_check = pd.read_csv(ARCHIVO_TAREAS)
+    if 'Prioridad' not in df_t_check.columns:
+        df_t_check['Prioridad'] = 'Media'
+        df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
 
 if not os.path.exists(ARCHIVO_BD):
     pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']).to_csv(ARCHIVO_BD, index=False)
@@ -241,9 +259,12 @@ else:
     cambios_bd = False
     for col in ['Cliente', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']:
         if col not in df_c_check.columns:
-            if col in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']: df_c_check[col] = 0
-            elif col == 'Estado_Honorarios': df_c_check[col] = "Sin fijar"
-            else: df_c_check[col] = pd.Series(dtype='str')
+            if col in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']: 
+                df_c_check[col] = 0
+            elif col == 'Estado_Honorarios': 
+                df_c_check[col] = "Sin fijar"
+            else: 
+                df_c_check[col] = pd.Series(dtype='str')
             cambios_bd = True
     if cambios_bd:
         df_c_check.to_csv(ARCHIVO_BD, index=False)
@@ -264,14 +285,29 @@ def limpiar_documentos_estado_diario():
         if not df_ed.empty:
             df_ed['Fecha_DT'] = pd.to_datetime(df_ed['Fecha_Estado'], format='%d/%m/%Y', errors='coerce')
             limite_fecha = datetime.now() - timedelta(days=15)
-            # Borrar el B64 del documento si tiene más de 15 días, para liberar peso
             mascara_viejos = df_ed['Fecha_DT'] < limite_fecha
             df_ed.loc[mascara_viejos, 'Doc_B64'] = ""
             df_ed.loc[mascara_viejos, 'Doc_Nombre'] = df_ed.loc[mascara_viejos, 'Doc_Nombre'].apply(lambda x: f"(Eliminado por antigüedad) {x}" if pd.notna(x) and x != "" and not str(x).startswith("(Eliminado") else x)
             df_ed.drop(columns=['Fecha_DT']).to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
 
-# Ejecutar limpieza silenciosa al iniciar
-limpiar_documentos_estado_diario()
+limpiar_documentos_estado_diario() # Se ejecuta silenciosamente
+
+# --- MOTOR SCRAPER PJUD ---
+def scraper_estado_diario_pjud():
+    url_pjud = "https://oficinajudicialvirtual.pjud.cl/estado_diario.php" 
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    try:
+        response = requests.get(url_pjud, headers=headers, timeout=10)
+        soup = BeautifulSoup(response.text, 'lxml')
+        tablas = pd.read_html(str(soup))
+        if tablas:
+            df_scrap = tablas[0]
+            if 'ROL' not in df_scrap.columns and len(df_scrap.columns) > 1: 
+                df_scrap.rename(columns={df_scrap.columns[1]: 'ROL'}, inplace=True)
+            return df_scrap
+    except Exception as e:
+        return None
+    return None
 
 # --- ESTADOS Y CALLBACKS DE NAVEGACIÓN ---
 def resetear_vistas():
@@ -286,8 +322,10 @@ if 'menu_radio' not in st.session_state:
 
 for key in ['causa_seleccionada', 'cliente_seleccionado', 'modo_edicion', 'creando_tarea', 'editando_tarea']:
     if key not in st.session_state: 
-        if key == 'modo_edicion' or key == 'creando_tarea': st.session_state[key] = False
-        else: st.session_state[key] = None
+        if key == 'modo_edicion' or key == 'creando_tarea':
+            st.session_state[key] = False
+        else:
+            st.session_state[key] = None
 
 def nav_causas(): 
     st.session_state.menu_radio = "💼 Causas"
@@ -356,7 +394,8 @@ with st.sidebar:
     
     st.write("---")
     if st.button("🚪 Cerrar Sesión", use_container_width=True): 
-        for key in list(st.session_state.keys()): del st.session_state[key]
+        for key in list(st.session_state.keys()): 
+            del st.session_state[key]
         st.rerun()
 
 # --- CONTROLADOR DE VISTAS ---
@@ -386,10 +425,14 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
                 pass
     
     c1, c2, c3, c4 = st.columns(4)
-    with c1: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
-    with c2: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
-    with c3: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
-    with c4: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
+    with c1: 
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
+    with c2: 
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
+    with c3: 
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
 
     st.write("<br>", unsafe_allow_html=True)
 
@@ -424,35 +467,47 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     df_c = pd.read_csv(ARCHIVO_BD)
     
     if df_c.empty or 'Total_Honorarios' not in df_c.columns:
-        st.info("Aún no hay registros financieros en el sistema.")
+        st.info("Aún no hay registros financieros en el sistema. Asegúrate de ingresar las causas y fijar los honorarios.")
     else:
         df_financiero = df_c[df_c['Estado_Honorarios'].isin(["Pagados", "Pendientes"])].copy()
+        
         for col in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']:
             df_financiero[col] = pd.to_numeric(df_financiero[col], errors='coerce').fillna(0)
             
         total_facturado = df_financiero['Total_Honorarios'].sum()
+        
         recaudado = 0
         for _, row in df_financiero.iterrows():
-            if row['Estado_Honorarios'] == 'Pagados': recaudado += row['Total_Honorarios']
+            if row['Estado_Honorarios'] == 'Pagados':
+                recaudado += row['Total_Honorarios']
             elif row['Estado_Honorarios'] == 'Pendientes' and row['Cuotas_Totales'] > 0:
                 valor_cuota = row['Total_Honorarios'] / row['Cuotas_Totales']
                 recaudado += (valor_cuota * row['Cuotas_Pagadas'])
+                
         por_cobrar = total_facturado - recaudado
         
         c1, c2, c3 = st.columns(3)
-        with c1: st.markdown(f"<div class='dash-card' style='border-left: 4px solid #0052cc;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TOTAL FACTURADO</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>${total_facturado:,.0f}</h2></div>", unsafe_allow_html=True)
-        with c2: st.markdown(f"<div class='dash-card' style='border-left: 4px solid #57a15a;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>RECAUDADO</h3><h2 style='margin:0; font-size:28px; color:#57a15a;'>${recaudado:,.0f}</h2></div>", unsafe_allow_html=True)
-        with c3: st.markdown(f"<div class='dash-card' style='border-left: 4px solid #ff5630;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>POR COBRAR</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>${por_cobrar:,.0f}</h2></div>", unsafe_allow_html=True)
+        with c1: 
+            st.markdown(f"<div class='dash-card' style='border-left: 4px solid #0052cc;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TOTAL FACTURADO</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>${total_facturado:,.0f}</h2></div>", unsafe_allow_html=True)
+        with c2: 
+            st.markdown(f"<div class='dash-card' style='border-left: 4px solid #57a15a;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>RECAUDADO</h3><h2 style='margin:0; font-size:28px; color:#57a15a;'>${recaudado:,.0f}</h2></div>", unsafe_allow_html=True)
+        with c3: 
+            st.markdown(f"<div class='dash-card' style='border-left: 4px solid #ff5630;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>POR COBRAR</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>${por_cobrar:,.0f}</h2></div>", unsafe_allow_html=True)
 
         st.markdown("### Estado de Cuentas por Cliente")
+        
         df_mostrar = df_financiero[['Cliente', 'ROL', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']].copy()
         df_mostrar.columns = ['Cliente', 'Rol Causa', 'Estado', 'Total ($)', 'Mensualidades', 'Cuotas Pagadas']
-        df_mostrar['Deuda ($)'] = df_mostrar.apply(lambda x: 0 if x['Estado'] == 'Pagados' else (x['Total ($)'] - ((x['Total ($)'] / x['Mensualidades'] * x['Cuotas Pagadas']) if x['Mensualidades'] > 0 else 0)), axis=1)
+        
+        df_mostrar['Deuda ($)'] = df_mostrar.apply(lambda x: 
+            0 if x['Estado'] == 'Pagados' 
+            else (x['Total ($)'] - ((x['Total ($)'] / x['Mensualidades'] * x['Cuotas Pagadas']) if x['Mensualidades'] > 0 else 0)), axis=1)
+        
         st.dataframe(df_mostrar.style.format({"Total ($)": "${:,.0f}", "Deuda ($)": "${:,.0f}"}), use_container_width=True)
 
 elif st.session_state['menu_radio'] == "📝 Trámites":
-    st.title("📝 Control de Trámites y Receptores")
-    st.markdown("Registra y adjunta los comprobantes de pago de los clientes para auxiliares de la administración de justicia (Receptores, Peritos, Notarios).")
+    st.title("📝 Control de Trámites y Auxiliares")
+    st.markdown("Registra y adjunta los comprobantes de pago para Receptores, Peritos, Notarios, etc.")
     
     df_causas = pd.read_csv(ARCHIVO_BD)
     df_tramites = pd.read_csv(ARCHIVO_TRAMITES)
@@ -516,97 +571,95 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                             st.write("Sin adjunto")
 
 elif st.session_state['menu_radio'] == "📆 Estado diario":
-    st.title("📆 Cruce de Estado Diario (PJUD)")
-    st.markdown("Sube el archivo Excel del Estado Diario Unificado para cruzarlo automáticamente con las causas que llevamos en la oficina.")
+    st.title("📆 Cruce Inteligente de Estado Diario (PJUD)")
+    st.markdown("El sistema lee el Estado Diario, lo cruza con tus causas y guarda las resoluciones (borrando los PDF cada 15 días).")
     
-    archivo_ed = st.file_uploader("📂 Subir Excel del Estado Diario", type=["xlsx", "xls", "csv"])
+    col_auto, col_man = st.columns(2)
+    df_causas = pd.read_csv(ARCHIVO_BD)
+    df_pj = pd.DataFrame()
     
-    if archivo_ed and st.button("🚀 Iniciar Cruce de Causas", type="primary"):
-        df_causas = pd.read_csv(ARCHIVO_BD)
-        
-        try:
-            if archivo_ed.name.endswith('.csv'): df_pj = pd.read_csv(archivo_ed)
-            else: df_pj = pd.read_excel(archivo_ed)
-            
-            # Buscar una columna que parezca ROL
-            col_rol_pj = None
-            for col in df_pj.columns:
-                if str(col).strip().upper() in ['ROL', 'RIT', 'ROL/RIT']:
-                    col_rol_pj = col
-                    break
-                    
-            if not col_rol_pj:
-                st.error("No se encontró una columna llamada 'ROL' o 'RIT' en el archivo subido. Revisa el formato del Excel.")
-            else:
-                st.write("Calculando coincidencias...")
-                df_pj['ROL_LIMPIO'] = df_pj[col_rol_pj].astype(str).str.strip().str.upper()
-                df_causas['ROL_LIMPIO'] = df_causas['ROL'].astype(str).str.strip().str.upper()
-                
-                # Cruce de datos (Inner join)
-                coincidencias = pd.merge(df_pj, df_causas[['ROL_LIMPIO', 'Cliente', 'Tipo_Negocio']], on='ROL_LIMPIO', how='inner')
-                
-                if coincidencias.empty:
-                    st.success("Cruce finalizado. No hubo movimientos en nuestras causas el día de hoy.")
+    with col_auto:
+        st.markdown("<div class='dash-card'><h4>Robot de Scrapeo (Gratis)</h4><p style='font-size:13px; color:#6b778c;'>Intenta extraer el Estado Diario directamente del PJUD.</p></div>", unsafe_allow_html=True)
+        if st.button("🤖 Sincronizar Automáticamente", use_container_width=True):
+            with st.spinner("Conectando con PJUD..."):
+                df_scrap = scraper_estado_diario_pjud()
+                if df_scrap is not None and not df_scrap.empty:
+                    df_pj = df_scrap
+                    st.success("✅ ¡Extracción exitosa!")
                 else:
-                    st.warning(f"⚠️ ¡Atención! Se encontraron {len(coincidencias)} causas con movimientos en el Estado Diario.")
-                    st.dataframe(coincidencias, use_container_width=True)
-                    
-                    st.markdown("### 📎 Subir resoluciones para estas causas")
-                    st.info("Puedes adjuntar los PDF de las resoluciones. El sistema las borrará automáticamente en 15 días para no colapsar la memoria.")
-                    
-                    # Interfaz para guardar documentos del cruce
-                    with st.form("form_resoluciones_cruce"):
-                        for i, fila in coincidencias.iterrows():
-                            rol_cruce = fila.get(col_rol_pj, "Desconocido")
-                            st.write(f"**Causa:** {rol_cruce} - Cliente: {fila.get('Cliente', '')}")
-                            st.file_uploader(f"Resolución para {rol_cruce}", key=f"res_{i}")
-                            st.markdown("---")
-                        
-                        if st.form_submit_button("Guardar Documentos"):
-                            df_ed_hist = pd.read_csv(ARCHIVO_ESTADO_DIARIO)
-                            fecha_hoy = datetime.now().strftime("%d/%m/%Y")
-                            
-                            for i, fila in coincidencias.iterrows():
-                                archivo_subido = st.session_state.get(f"res_{i}")
-                                if archivo_subido:
-                                    b64_res = base64.b64encode(archivo_subido.getvalue()).decode('utf-8')
-                                    nuevo_ed = {
-                                        'ID_ED': str(uuid.uuid4())[:8],
-                                        'Fecha_Estado': fecha_hoy,
-                                        'ROL': fila.get(col_rol_pj, "Desconocido"),
-                                        'Tribunal': fila.get('TRIBUNAL', 'No indicado'),
-                                        'Resolucion_Extracto': 'Resolución adjunta por cruce de Estado Diario',
-                                        'Doc_Nombre': archivo_subido.name,
-                                        'Doc_B64': b64_res
-                                    }
-                                    df_ed_hist = pd.concat([df_ed_hist, pd.DataFrame([nuevo_ed])], ignore_index=True)
-                            
-                            df_ed_hist.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
-                            st.success("Resoluciones guardadas en el historial. Recuerda que se autodestruirán en 15 días.")
-                            st.rerun()
-                            
-        except Exception as e:
-            st.error(f"Error al leer el archivo: {e}")
+                    st.error("⚠️ El servidor del PJUD bloqueó el robot por seguridad (Captcha). Usa la opción manual.")
+    
+    with col_man:
+        st.markdown("<div class='dash-card'><h4>Subir Excel Manual (Infalible)</h4><p style='font-size:13px; color:#6b778c;'>Sube el reporte del estado diario unificado.</p></div>", unsafe_allow_html=True)
+        archivo_ed = st.file_uploader("📂 Subir Excel", type=["xlsx", "xls", "csv"], label_visibility="collapsed")
+        if archivo_ed and st.button("🚀 Iniciar Cruce Manual", type="primary", use_container_width=True):
+            if archivo_ed.name.endswith('.csv'):
+                df_pj = pd.read_csv(archivo_ed)
+            else:
+                df_pj = pd.read_excel(archivo_ed)
 
-    # Mostrar historial de documentos del Estado Diario
-    st.markdown("### 🗄️ Historial Reciente de Resoluciones (Últimos 15 días)")
+    if not df_pj.empty:
+        col_rol_pj = None
+        for col in df_pj.columns:
+            if str(col).strip().upper() in ['ROL', 'RIT', 'ROL/RIT', 'ROL_RIT']:
+                col_rol_pj = col
+                break
+                
+        if not col_rol_pj: 
+            st.error("No se encontró una columna 'ROL' en los datos.")
+        else:
+            df_pj['ROL_LIMPIO'] = df_pj[col_rol_pj].astype(str).str.strip().str.upper()
+            df_causas['ROL_LIMPIO'] = df_causas['ROL'].astype(str).str.strip().str.upper()
+            coincidencias = pd.merge(df_pj, df_causas[['ROL_LIMPIO', 'Cliente', 'Tipo_Negocio', 'TRIBUNAL']], on='ROL_LIMPIO', how='inner')
+            
+            if coincidencias.empty: 
+                st.success("Cruce finalizado. No hubo movimientos hoy en tus causas.")
+            else:
+                st.warning(f"⚠️ ¡Se encontraron {len(coincidencias)} causas con movimientos!")
+                st.dataframe(coincidencias, use_container_width=True)
+                st.markdown("### 📎 Adjuntar Resoluciones")
+                with st.form("form_resoluciones_cruce"):
+                    for i, fila in coincidencias.iterrows():
+                        rol_cruce = fila.get(col_rol_pj, "Desconocido")
+                        st.write(f"**{rol_cruce}** - {fila.get('Cliente', '')}")
+                        st.file_uploader(f"Resolución {rol_cruce}", key=f"res_{i}")
+                        
+                    if st.form_submit_button("Guardar en Historial", type="primary"):
+                        df_ed_hist = pd.read_csv(ARCHIVO_ESTADO_DIARIO)
+                        fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+                        
+                        for i, fila in coincidencias.iterrows():
+                            archivo_subido = st.session_state.get(f"res_{i}")
+                            if archivo_subido:
+                                b64_res = base64.b64encode(archivo_subido.getvalue()).decode('utf-8')
+                                nuevo_ed = {
+                                    'ID_ED': str(uuid.uuid4())[:8], 
+                                    'Fecha_Estado': fecha_hoy,
+                                    'ROL': fila.get(col_rol_pj, "Desconocido"), 
+                                    'Tribunal': fila.get('TRIBUNAL', 'S/I'),
+                                    'Resolucion_Extracto': 'Adjunto automático', 
+                                    'Doc_Nombre': archivo_subido.name,
+                                    'Doc_B64': b64_res
+                                }
+                                df_ed_hist = pd.concat([df_ed_hist, pd.DataFrame([nuevo_ed])], ignore_index=True)
+                                
+                        df_ed_hist.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
+                        st.success("Guardado. Se borrarán automáticamente en 15 días.")
+                        st.rerun()
+
+    st.markdown("### 🗄️ Historial Reciente (Últimos 15 días)")
     df_hist_ed = pd.read_csv(ARCHIVO_ESTADO_DIARIO)
-    if df_hist_ed.empty:
+    if df_hist_ed.empty: 
         st.write("No hay resoluciones guardadas recientemente.")
     else:
-        for idx, doc_ed in df_hist_ed.iterrows():
+        for _, doc_ed in df_hist_ed.iterrows():
             with st.container(border=True):
-                col_d1, col_d2 = st.columns([4, 1])
-                with col_d1:
-                    st.markdown(f"**ROL:** {doc_ed['ROL']} | **Fecha:** {doc_ed['Fecha_Estado']}")
-                    st.markdown(f"<span style='color:#6b778c; font-size:14px;'>Archivo: {doc_ed['Doc_Nombre']}</span>", unsafe_allow_html=True)
-                with col_d2:
-                    if pd.notna(doc_ed['Doc_B64']) and doc_ed['Doc_B64'] != "":
-                        pdf_bytes = base64.b64decode(doc_ed['Doc_B64'])
-                        st.download_button("📥 Bajar PDF", data=pdf_bytes, file_name=doc_ed['Doc_Nombre'], key=f"bajared_{doc_ed['ID_ED']}")
-                    else:
-                        st.write("*(Archivo eliminado)*")
-
+                c1, c2 = st.columns([4, 1])
+                with c1: 
+                    st.markdown(f"**ROL:** {doc_ed['ROL']} | **Fecha:** {doc_ed['Fecha_Estado']}<br><span style='color:#6b778c; font-size:14px;'>Archivo: {doc_ed['Doc_Nombre']}</span>", unsafe_allow_html=True)
+                with c2:
+                    if pd.notna(doc_ed['Doc_B64']) and doc_ed['Doc_B64'] != "": 
+                        st.download_button("📥 PDF", data=base64.b64decode(doc_ed['Doc_B64']), file_name=doc_ed['Doc_Nombre'], key=f"bajared_{doc_ed['ID_ED']}")
 
 elif st.session_state['menu_radio'] == "💼 Causas":
     df_causas = pd.read_csv(ARCHIVO_BD)
