@@ -44,20 +44,22 @@ def get_logo_src():
                 contenido_b64 = base64.b64encode(f.read()).decode()
                 return f"data:image/{ext.lower()};base64,{contenido_b64}"
                 
+    # NUEVO LOGO VECTORIAL: Balanza de la Justicia Moderna + Flechas Sync
     svg_logo = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <path d="M 18 50 A 32 32 0 0 1 82 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
-        <polygon points="82,50 72,38 92,38" fill="#0052cc"/>
-        <path d="M 82 55 A 32 32 0 0 1 18 55" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
-        <polygon points="18,55 8,67 28,67" fill="#0052cc"/>
-        <rect x="46" y="22" width="8" height="48" fill="#172b4d" rx="2"/>
-        <rect x="38" y="70" width="24" height="6" fill="#172b4d" rx="3"/>
-        <rect x="42" y="18" width="16" height="4" fill="#172b4d" rx="2"/>
-        <path d="M 22 35 L 78 35" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
-        <path d="M 22 35 L 12 55 L 32 55 Z" fill="none" stroke="#172b4d" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M 12 55 Q 22 62 32 55 Z" fill="#172b4d"/>
-        <path d="M 78 35 L 68 55 L 88 55 Z" fill="none" stroke="#172b4d" stroke-width="2" stroke-linejoin="round"/>
-        <path d="M 68 55 Q 78 62 88 55 Z" fill="#172b4d"/>
+        <path d="M 30 20 A 35 35 0 0 1 85 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="85,60 76,46 94,46" fill="#0052cc"/>
+        
+        <path d="M 70 80 A 35 35 0 0 1 15 50" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="15,40 6,54 24,54" fill="#172b4d"/>
+        
+        <rect x="46" y="25" width="8" height="50" rx="3" fill="#172b4d"/>
+        <rect x="35" y="75" width="30" height="8" rx="4" fill="#172b4d"/>
+        <rect x="23" y="32" width="54" height="6" rx="3" fill="#0052cc"/>
+        <line x1="30" y1="38" x2="30" y2="50" stroke="#172b4d" stroke-width="3"/>
+        <line x1="70" y1="38" x2="70" y2="50" stroke="#172b4d" stroke-width="3"/>
+        <path d="M 20 50 A 10 10 0 0 0 40 50 Z" fill="#0052cc"/>
+        <path d="M 60 50 A 10 10 0 0 0 80 50 Z" fill="#0052cc"/>
     </svg>
     """
     b64_svg = base64.b64encode(svg_logo.encode('utf-8')).decode('utf-8')
