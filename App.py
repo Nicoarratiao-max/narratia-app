@@ -5,10 +5,10 @@ import json
 import uuid
 import base64
 import io
+import requests
 from datetime import datetime
 from streamlit_calendar import calendar
 
-# Intentamos importar la librería para crear Word. 
 try:
     from docx import Document
     from docx.shared import Pt
@@ -19,6 +19,27 @@ except ImportError:
 
 # --- CONFIGURACIÓN ---
 st.set_page_config(page_title="JuriSync | Sistema Judicial", layout="wide", initial_sidebar_state="expanded")
+
+# --- MOTOR DE RESPALDO EN GITHUB ---
+def respaldar_en_github(nombre_archivo):
+    try:
+        token = st.secrets["GITHUB_TOKEN"]
+        repo = st.secrets["GITHUB_REPO"]
+        url = f"https://api.github.com/repos/{repo}/contents/{nombre_archivo}"
+        headers = {"Authorization": f"token {token}"}
+        
+        with open(nombre_archivo, "rb") as f:
+            contenido_b64 = base64.b64encode(f.read()).decode('utf-8')
+            
+        r_get = requests.get(url, headers=headers)
+        sha = r_get.json().get("sha", "") if r_get.status_code == 200 else ""
+        
+        datos = {"message": f"Respaldo autoguardado: {nombre_archivo}", "content": contenido_b64}
+        if sha: datos["sha"] = sha
+            
+        requests.put(url, headers=headers, json=datos)
+    except Exception:
+        pass # Si falla por falta de internet o clave, el sistema sigue funcionando normal
 
 # --- FUNCIONES PRINCIPALES ---
 def obtener_saludo():
@@ -58,10 +79,10 @@ def procesar_ojv_completo(archivo):
         for col in cols_extra:
             if col not in df_consolidado.columns: df_consolidado[col] = "--"
         df_consolidado.to_csv(ARCHIVO_BD, index=False)
+        respaldar_en_github(ARCHIVO_BD)
         return df_consolidado
     return pd.DataFrame()
 
-# --- GENERADOR DE FERIADOS CHILENOS ---
 def obtener_feriados_chile():
     feriados = []
     for anio in [2025, 2026, 2027]:
@@ -87,7 +108,6 @@ def obtener_feriados_chile():
     ])
     return feriados
 
-# --- LÓGICA DE CREACIÓN DEL CONTRATO EN WORD ---
 def crear_contrato_word(datos):
     if not DOCX_READY: return None
     doc = Document()
@@ -211,7 +231,7 @@ def crear_contrato_word(datos):
     
     return doc
 
-# --- SISTEMA DE AUTENTICACIÓN Y NOMBRES REALES ---
+# --- SISTEMA DE AUTENTICACIÓN ---
 USUARIOS = {"Narratia": "20911237", "Vfarfan": "vpfm2404", "Gdonoso": "gdonoso123"}
 NOMBRES_REALES = {"Narratia": "Nicolás Arratia", "Vfarfan": "Valentina Farfán", "Gdonoso": "Gabriel Donoso"}
 
@@ -261,37 +281,48 @@ ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 
-# Creación/verificación de archivos seguros
-if not os.path.exists(ARCHIVO_TAREAS):
-    pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(ARCHIVO_TAREAS, index=False)
-else:
-    df_t_check = pd.read_csv(ARCHIVO_TAREAS)
-    if 'Prioridad' not in df_t_check.columns:
-        df_t_check['Prioridad'] = 'Media'
-        df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
+# Funciones para sincronizar y crear bases desde GitHub si no existen
+def asegurar_archivo(archivo_local, df_vacio):
+    try:
+        if "GITHUB_TOKEN" in st.secrets:
+            token = st.secrets["GITHUB_TOKEN"]
+            repo = st.secrets["GITHUB_REPO"]
+            url = f"https://api.github.com/repos/{repo}/contents/{archivo_local}"
+            headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3.raw"}
+            r = requests.get(url, headers=headers)
+            if r.status_code == 200:
+                with open(archivo_local, 'wb') as f: f.write(r.content)
+                return pd.read_csv(archivo_local)
+    except: pass
+    
+    if not os.path.exists(archivo_local):
+        df_vacio.to_csv(archivo_local, index=False)
+        respaldar_en_github(archivo_local)
+        return df_vacio
+    return pd.read_csv(archivo_local)
 
-if not os.path.exists(ARCHIVO_BD):
-    pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']).to_csv(ARCHIVO_BD, index=False)
-else:
-    df_c_check = pd.read_csv(ARCHIVO_BD)
-    if 'Cliente' not in df_c_check.columns:
-        df_c_check['Cliente'] = pd.Series(dtype='str')
-        df_c_check.to_csv(ARCHIVO_BD, index=False)
+df_t_check = asegurar_archivo(ARCHIVO_TAREAS, pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']))
+if 'Prioridad' not in df_t_check.columns:
+    df_t_check['Prioridad'] = 'Media'
+    df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
+    respaldar_en_github(ARCHIVO_TAREAS)
 
-if not os.path.exists(ARCHIVO_CONTRATOS):
-    pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios']).to_csv(ARCHIVO_CONTRATOS, index=False)
+df_c_check = asegurar_archivo(ARCHIVO_BD, pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal']))
+if 'Cliente' not in df_c_check.columns:
+    df_c_check['Cliente'] = pd.Series(dtype='str')
+    df_c_check.to_csv(ARCHIVO_BD, index=False)
+    respaldar_en_github(ARCHIVO_BD)
 
+asegurar_archivo(ARCHIVO_CONTRATOS, pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios']))
 
 # --- CALLBACK PARA RESETEAR LA NAVEGACIÓN ---
 def resetear_vistas():
-    # Esto limpia las carpetas abiertas si el usuario cambia de sección en el menú
     st.session_state.causa_seleccionada = None
     st.session_state.cliente_seleccionado = None
     st.session_state.modo_edicion = False
     st.session_state.creando_tarea = False
     st.session_state.editando_tarea = None
 
-# Estados iniciales
 if 'menu_radio' not in st.session_state: st.session_state['menu_radio'] = "🏠 Inicio"
 if 'causa_seleccionada' not in st.session_state: st.session_state['causa_seleccionada'] = None
 if 'cliente_seleccionado' not in st.session_state: st.session_state['cliente_seleccionado'] = None
@@ -299,7 +330,6 @@ if 'modo_edicion' not in st.session_state: st.session_state['modo_edicion'] = Fa
 if 'creando_tarea' not in st.session_state: st.session_state['creando_tarea'] = False
 if 'editando_tarea' not in st.session_state: st.session_state['editando_tarea'] = None
 
-# Funciones de botones directos
 def nav_causas():
     st.session_state.menu_radio = "💼 Causas"
     resetear_vistas()
@@ -372,7 +402,6 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
                     if "[📎 Archivo adjunto:" in com.get('texto', ''): documentos_efectivos += 1
             except: pass
 
-    # MÉTRICAS PRINCIPALES
     c1, c2, c3, c4 = st.columns(4)
     with c1: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
     with c2: st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
@@ -584,6 +613,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     nuevo_c = {'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'Cliente': cli_nom, 'Servicio': tipo_servicio, 'Honorarios': hon_num}
                     df_contratos = pd.concat([df_contratos, pd.DataFrame([nuevo_c])], ignore_index=True)
                     df_contratos.to_csv(ARCHIVO_CONTRATOS, index=False)
+                    respaldar_en_github(ARCHIVO_CONTRATOS)
                     st.rerun()
 
         if st.session_state.get('contrato_generado'):
@@ -741,7 +771,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             df_causas.at[idx, 'Cliente'] = n_cliente; df_causas.at[idx, 'RUT'] = n_rut; df_causas.at[idx, 'Teléfono'] = n_tel
                             df_causas.at[idx, 'Correo'] = n_correo; df_causas.at[idx, 'Direccion'] = n_dir; df_causas.at[idx, 'Clave_unica'] = n_clave
                             df_causas.at[idx, 'SAC'] = n_sac; df_causas.at[idx, 'Sucursal'] = n_suc
-                            df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['modo_edicion'] = False; st.rerun()
+                            df_causas.to_csv(ARCHIVO_BD, index=False)
+                            respaldar_en_github(ARCHIVO_BD)
+                            st.session_state['modo_edicion'] = False; st.rerun()
                 else:
                     badge_class = "badge-active" if c_data.get('Tipo_Negocio') == "Grupo Defensa" else "badge-propio"
                     st.markdown(f"""
@@ -784,7 +816,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         'Titulo': nuevo_titulo, 'Descripcion': nueva_desc, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': prio_seleccionada
                                     }
                                     df_t = pd.concat([df_t, pd.DataFrame([nueva_t])], ignore_index=True)
-                                    df_t.to_csv(ARCHIVO_TAREAS, index=False); st.session_state['creando_tarea'] = False; st.rerun()
+                                    df_t.to_csv(ARCHIVO_TAREAS, index=False)
+                                    respaldar_en_github(ARCHIVO_TAREAS)
+                                    st.session_state['creando_tarea'] = False; st.rerun()
                     df_tareas = pd.read_csv(ARCHIVO_TAREAS)
                     tareas_rol = df_tareas[df_tareas['ROL'] == rol_actual]
                     if tareas_rol.empty: st.write("<br>", unsafe_allow_html=True); st.info("Aún no hay tareas registradas para esta causa.")
@@ -813,7 +847,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             cf1, cf2 = st.columns(2)
                                             if cf1.form_submit_button("Guardar"):
                                                 df_tareas.at[idx_t, 'Fecha_Vencimiento'] = n_fecha.strftime("%d/%m/%Y")
-                                                df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.session_state['editando_tarea'] = None; st.rerun()
+                                                df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                                respaldar_en_github(ARCHIVO_TAREAS)
+                                                st.session_state['editando_tarea'] = None; st.rerun()
                                             if cf2.form_submit_button("Cancelar"): st.session_state['editando_tarea'] = None; st.rerun()
                                     else:
                                         st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Fecha creación: {row_t['Fecha_Creacion']} • Fecha vencimiento: {row_t['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
@@ -821,8 +857,16 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     st.write("")
                                     if row_t['Estado'] == 'En progreso':
                                         btn_cols = st.columns([1, 1, 1.5, 0.5])
-                                        if btn_cols[0].button("❌", key=f"rec_{row_t['ID_Tarea']}"): df_tareas.at[idx_t, 'Estado'] = 'Rechazada'; df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                        if btn_cols[1].button("✅", key=f"apr_{row_t['ID_Tarea']}"): df_tareas.at[idx_t, 'Estado'] = 'Aprobada'; df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        if btn_cols[0].button("❌", key=f"rec_{row_t['ID_Tarea']}"): 
+                                            df_tareas.at[idx_t, 'Estado'] = 'Rechazada'
+                                            df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                            respaldar_en_github(ARCHIVO_TAREAS)
+                                            st.rerun()
+                                        if btn_cols[1].button("✅", key=f"apr_{row_t['ID_Tarea']}"): 
+                                            df_tareas.at[idx_t, 'Estado'] = 'Aprobada'
+                                            df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                            respaldar_en_github(ARCHIVO_TAREAS)
+                                            st.rerun()
                                         btn_cols[2].markdown("<div style='background:#ffc400; color:#172b4d; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>En progreso</div>", unsafe_allow_html=True)
                                         if btn_cols[3].button("✏️", key=f"edit_btn_{row_t['ID_Tarea']}"): st.session_state['editando_tarea'] = row_t['ID_Tarea']; st.rerun()
                                     elif row_t['Estado'] == 'Aprobada':
@@ -858,13 +902,16 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             if archivo_adjunto_coment: texto_comentario_final += f" <br><em>[📎 Archivo adjunto: {archivo_adjunto_coment.name}]</em>"
                                             comentarios.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": texto_comentario_final})
                                             df_tareas.at[idx_t, 'Comentarios'] = json.dumps(comentarios)
-                                            df_tareas.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                            df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                            respaldar_en_github(ARCHIVO_TAREAS)
+                                            st.rerun()
 
 elif st.session_state['menu_radio'] == "📥 Excel":
     st.title("📥 Importador")
     archivo = st.file_uploader("Sube Excel", type=["xlsx", "xls"])
     if archivo and st.button("Procesar"):
-        procesar_ojv_completo(archivo); st.success("Base actualizada.")
+        procesar_ojv_completo(archivo)
+        st.success("Base actualizada y respaldada en la nube.")
 
 else:
     st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
