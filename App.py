@@ -41,7 +41,11 @@ LOGO_URL = get_logo_src()
 
 def procesar_ojv_completo(archivo):
     diccionario_hojas = pd.read_excel(archivo, sheet_name=None)
-    mapa = {'ROL': ['ROL', 'RIT', 'Rol', 'Rit'], 'TRIBUNAL': ['TRIBUNAL', 'Tribunal', 'Juzgado', 'Corte'], 'CARATULADO': ['CARATULA', 'Carátula', 'Caratulado', 'Causa']}
+    mapa = {
+        'ROL': ['ROL', 'RIT', 'Rol', 'Rit'], 
+        'TRIBUNAL': ['TRIBUNAL', 'Tribunal', 'Juzgado', 'Corte'], 
+        'CARATULADO': ['CARATULA', 'Carátula', 'Caratulado', 'Causa']
+    }
     lista_final = []
     
     for nombre_hoja, df_hoja in diccionario_hojas.items():
@@ -231,14 +235,14 @@ USUARIOS = {
     "Narratia": "20911237", 
     "Vfarfan": "vpfm2404", 
     "Gdonoso": "gdonoso123",
-    "Mcortes": "Mcortes123"  # <--- Agregada Miryam Cortés
+    "Mcortes": "Mcortes123"
 }
 
 NOMBRES_REALES = {
     "Narratia": "Nicolás Arratia", 
     "Vfarfan": "Valentina Farfán", 
     "Gdonoso": "Gabriel Donoso",
-    "Mcortes": "Miryam Cortés" # <--- Agregada Miryam Cortés
+    "Mcortes": "Miryam Cortés"
 }
 
 if 'logged_in' not in st.session_state: 
@@ -308,7 +312,6 @@ else:
     df_c_check = pd.read_csv(ARCHIVO_BD)
     cambios_bd = False
     
-    # Asegurarnos de que existan las nuevas columnas de Contabilidad
     for col in ['Cliente', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']:
         if col not in df_c_check.columns:
             if col in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']: 
@@ -369,7 +372,7 @@ st.markdown("""
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
     
     .dash-card { background: white !important; border-radius: 12px; padding: 15px; border: 1px solid #e0e4e8; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    .dash-header { border-bottom: 2px solid #e0e4e8; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #6b778c; letter-spacing: 0.5px; }
+    .dash-header { border-bottom: 2px solid #e0e4e8; padding-bottom: 10px; margin-bottom: 15px; font-weight: 800; font-size: 14px; color: #6b778c; letter-spacing: 0.5px; text-transform: uppercase; }
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     
@@ -389,7 +392,23 @@ with st.sidebar:
     """, unsafe_allow_html=True)
     st.write("---")
     
-    menu_opciones = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "☑️ Tareas", "💼 Causas", "👥 Clientes", "✈️ Mensajería", "📥 Excel"]
+    menu_opciones = [
+        "🏠 Inicio", 
+        "📅 Calendario", 
+        "📋 Agenda", 
+        "📄 Contratos", 
+        "💰 Contabilidad", 
+        "📝 Trámites", 
+        "📆 Estado diario", 
+        "☑️ Tareas", 
+        "💼 Causas", 
+        "👥 Clientes", 
+        "✈️ Mensajería", 
+        "⚙️ Automatizaciones", 
+        "📊 Informes", 
+        "📥 Excel", 
+        "📈 Marketing"
+    ]
     
     st.radio("Navegación", menu_opciones, key="menu_radio", on_change=resetear_vistas)
     
@@ -402,6 +421,8 @@ with st.sidebar:
 # --- CONTROLADOR DE VISTAS ---
 if st.session_state['menu_radio'] == "🏠 Inicio":
     st.title(f"{obtener_saludo()}, {nombre_real_usuario}")
+    st.write("Panel de control unificado. Aquí tienes un resumen de tu actividad judicial.")
+    st.write("<br>", unsafe_allow_html=True)
     
     df_causas_totales = pd.read_csv(ARCHIVO_BD)
     df_tareas_totales = pd.read_csv(ARCHIVO_TAREAS)
@@ -412,6 +433,17 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
     tareas_del_dia = len(df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]) if not df_tareas_totales.empty else 0
     
+    documentos_efectivos = 0
+    if not df_tareas_totales.empty and 'Comentarios' in df_tareas_totales.columns:
+        for bloque_comentario in df_tareas_totales['Comentarios'].dropna():
+            try:
+                lista_comentarios = json.loads(bloque_comentario)
+                for com in lista_comentarios:
+                    if "[📎 Archivo adjunto:" in com.get('texto', ''): 
+                        documentos_efectivos += 1
+            except: 
+                pass
+    
     c1, c2, c3, c4 = st.columns(4)
     with c1: 
         st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
@@ -420,7 +452,35 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     with c3: 
         st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
     with c4:
-        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>0</h2></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
+
+    st.write("<br>", unsafe_allow_html=True)
+
+    grid_izq, grid_der = st.columns([1.2, 1])
+    
+    with grid_izq:
+        st.markdown("<div class='dash-card'><div class='dash-header'>ÚLTIMAS CAUSAS INGRESADAS</div>", unsafe_allow_html=True)
+        if df_causas_totales.empty:
+            st.info("No hay causas recientes.")
+        else:
+            ultimas = df_causas_totales.tail(4)[::-1]
+            for _, c in ultimas.iterrows():
+                st.markdown(f"<div style='border-bottom:1px solid #f4f5f7; padding:8px 0;'><strong style='color:#172b4d; font-size:14px;'>{c.get('CARATULADO', 'Sin nombre')}</strong><br><span style='color:#6b778c; font-size:12px;'>Rol: {c.get('ROL','--')} | {c.get('Tipo_Negocio','--')}</span></div>", unsafe_allow_html=True)
+            st.button("Ver todas las causas", on_click=nav_causas, use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with grid_der:
+        st.markdown("<div class='dash-card'><div class='dash-header'>TAREAS PARA HOY</div>", unsafe_allow_html=True)
+        if tareas_del_dia == 0:
+            st.info("No hay tareas pendientes para hoy.")
+        else:
+            t_hoy = df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]
+            for _, t in t_hoy.iterrows():
+                color_t = "#ff5630" if t.get('Prioridad') == 'Alta' else "#ffc400"
+                st.markdown(f"<div style='border-left:3px solid {color_t}; padding-left:10px; margin-bottom:10px;'><strong style='color:#172b4d; font-size:14px;'>{t['Titulo']}</strong><br><span style='color:#6b778c; font-size:12px;'>Causa: {t['ROL']}</span></div>", unsafe_allow_html=True)
+            st.button("Ir a Agenda", on_click=lambda: st.session_state.update({'menu_radio': '📋 Agenda'}), use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
         
 elif st.session_state['menu_radio'] == "💰 Contabilidad":
     st.title("💰 Panel de Honorarios y Contabilidad")
@@ -472,12 +532,24 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         st.session_state['modo_edicion'] = False
         st.title("💼 Gestión de Causas")
         
-        rol = st.selectbox("🔍 Buscar ROL:", [""] + df_causas['ROL'].astype(str).tolist())
+        c_f1, c_f2 = st.columns(2)
+        trib_unicos = df_causas['TRIBUNAL'].dropna().unique().tolist()
+        neg_unicos = df_causas['Tipo_Negocio'].dropna().unique().tolist()
+        
+        filtro_trib = c_f1.multiselect("Filtrar por Tribunal", trib_unicos, placeholder="Selecciona tribunal...")
+        filtro_neg = c_f2.multiselect("Filtrar por Tipo de Negocio", neg_unicos, placeholder="Selecciona negocio...")
+        
+        df_filtrado = df_causas.copy()
+        if filtro_trib: df_filtrado = df_filtrado[df_filtrado['TRIBUNAL'].isin(filtro_trib)]
+        if filtro_neg: df_filtrado = df_filtrado[df_filtrado['Tipo_Negocio'].isin(filtro_neg)]
+
+        rol = st.selectbox("🔍 Buscar ROL Específico:", [""] + df_filtrado['ROL'].astype(str).tolist())
         if rol != "" and st.button("Abrir Expediente", type="primary"): 
             st.session_state['causa_seleccionada'] = rol
             st.rerun()
             
-        st.dataframe(df_causas[['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'Estado_Honorarios']], use_container_width=True)
+        st.markdown("### Listado General")
+        st.dataframe(df_filtrado[['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'Estado_Honorarios']], use_container_width=True)
         
     else:
         rol_actual = st.session_state['causa_seleccionada']
@@ -508,6 +580,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     
                     st.markdown("#### Cliente")
                     n_cliente = st.text_input("Nombre", str(c_data.get('Cliente','')))
+                    n_rut = st.text_input("RUT", str(c_data.get('RUT','')))
+                    n_tel = st.text_input("Teléfono", str(c_data.get('Teléfono','')))
+                    n_correo = st.text_input("Correo", str(c_data.get('Correo','')))
+                    n_dir = st.text_input("Dirección", str(c_data.get('Direccion','')))
+                    n_clave = st.text_input("Clave Única", str(c_data.get('Clave_unica','')))
+                    n_sac = st.text_input("SAC Asignado", str(c_data.get('SAC','')))
+                    n_suc = st.text_input("Sucursal", str(c_data.get('Sucursal','')))
                     
                     st.markdown("#### 💰 Honorarios")
                     opciones_hon = ["Sin fijar", "Pagados", "Pendientes"]
@@ -535,6 +614,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             df_causas.at[idx, 'Servicio'] = n_serv
                             df_causas.at[idx, 'Tipo_Negocio'] = n_negocio
                             df_causas.at[idx, 'Cliente'] = n_cliente
+                            df_causas.at[idx, 'RUT'] = n_rut
+                            df_causas.at[idx, 'Teléfono'] = n_tel
+                            df_causas.at[idx, 'Correo'] = n_correo
+                            df_causas.at[idx, 'Direccion'] = n_dir
+                            df_causas.at[idx, 'Clave_unica'] = n_clave
+                            df_causas.at[idx, 'SAC'] = n_sac
+                            df_causas.at[idx, 'Sucursal'] = n_suc
                             df_causas.at[idx, 'Estado_Honorarios'] = n_estado_hon
                             df_causas.at[idx, 'Total_Honorarios'] = n_tot_hon
                             df_causas.at[idx, 'Cuotas_Totales'] = n_cuo_tot
@@ -544,49 +630,249 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.session_state['modo_edicion'] = False
                             st.rerun()
             else:
+                badge_class = "badge-active" if c_data.get('Tipo_Negocio') == "Grupo Defensa" else "badge-propio"
                 st.markdown(f"""
                 <div class="dash-card">
-                    <span style="font-weight:bold; color:#172b4d;">{c_data.get('CARATULADO')}</span><br>
-                    <span style="color:#6b778c; font-size:14px;">Cliente: {c_data.get('Cliente')}</span><hr>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+                        <span style="font-weight:bold; color:#172b4d;">Información de la causa</span>
+                        <span class="{badge_class}">{c_data.get('Tipo_Negocio','')}</span>
+                    </div>
+                    <span style="font-weight:bold;">Causa:</span> {c_data.get('CARATULADO')}<br>
+                    <span style="font-weight:bold;">Rol:</span> {rol_actual}<br>
+                    <span style="font-weight:bold;">Tribunal:</span> {c_data.get('TRIBUNAL')}<br>
+                    <span style="font-weight:bold;">Servicio:</span> {c_data.get('Servicio')}<br>
+                </div>
+                
+                <div class="dash-card">
+                    <span style="font-weight:bold; color:#172b4d; margin-bottom:10px; display:block;">Información del cliente</span>
+                    <span style="font-weight:bold;">Nombre:</span> {c_data.get('Cliente')}<br>
+                    <span style="font-weight:bold;">RUT:</span> {c_data.get('RUT')}<br>
+                    <span style="font-weight:bold;">Teléfono:</span> {c_data.get('Teléfono')}<br>
+                    <hr>
                     <span style="font-weight:bold;">Honorarios:</span> {c_data.get('Estado_Honorarios')}<br>
                     <span style="color:#6b778c; font-size:14px;">Total: ${c_data.get('Total_Honorarios',0):,.0f}</span>
                 </div>
                 """, unsafe_allow_html=True)
                 
         with col_izq:
-            t_tar = st.tabs(["Tareas de la causa"])[0]
+            t_mov, t_tar, t_leg = st.tabs(["Movimientos", "Tareas", "Movimientos legacy"])
+            
             with t_tar:
-                if st.button("+ Nueva tarea", type="primary"): 
-                    st.session_state['creando_tarea'] = not st.session_state['creando_tarea']
-                    st.rerun()
-                    
+                c_buscar, c_btn_crear = st.columns([3, 1])
+                with c_buscar: 
+                    filtro_tareas = st.text_input("🔍 Buscar tareas...", label_visibility="collapsed")
+                with c_btn_crear:
+                    if st.button("+ Nueva tarea", type="primary", use_container_width=True): 
+                        st.session_state['creando_tarea'] = not st.session_state['creando_tarea']
+                        st.rerun()
+                        
                 if st.session_state['creando_tarea']:
-                    with st.form("form_nueva_tarea"):
-                        n_tit = st.text_input("Título")
-                        n_desc = st.text_area("Descripción")
-                        n_f = st.date_input("Vencimiento")
-                        if st.form_submit_button("Guardar"):
-                            df_t = pd.read_csv(ARCHIVO_TAREAS)
-                            nueva_t = {
-                                'ID_Tarea': str(uuid.uuid4())[:8], 
-                                'ROL': rol_actual, 
-                                'Creador': usuario_actual, 
-                                'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
-                                'Fecha_Vencimiento': n_f.strftime("%d/%m/%Y"), 
-                                'Titulo': n_tit, 
-                                'Descripcion': n_desc, 
-                                'Estado': 'En progreso', 
-                                'Comentarios': '[]', 
-                                'Prioridad': 'Media'
-                            }
-                            df_t = pd.concat([df_t, pd.DataFrame([nueva_t])], ignore_index=True)
-                            df_t.to_csv(ARCHIVO_TAREAS, index=False)
-                            st.session_state['creando_tarea'] = False
-                            st.rerun()
+                    with st.container(border=True):
+                        with st.form("form_nueva_tarea"):
+                            st.markdown("#### ✨ Crear Nueva Tarea")
+                            n_tit = st.text_input("Nomenclatura o Título")
+                            n_desc = st.text_area("Descripción detallada")
+                            prio_seleccionada = st.selectbox("Prioridad", ["Alta", "Media", "Baja"], index=1)
+                            n_f = st.date_input("Vencimiento")
                             
+                            c_guardar, c_cancelar = st.columns([1, 5])
+                            if c_guardar.form_submit_button("💾 Guardar"):
+                                df_t = pd.read_csv(ARCHIVO_TAREAS)
+                                nueva_t = {
+                                    'ID_Tarea': str(uuid.uuid4())[:8], 
+                                    'ROL': rol_actual, 
+                                    'Creador': usuario_actual, 
+                                    'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
+                                    'Fecha_Vencimiento': n_f.strftime("%d/%m/%Y"), 
+                                    'Titulo': n_tit, 
+                                    'Descripcion': n_desc, 
+                                    'Estado': 'En progreso', 
+                                    'Comentarios': '[]', 
+                                    'Prioridad': prio_seleccionada
+                                }
+                                df_t = pd.concat([df_t, pd.DataFrame([nueva_t])], ignore_index=True)
+                                df_t.to_csv(ARCHIVO_TAREAS, index=False)
+                                st.session_state['creando_tarea'] = False
+                                st.rerun()
+                                
                 df_tareas = pd.read_csv(ARCHIVO_TAREAS)
-                for _, r in df_tareas[df_tareas['ROL'] == rol_actual].iterrows():
-                    st.markdown(f"<div class='dash-card'><strong>{r['Titulo']}</strong> ({r['Estado']})</div>", unsafe_allow_html=True)
+                tareas_rol = df_tareas[df_tareas['ROL'] == rol_actual]
+                
+                if tareas_rol.empty: 
+                    st.write("<br>", unsafe_allow_html=True)
+                    st.info("Aún no hay tareas registradas para esta causa.")
+                else:
+                    st.write("<br>", unsafe_allow_html=True)
+                    for idx_t, row_t in tareas_rol.iterrows():
+                        with st.container(border=True):
+                            border_prio_color = "#ff5630" if row_t.get('Prioridad') == "Alta" else ("#ffc400" if row_t.get('Prioridad') == "Media" else "#57a15a")
+                            st.markdown(f"<div style='height: 5px; background-color: {border_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
+                            
+                            col_top_left, col_top_right = st.columns([3, 1.8])
+                            with col_top_left:
+                                creador_real = NOMBRES_REALES.get(row_t['Creador'], row_t['Creador'])
+                                st.markdown(f"""
+                                <div style='display: flex; align-items: center; margin-bottom: 5px;'>
+                                    <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                                    <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{creador_real}</span>
+                                    <span style='font-size:12px; color:{border_prio_color}; font-weight:bold; margin-left:8px;'>[{row_t.get('Prioridad', 'Media')}]</span>
+                                </div>
+                                """, unsafe_allow_html=True)
+                                
+                                st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado por: {creador_real} • N° tarea {row_t['ID_Tarea']}</span>", unsafe_allow_html=True)
+                                
+                                if st.session_state.get('editando_tarea') == row_t['ID_Tarea']:
+                                    with st.form(key=f"form_fecha_{row_t['ID_Tarea']}"):
+                                        try: 
+                                            d_actual = datetime.strptime(row_t['Fecha_Vencimiento'], "%d/%m/%Y").date()
+                                        except: 
+                                            d_actual = datetime.now().date()
+                                        n_fecha = st.date_input("Nueva fecha:", d_actual)
+                                        cf1, cf2 = st.columns(2)
+                                        if cf1.form_submit_button("Guardar"):
+                                            df_tareas.at[idx_t, 'Fecha_Vencimiento'] = n_fecha.strftime("%d/%m/%Y")
+                                            df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                            st.session_state['editando_tarea'] = None
+                                            st.rerun()
+                                        if cf2.form_submit_button("Cancelar"): 
+                                            st.session_state['editando_tarea'] = None
+                                            st.rerun()
+                                else:
+                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Fecha creación: {row_t['Fecha_Creacion']} • Fecha vencimiento: {row_t['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
+                                    
+                            with col_top_right:
+                                st.write("")
+                                if row_t['Estado'] == 'En progreso':
+                                    btn_cols = st.columns([1, 1, 1.5, 0.5])
+                                    if btn_cols[0].button("❌", key=f"rec_{row_t['ID_Tarea']}"): 
+                                        df_tareas.at[idx_t, 'Estado'] = 'Rechazada'
+                                        df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                        st.rerun()
+                                    if btn_cols[1].button("✅", key=f"apr_{row_t['ID_Tarea']}"): 
+                                        df_tareas.at[idx_t, 'Estado'] = 'Aprobada'
+                                        df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                        st.rerun()
+                                    btn_cols[2].markdown("<div style='background:#ffc400; color:#172b4d; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>En progreso</div>", unsafe_allow_html=True)
+                                    if btn_cols[3].button("✏️", key=f"edit_btn_{row_t['ID_Tarea']}"): 
+                                        st.session_state['editando_tarea'] = row_t['ID_Tarea']
+                                        st.rerun()
+                                elif row_t['Estado'] == 'Aprobada':
+                                    btn_cols = st.columns([3, 1.5, 0.5])
+                                    btn_cols[1].markdown("<div style='background:#57a15a; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>Aprobada</div>", unsafe_allow_html=True)
+                                    if btn_cols[2].button("✏️", key=f"edit_btn_{row_t['ID_Tarea']}"): 
+                                        st.session_state['editando_tarea'] = row_t['ID_Tarea']
+                                        st.rerun()
+                                else:
+                                    btn_cols = st.columns([3, 1.5, 0.5])
+                                    btn_cols[1].markdown("<div style='background:#ff5630; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>Rechazada</div>", unsafe_allow_html=True)
+                                    if btn_cols[2].button("✏️", key=f"edit_btn_{row_t['ID_Tarea']}"): 
+                                        st.session_state['editando_tarea'] = row_t['ID_Tarea']
+                                        st.rerun()
+                                        
+                            st.markdown(f"<h3 style='font-size: 18px; color: #172b4d; margin-top: 15px; margin-bottom: 5px;'>{row_t['Titulo']}</h3>", unsafe_allow_html=True)
+                            st.markdown(f"<p style='font-size: 15px; color: #172b4d; margin-bottom: 15px; white-space: pre-wrap;'>{row_t['Descripcion']}</p>", unsafe_allow_html=True)
+                            
+                            comentarios = json.loads(row_t['Comentarios'])
+                            if comentarios:
+                                comentarios_html = "".join([f"<div style='margin-bottom:15px;'><strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong> <span style='color:#6b778c; font-size:13px;'>• {c['fecha']}</span><br><span style='color:#42526e; font-size:14px;'>{c['texto']}</span></div>" for c in comentarios])
+                            else:
+                                comentarios_html = "<span style='color:#6b778c; font-size:14px;'>No hay comentarios aún.</span>"
+                                
+                            st.markdown(f"""
+                            <div style="background: #f8f9fa; margin: 10px -16px 0 -16px; padding: 12px 20px; border-top: 1px solid #e0e4e8; border-bottom: 1px solid #e0e4e8;">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="color:#172b4d; font-size:14px;">Comentarios <span style="background:#e1e4e8; padding:2px 8px; border-radius:12px; font-weight:bold; margin-left:5px; font-size:12px;">{len(comentarios)}</span></span>
+                                    <span style="color:#172b4d; font-weight:bold;">^</span>
+                                </div>
+                            </div>
+                            <div style="padding: 15px 4px 5px 4px;">{comentarios_html}</div>
+                            """, unsafe_allow_html=True)
+                            
+                            archivo_adjunto_coment = st.file_uploader("📎 Adjuntar documento al comentario", key=f"file_uploader_{row_t['ID_Tarea']}", label_visibility="collapsed")
+                            with st.form(key=f"form_coment_{row_t['ID_Tarea']}", clear_on_submit=True):
+                                col_inp, col_snd = st.columns([8, 1])
+                                nuevo_comentario = col_inp.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Agregar un comentario...")
+                                if col_snd.form_submit_button("Enviar"):
+                                    if nuevo_comentario.strip() or archivo_adjunto_coment:
+                                        texto_comentario_final = nuevo_comentario.strip()
+                                        if archivo_adjunto_coment: 
+                                            texto_comentario_final += f" <br><em>[📎 Archivo adjunto: {archivo_adjunto_coment.name}]</em>"
+                                        comentarios.append({
+                                            "autor": nombre_real_usuario, 
+                                            "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), 
+                                            "texto": texto_comentario_final
+                                        })
+                                        df_tareas.at[idx_t, 'Comentarios'] = json.dumps(comentarios)
+                                        df_tareas.to_csv(ARCHIVO_TAREAS, index=False)
+                                        st.rerun()
+
+elif st.session_state['menu_radio'] == "👥 Clientes":
+    if not os.path.exists(ARCHIVO_BD): 
+        st.info("Importa datos en 'Excel'.")
+    else:
+        df_causas = pd.read_csv(ARCHIVO_BD)
+        if st.session_state['cliente_seleccionado'] is None:
+            st.title("👥 Gestión de Clientes")
+            st.markdown("Haz clic en cualquier celda o botón de cliente para acceder de inmediato a su ficha unificada:")
+            clientes_unicos = df_causas['Cliente'].dropna().unique().tolist() if 'Cliente' in df_causas.columns else []
+            
+            c_grid1, c_grid2, c_grid3 = st.columns(3)
+            for i_cli, cli_nom in enumerate(clientes_unicos):
+                c_target = [c_grid1, c_grid2, c_grid3][i_cli % 3]
+                if c_target.button(f"👤 {cli_nom}", key=f"select_cli_btn_{i_cli}", use_container_width=True):
+                    st.session_state['cliente_seleccionado'] = cli_nom
+                    st.rerun()
+            st.write("<br>", unsafe_allow_html=True)
+            if 'Cliente' in df_causas.columns:
+                st.dataframe(df_causas[['Cliente', 'RUT', 'Teléfono']].drop_duplicates(subset=['Cliente']).dropna(subset=['Cliente']), use_container_width=True)
+        else:
+            cli_actual = st.session_state['cliente_seleccionado']
+            df_cli = df_causas[df_causas['Cliente'] == cli_actual]
+            datos = df_cli.iloc[0]
+            if st.button("⬅ Volver al listado", key="back_to_cli_list", on_click=nav_clientes): 
+                pass
+            
+            st.markdown(f"""
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                <h2 style="color:#172b4d; margin:0;">Ficha de cliente - {cli_actual} <span style="color:#0052cc; font-size:18px; cursor:pointer;">✏️</span></h2>
+                <div style="display:flex; border: 1px solid #0052cc; border-radius:6px; overflow:hidden;">
+                    <div style="background:#0052cc; color:white; padding:8px 20px; font-weight:bold; font-size:14px;">Información</div>
+                    <div style="background:white; color:#0052cc; padding:8px 20px; font-weight:bold; font-size:14px;">Tareas SAC/EEPP</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+            c_izq, c_der = st.columns([1, 2.5])
+            with c_izq:
+                st.markdown(f"""
+                <div style="background:white; padding:25px; border-radius:12px; border:1px solid #e0e4e8; margin-bottom:20px;">
+                    <div style="display:flex; justify-content:space-between; margin-bottom:25px;">
+                        <span style="font-weight:bold; color:#172b4d; font-size:16px;">Información</span>
+                        <span style="background:#57a15a; color:white; padding:4px 12px; border-radius:15px; font-size:13px; font-weight:bold; display:flex; align-items:center; gap:6px;">Activo <span style="height:8px; width:8px; background:white; border-radius:50%; display:inline-block;"></span></span>
+                    </div>
+                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Nombre:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('Cliente','--')}</div>
+                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Rut cliente:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('RUT','--')}</div>
+                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Clave única:</div><div style="color:#172b4d; font-size:15px; margin-bottom:20px; display:flex; justify-content:space-between;"><span>🛡️ {datos.get('Clave_unica','*****')}</span><span style="color:#6b778c;">👁️‍🗨️</span></div>
+                    <div style="color:#172b4d; font-size:15px; margin-bottom:12px;">📞 {datos.get('Teléfono','--')}</div>
+                    <div style="color:#172b4d; font-size:15px; margin-bottom:12px;">📄 {datos.get('Correo','--')}</div>
+                    <div style="color:#172b4d; font-size:15px; margin-bottom:30px;">📍 {datos.get('Direccion','--')}</div>
+                    <div style="font-weight:bold; color:#172b4d; font-size:15px; margin-bottom:15px;">Información SAC</div>
+                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">SAC asignado:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('SAC','--')}</div>
+                    <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Sucursal:</div><div style="color:#172b4d; font-size:15px; margin-bottom:10px;">{datos.get('Sucursal','--')}</div>
+                </div>
+                """, unsafe_allow_html=True)
+            with c_der:
+                st.markdown("<div style='background:#f8f9fa; padding:20px; border-radius:12px; border:1px solid #e0e4e8; min-height:600px;'><h3 style='color:#172b4d; margin-top:0; margin-bottom:20px;'>Causas</h3>", unsafe_allow_html=True)
+                for i, causa in df_cli.iterrows():
+                    with st.container(border=True):
+                        col_card1, col_card2 = st.columns([5, 1])
+                        with col_card1:
+                            st.markdown(f"<div><strong style='color:#172b4d; font-size:16px;'>{causa.get('CARATULADO','--')}</strong><br><span style='color:#42526e; font-size:14px;'>Rol: {causa.get('ROL','--')}</span><br><span style='color:#42526e; font-size:14px;'>👥 {causa.get('Servicio', 'Ejecutivo')}</span><br><span style='color:#42526e; font-size:14px;'>🏛️ {causa.get('TRIBUNAL', 'Sin Tribunal')}</span></div>", unsafe_allow_html=True)
+                        with col_card2:
+                            color_punto = "#57a15a" if causa.get('Tipo_Negocio') == "Grupo Defensa" else "#ff5630"
+                            st.markdown(f"<div style='height:12px; width:12px; background:{color_punto}; border-radius:50%; float:right;'></div>", unsafe_allow_html=True)
+                            st.write("<br><br>", unsafe_allow_html=True)
+                            st.button("Ir al expediente ➔", key=f"ficha_ir_{causa.get('ROL')}", on_click=ir_a_expediente, args=(causa.get('ROL'),))
+                st.markdown("</div>", unsafe_allow_html=True)
 
 elif st.session_state['menu_radio'] == "📄 Contratos":
     st.title("📄 Gestión de Contratos")
