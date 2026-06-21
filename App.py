@@ -309,7 +309,6 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas")
     col_cal, col_side = st.columns([3, 1])
     
-    # Cargamos los feriados como base del calendario
     eventos_calendario = obtener_feriados_chile()
     
     df_t = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
@@ -321,7 +320,6 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 d_str = d_obj.strftime("%Y-%m-%d")
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
                 
-                # Para evitar que el texto blanco se pierda en el amarillo, forzamos texto oscuro si es prioridad media
                 text_color = "white" if bg_color != "#ffc400" else "#172b4d"
                 
                 eventos_calendario.append({
@@ -333,10 +331,10 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 })
             except: pass
                 
-    # Configuración de FullCalendar 100% en Español
     opciones_calendario = {
         "initialView": "dayGridMonth", 
         "locale": "es", 
+        "firstDay": 1, # Aquí está el ajuste para empezar en Lunes
         "buttonText": {
             "today": "Hoy",
             "month": "Mes",
@@ -351,7 +349,6 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
         }
     }
     
-    # Inyección de CSS para suavizar y embellecer el Calendario (menos cuadrado, sombras suaves)
     css_calendario_moderno = """
         .fc {
             background-color: white;
