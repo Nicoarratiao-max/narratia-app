@@ -44,22 +44,35 @@ def get_logo_src():
                 contenido_b64 = base64.b64encode(f.read()).decode()
                 return f"data:image/{ext.lower()};base64,{contenido_b64}"
                 
-    # NUEVO LOGO VECTORIAL: Balanza de la Justicia Moderna + Flechas Sync
+    # NUEVO LOGO VECTORIAL: Diosa Themis + Flechas Sync
     svg_logo = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <!-- Flechas Sync Orbitando (Tecnología/Automatización) -->
         <path d="M 30 20 A 35 35 0 0 1 85 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
         <polygon points="85,60 76,46 94,46" fill="#0052cc"/>
-        
         <path d="M 70 80 A 35 35 0 0 1 15 50" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
         <polygon points="15,40 6,54 24,54" fill="#172b4d"/>
+
+        <!-- DIOSA THEMIS (Centro) -->
+        <!-- Espada de la Justicia (Eje central de fondo) -->
+        <line x1="50" y1="15" x2="50" y2="70" stroke="#0052cc" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="43" y1="28" x2="57" y2="28" stroke="#0052cc" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="50" cy="72" r="3" fill="#0052cc"/>
+
+        <!-- Toga / Cuerpo -->
+        <path d="M 50 35 Q 40 55 33 75 L 67 75 Q 60 55 50 35 Z" fill="#172b4d" stroke-linejoin="round"/>
+
+        <!-- Cabeza Themis -->
+        <circle cx="50" cy="35" r="7" fill="#172b4d"/>
         
-        <rect x="46" y="25" width="8" height="50" rx="3" fill="#172b4d"/>
-        <rect x="35" y="75" width="30" height="8" rx="4" fill="#172b4d"/>
-        <rect x="23" y="32" width="54" height="6" rx="3" fill="#0052cc"/>
-        <line x1="30" y1="38" x2="30" y2="50" stroke="#172b4d" stroke-width="3"/>
-        <line x1="70" y1="38" x2="70" y2="50" stroke="#172b4d" stroke-width="3"/>
-        <path d="M 20 50 A 10 10 0 0 0 40 50 Z" fill="#0052cc"/>
-        <path d="M 60 50 A 10 10 0 0 0 80 50 Z" fill="#0052cc"/>
+        <!-- Venda en los ojos -->
+        <path d="M 41 35 Q 50 38 59 35" fill="none" stroke="#0052cc" stroke-width="2.5" stroke-linecap="round"/>
+        
+        <!-- Balanza minimalista al frente -->
+        <path d="M 40 52 L 60 52" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M 40 52 L 36 64 L 44 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M 60 52 L 56 64 L 64 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
+        <circle cx="50" cy="52" r="2" fill="#ffffff"/>
     </svg>
     """
     b64_svg = base64.b64encode(svg_logo.encode('utf-8')).decode('utf-8')
