@@ -332,14 +332,16 @@ USUARIOS = {
     "Narratia": "20911237", 
     "Vfarfan": "vpfm2404", 
     "Gdonoso": "gdonoso123",
-    "Mcortes": "Mcortes123"
+    "Mcortes": "Mcortes123",
+    "Jtrujillo": "Jtrujillo123"
 }
 
 NOMBRES_REALES = {
-    "Narratia": "Nicolás Arratia", 
-    "Vfarfan": "Valentina Farfán", 
-    "Gdonoso": "Gabriel Donoso",
-    "Mcortes": "Miryam Cortés"
+    "Narratia": "Nicolás Arratia Oyarzo", 
+    "Vfarfan": "Valentina Farfán Muñoz", 
+    "Gdonoso": "Juan Gabriel Donoso Cabello",
+    "Mcortes": "Miryam Cortés Salinas",
+    "Jtrujillo": "José Trujillo Cañete"
 }
 
 if 'logged_in' not in st.session_state: 
