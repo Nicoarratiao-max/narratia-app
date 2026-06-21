@@ -487,38 +487,44 @@ st.markdown("""
 # --- RENDER DE BARRA LATERAL ---
 with st.sidebar:
     st.markdown(f"""
-    <div style='display: flex; justify-content: center; flex-direction: column; align-items: center; margin-bottom: 20px;'>
-        <img src='{LOGO_URL}' style='width: 140px;'>
-        <h2 style='color:#172b4d; margin-top: 5px; margin-bottom: 0; font-size: 22px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h2>
+    <div style='text-align: center; margin-bottom: 25px;'>
+        <img src='{LOGO_URL}' style='width: 80px;'>
+        <h2 style='color:#c9d1d9; margin-top: 10px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h2>
     </div>
     """, unsafe_allow_html=True)
-    st.write("---")
     
-    menu_opciones = [
-        "🏠 Inicio", 
-        "📅 Calendario", 
-        "📋 Agenda", 
-        "📄 Contratos", 
-        "💰 Contabilidad", 
-        "📝 Trámites", 
-        "📆 Estado diario", 
-        "☑️ Tareas", 
-        "💼 Causas", 
-        "👥 Clientes", 
-        "✈️ Mensajería", 
-        "⚙️ Automatizaciones", 
-        "📊 Informes", 
-        "📥 Excel", 
-        "📈 Marketing"
+    # Menú unificado para no romper el flujo
+    opciones_flujo = [
+        "🏠 Inicio", "💼 Causas", "👥 Clientes", "📋 Agenda", "☑️ Tareas",
+        "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
+        "📅 Calendario", "✈️ Mensajería", "⚙️ Automatizaciones", "📊 Informes", 
+        "📥 Excel", "📈 Marketing"
     ]
-    st.radio("Navegación", menu_opciones, key="menu_radio", on_change=resetear_vistas)
     
-    st.write("---")
-    boton_logout = st.button("🚪 Cerrar Sesión", use_container_width=True)
-    if boton_logout: 
-        for key in list(st.session_state.keys()): 
-            del st.session_state[key]
-        st.rerun()
+    # Navegación limpia sin títulos intermedios
+    st.radio("Navegación", opciones_flujo, key="menu_radio", on_change=resetear_vistas, label_visibility="collapsed")
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # Usuario y Cierre de Sesión (Fijo abajo)
+    with st.container():
+        st.write("---")
+        st.markdown(f"""
+        <div style='display: flex; align-items: center; padding: 10px; background: #21262d; border-radius: 8px;'>
+            <div style='background:#58a6ff; color:white; width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:bold; margin-right:10px;'>
+                {nombre_real_usuario[0]}
+            </div>
+            <div>
+                <div style='font-size:14px; font-weight:bold; color:#c9d1d9;'>{nombre_real_usuario}</div>
+                <div style='font-size:11px; color:#8b949e;'>Supervisor_general</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        st.write("")
+        if st.button("🚪 Cerrar Sesión", use_container_width=True): 
+            for key in list(st.session_state.keys()): 
+                del st.session_state[key]
+            st.rerun()
 
 # --- CONTROLADOR DE PESTAÑAS (VISTAS INDIVIDUALES EXPLICITAS) ---
 
