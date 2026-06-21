@@ -318,7 +318,7 @@ ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
-ARCHIVO_MENSAJES = "base_mensajes_global.csv" # Archivo global compartido por todos los usuarios
+ARCHIVO_MENSAJES = "base_mensajes_global.csv"
 
 # Verificación de archivos individuales para evitar pérdida de datos
 if not os.path.exists(ARCHIVO_TAREAS):
@@ -368,18 +368,13 @@ if not os.path.exists(ARCHIVO_MENSAJES):
 if st.session_state['logged_in']:
     if os.path.exists(ARCHIVO_MENSAJES):
         df_msgs_alerta = pd.read_csv(ARCHIVO_MENSAJES)
-        # Filtramos los mensajes que son para mí o para "Todos"
         mis_mensajes = df_msgs_alerta[(df_msgs_alerta['Para'] == nombre_real_usuario) | (df_msgs_alerta['Para'] == 'Todos')]
         
-        # Si es la primera vez que inicia sesión hoy, guardamos la cantidad base
         if 'ultimo_mensaje_leido' not in st.session_state:
             st.session_state['ultimo_mensaje_leido'] = len(mis_mensajes)
-        
-        # Si la cantidad de mensajes aumentó, lanzamos la campanita
         elif len(mis_mensajes) > st.session_state['ultimo_mensaje_leido']:
             mensajes_nuevos = len(mis_mensajes) - st.session_state['ultimo_mensaje_leido']
-            st.toast(f"🔔 ¡Tienes {mensajes_nuevos} mensaje(s) nuevo(s) de tu equipo!", icon="📩")
-            # Actualizamos el contador para que no siga sonando
+            st.toast(f"🔔 ¡Tienes {mensajes_nuevos} mensaje(s) nuevo(s) en tu buzón!", icon="📩")
             st.session_state['ultimo_mensaje_leido'] = len(mis_mensajes)
 
 # --- FUNCIÓN DE AUTOLIMPIEZA SISTEMA (15 DÍAS EXACTOS) ---
@@ -811,7 +806,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         else: 
             st.dataframe(df_contratos_reg, use_container_width=True)
 
-# 6. CAUSAS / EXPEDIENTES (MEJORADO CON BOTONES DIRECTOS)
+# 6. CAUSAS / EXPEDIENTES (MEJORADO VISUALMENTE)
 elif st.session_state['menu_radio'] == "💼 Causas":
     df_causas = pd.read_csv(ARCHIVO_BD)
     
@@ -819,7 +814,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         st.session_state['modo_edicion'] = False
         st.title("💼 Gestión e Historial de Causas")
         
-        # Botón para Crear Causa Nueva
         if st.button("➕ Crear Nueva Causa", type="primary"):
             st.session_state['creando_causa'] = not st.session_state.get('creando_causa', False)
             
@@ -860,21 +854,29 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         if filtro_neg: 
             df_filtrado = df_filtrado[df_filtrado['Tipo_Negocio'].isin(filtro_neg)]
             
-        st.markdown("### Expedientes (Haz clic para abrir)")
+        st.markdown("### Expedientes Activos")
         
-        # Lista de causas en tarjetas interactivas en vez del selectbox
-        with st.container(height=500):
+        # Renderizado Visual Estilo Lista Elegante
+        with st.container(height=600):
             if df_filtrado.empty:
                 st.info("No hay causas que coincidan con la búsqueda.")
             else:
+                # Encabezado de la "Tabla"
+                c_h1, c_h2, c_h3, c_h4 = st.columns([2, 3, 4, 2])
+                c_h1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>ROL DE CAUSA</span>", unsafe_allow_html=True)
+                c_h2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>TRIBUNAL ASIGNADO</span>", unsafe_allow_html=True)
+                c_h3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CARATULADO</span>", unsafe_allow_html=True)
+                c_h4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px; text-align:center; display:block;'>ACCIÓN</span>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 5px 0px 10px 0px;'>", unsafe_allow_html=True)
+                
+                # Filas de la Tabla
                 for idx, row in df_filtrado.iterrows():
-                    with st.container(border=True):
-                        c1, c2, c3 = st.columns([3, 2, 1])
-                        c1.markdown(f"**{row['CARATULADO']}**")
-                        c2.markdown(f"<span style='color:#6b778c;'>ROL: {row['ROL']} | Tribunal: {row['TRIBUNAL']}</span>", unsafe_allow_html=True)
-                        if c3.button("📂 Abrir Expediente", key=f"abrir_c_{idx}", use_container_width=True):
-                            st.session_state['causa_seleccionada'] = row['ROL']
-                            st.rerun()
+                    c1, c2, c3, c4 = st.columns([2, 3, 4, 2])
+                    c1.markdown(f"<span style='color:#0052cc; font-weight:bold; font-size:15px;'>{row['ROL']}</span>", unsafe_allow_html=True)
+                    c2.markdown(f"<span style='color:#172b4d; font-size:14px;'>{row['TRIBUNAL']}</span>", unsafe_allow_html=True)
+                    c3.markdown(f"<span style='color:#172b4d; font-size:14px;'>{row['CARATULADO']}</span>", unsafe_allow_html=True)
+                    c4.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
+                    st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
         
     else:
         rol_actual = st.session_state['causa_seleccionada']
@@ -1073,50 +1075,52 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
                     with c3:
                         st.button("Ir al expediente ➔", key=f"ag_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
 
-# 8. MENSAJERÍA INTERNA (NUEVO)
+# 8. MENSAJERÍA INTERNA (MODO WHATSAPP)
 elif st.session_state['menu_radio'] == "✈️ Mensajería":
     st.title("✈️ Mensajería Interna del Equipo")
-    st.markdown("Plataforma de comunicación rápida. Utiliza este módulo para reportar requerimientos o conversar con los miembros de la oficina.")
+    st.markdown("Plataforma de comunicación rápida para la oficina.")
     
-    # Render UI del Chat
     df_msgs = pd.read_csv(ARCHIVO_MENSAJES)
+    
+    # CSS Custom para imitar WhatsApp
+    st.markdown("""
+    <style>
+        .chat-bg { background-color: #efeae2; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
+        .burbuja-mia { background-color: #dcf8c6; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-left: auto; margin-bottom: 12px; }
+        .burbuja-otro { background-color: #ffffff; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-right: auto; margin-bottom: 12px; }
+        .chat-autor { font-size: 13px; font-weight: 800; color: #075e54; margin-bottom: 2px; }
+        .chat-texto { font-size: 15px; color: #303030; line-height: 1.4; }
+        .chat-hora { font-size: 11px; color: #999999; text-align: right; margin-top: 5px; }
+        .chat-para { font-size: 11px; color: #667781; font-weight: normal; margin-left: 5px; }
+    </style>
+    """, unsafe_allow_html=True)
     
     with st.container(height=500):
         if df_msgs.empty:
-            st.info("No hay mensajes en el buzón. ¡Sé el primero en saludar!")
+            st.info("No hay mensajes en el buzón. ¡Sé el primero en escribir!")
         else:
+            st.markdown("<div class='chat-bg'>", unsafe_allow_html=True)
             for _, msg in df_msgs.iterrows():
-                # Alineación y color dependiendo si lo envié yo o lo recibí
-                if msg['De'] == nombre_real_usuario:
-                    color_bg = "#e3f0ff" # Azul clarito para los mios
-                    align = "right"
-                    margin = "margin-left: 20%;"
-                else:
-                    color_bg = "#f4f5f7" # Gris para los que recibo
-                    align = "left"
-                    margin = "margin-right: 20%;"
-                
-                # Etiqueta de Destinatario
-                etiqueta_para = f"<span style='font-size:11px; color:#0052cc; background:white; padding:2px 6px; border-radius:8px;'>Para: {msg['Para']}</span>"
+                es_mio = (msg['De'] == nombre_real_usuario)
+                clase_burbuja = "burbuja-mia" if es_mio else "burbuja-otro"
+                alineacion = "flex-end" if es_mio else "flex-start"
                 
                 st.markdown(f"""
-                <div style="text-align: {align}; {margin} margin-bottom: 15px;">
-                    <div style="display: inline-block; background-color: {color_bg}; padding: 12px 18px; border-radius: 16px; text-align: left; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
-                        <div style="font-size: 13px; font-weight: bold; color: #172b4d; margin-bottom: 4px;">{msg['De']} {etiqueta_para}</div>
-                        <div style="font-size: 15px; color: #172b4d; margin-bottom: 5px;">{msg['Mensaje']}</div>
-                        <div style="font-size: 11px; color: #6b778c;">{msg['Fecha']}</div>
+                <div style="display: flex; justify-content: {alineacion}; width: 100%;">
+                    <div class="{clase_burbuja}">
+                        <div class="chat-autor">{msg['De']} <span class="chat-para">▶ Para: {msg['Para']}</span></div>
+                        <div class="chat-texto">{msg['Mensaje']}</div>
+                        <div class="chat-hora">{msg['Fecha']}</div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
                 
-    # Formulario para enviar nuevos mensajes
     with st.form("form_chat", clear_on_submit=True):
-        st.markdown("#### Redactar Nuevo Mensaje")
         c_para, c_texto, c_btn = st.columns([2, 6, 2])
         destinatario = c_para.selectbox("Destinatario", ["Todos"] + list(NOMBRES_REALES.values()))
-        texto_mensaje = c_texto.text_input("Escribe tu reporte o mensaje aquí...", label_visibility="collapsed")
-        
-        if c_btn.form_submit_button("Enviar Mensaje 🚀", type="primary", use_container_width=True):
+        texto_mensaje = c_texto.text_input("Escribe tu mensaje...", label_visibility="collapsed", placeholder="Escribe un mensaje aquí...")
+        if c_btn.form_submit_button("Enviar 🚀", type="primary", use_container_width=True):
             if texto_mensaje.strip() != "":
                 nuevo_msj = {
                     'ID': str(uuid.uuid4())[:8],
@@ -1129,7 +1133,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 df_msgs.to_csv(ARCHIVO_MENSAJES, index=False)
                 st.rerun()
 
-# 9. CLIENTES DIRECTOS
+# 9. CLIENTES DIRECTOS (MEJORADO VISUALMENTE)
 elif st.session_state['menu_radio'] == "👥 Clientes":
     df_causas = pd.read_csv(ARCHIVO_BD)
     
@@ -1167,18 +1171,29 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         st.write("---")
         clientes_unicos = df_causas['Cliente'].dropna().unique().tolist() if 'Cliente' in df_causas.columns else []
         
-        st.markdown("### Directorio Interactivo (Haz clic para ver la ficha)")
-        with st.container(height=500):
+        st.markdown("### Listado de Clientes Activos")
+        
+        # Renderizado Visual Estilo Lista Elegante para Clientes
+        with st.container(height=600):
+            # Encabezado
+            ch1, ch2, ch3, ch4 = st.columns([1, 4, 3, 2])
+            ch1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>PERFIL</span>", unsafe_allow_html=True)
+            ch2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>NOMBRE COMPLETO</span>", unsafe_allow_html=True)
+            ch3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>DATOS CONTACTO</span>", unsafe_allow_html=True)
+            ch4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px; text-align:center; display:block;'>ACCIÓN</span>", unsafe_allow_html=True)
+            st.markdown("<hr style='margin: 5px 0px 10px 0px;'>", unsafe_allow_html=True)
+            
             for cli_nom in clientes_unicos:
                 if cli_nom.strip() and cli_nom != "--":
-                    with st.container(border=True):
-                        col_cli1, col_cli2 = st.columns([4, 1])
-                        # Busca el primer rut y tel asociado a este cliente para mostrarlo rapido
-                        fila_ref = df_causas[df_causas['Cliente'] == cli_nom].iloc[0]
-                        col_cli1.markdown(f"👤 **{cli_nom}** | RUT: {fila_ref.get('RUT', '--')} | Tel: {fila_ref.get('Teléfono', '--')}")
-                        if col_cli2.button("Ver Ficha de Cliente", key=f"v_cli_{cli_nom}", use_container_width=True):
-                            st.session_state['cliente_seleccionado'] = cli_nom
-                            st.rerun()
+                    fila_ref = df_causas[df_causas['Cliente'] == cli_nom].iloc[0]
+                    c1, c2, c3, c4 = st.columns([1, 4, 3, 2])
+                    
+                    c1.markdown(f"<div style='font-size:24px; text-align:center;'>👤</div>", unsafe_allow_html=True)
+                    c2.markdown(f"<span style='color:#172b4d; font-weight:bold; font-size:15px; display:block; margin-top:5px;'>{cli_nom}</span>", unsafe_allow_html=True)
+                    c3.markdown(f"<span style='color:#6b778c; font-size:13px;'>RUT: {fila_ref.get('RUT', '--')}<br>Tel: {fila_ref.get('Teléfono', '--')}</span>", unsafe_allow_html=True)
+                    c4.button("Ver Ficha", key=f"v_cli_{cli_nom}", use_container_width=True, on_click=lambda c=cli_nom: st.session_state.update({'cliente_seleccionado': c}))
+                    st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
+                    
     else:
         cli_actual = st.session_state['cliente_seleccionado']
         df_cli = df_causas[df_causas['Cliente'] == cli_actual]
