@@ -732,40 +732,42 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-   # --- SISTEMA DE PLANES Y PERMISOS ---
+# --- SISTEMA DE PLANES Y PERMISOS ---
     df_usuarios_plan = pd.read_csv(ARCHIVO_USUARIOS)
     
-    # Si la columna 'Plan' no existe aún, la creamos automáticamente para evitar errores
+    # Si la columna 'Plan' no existe aún, la creamos automáticamente
     if 'Plan' not in df_usuarios_plan.columns:
         df_usuarios_plan['Plan'] = 'Full' 
         df_usuarios_plan.to_csv(ARCHIVO_USUARIOS, index=False)
         
-    # Rescatar el plan del usuario que inició sesión
+    # Rescatar el plan del usuario que inició sesión (Corregido a 'username')
+    usuario_actual = st.session_state.get('username', 'Desconocido')
+    
     try:
-        usuario_actual = st.session_state['usuario']
         plan_actual = df_usuarios_plan.loc[df_usuarios_plan['Usuario'] == usuario_actual, 'Plan'].values[0]
     except:
         plan_actual = "Básico" # Nivel de seguridad por defecto
 
     # --- RENDERIZAR MENÚ SEGÚN EL PLAN ---
+    opciones_basicas = [
+        "🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "💼 Causas", "👥 Clientes"
+    ]
+    
     if plan_actual == "Básico":
-        opciones_flujo = [
-            "🏠 Inicio", "📅 Calendario", "📋 Agenda", 
-            "☑️ Tareas", "💼 Causas", "👥 Clientes"
-        ]
+        opciones_flujo = opciones_basicas
     elif plan_actual == "Medio":
-        opciones_flujo = [
-            "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
-            "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
-            "💼 Causas", "👥 Clientes"
+        opciones_flujo = opciones_basicas + [
+            "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario"
         ]
-    else: # Nivel "Full" (Tú y quienes paguen el premium)
-        opciones_flujo = [
-            "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
-            "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
-            "💼 Causas", "👥 Clientes", "✈️ Mensajería", "🧠 Estrategia", 
-            "📊 Informes", "📥 Excel", "📈 Marketing"
+    else: # Nivel "Full"
+        opciones_flujo = opciones_basicas + [
+            "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
+            "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📈 Marketing"
         ]
+        
+    # El botón secreto de Admin: Solo aparece si el que entró eres tú (Narratia)
+    if usuario_actual == "Narratia":
+        opciones_flujo.append("👑 Panel Admin")
 
     for i, opcion in enumerate(opciones_flujo):
         if st.button(opcion, use_container_width=True, key=f"btn_nav_{i}"):
@@ -1734,7 +1736,51 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
             except: 
                 st.write("Selecciona un día en el calendario.")
 
-# 14. RESTO DE PESTAÑAS (EN DESARROLLO / PRÓXIMAS)
-else:
-    st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
-    st.info("🚧 Módulo en desarrollo. Estará disponible en futuras actualizaciones de JuriSync.")
+# 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
+elif st.session_state['menu_radio'] == "👑 Panel Admin":
+    st.title("👑 Panel de Control - SaaS JuriSync")
+    st.markdown("Crea las cuentas de tus clientes y asígnales un plan. Al ingresar con su clave provisoria, el sistema los obligará a registrar un correo y crear una clave definitiva.")
+    
+    with st.container(border=True):
+        st.subheader("➕ Vender Plan / Crear Usuario")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)", placeholder="Ej: EstudioPerez")
+            nuevo_nombre = st.text_input("Nombre Real del Abogado / Cliente", placeholder="Ej: Juan Pérez")
+        with col2:
+            nueva_clave = st.text_input("Clave Provisoria", placeholder="Ej: JuriSync123")
+            nuevo_plan = st.selectbox("Plan Asignado", ["Básico", "Medio", "Full"])
+            
+        if st.button("🚀 Crear Usuario en el Sistema", type="primary", use_container_width=True):
+            if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
+                st.error("⚠️ Faltan datos obligatorios (Usuario, Nombre o Clave).")
+            else:
+                df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
+                
+                if nuevo_user in df_usuarios_admin['Usuario'].values:
+                    st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema. Inventa otro nombre de acceso.")
+                else:
+                    # Llenamos la fila exacta con las columnas de tu base_usuarios.csv original
+                    nuevo_registro = {
+                        "Usuario": nuevo_user.strip(),
+                        "Password": nueva_clave.strip(),
+                        "Nombre_Real": nuevo_nombre.strip(),
+                        "Correo": "pendiente",  # Esto dispara tu pantalla de bienvenida
+                        "Debe_Cambiar_Clave": True, # Esto obliga a cambiar la clave
+                        "Plan": nuevo_plan
+                    }
+                    
+                    df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                    df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
+                    
+                    # Le creamos su base de tareas lista para operar y evitar errores
+                    archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
+                    if not os.path.exists(archivo_tareas_nuevo):
+                        pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(archivo_tareas_nuevo, index=False)
+                    
+                    st.success(f"✅ ¡Cuenta lista! Usuario **{nuevo_user}** creado con Plan {nuevo_plan}. Envíale el Usuario y la Clave por WhatsApp para que entre.")
+    
+    st.subheader("👥 Clientes y Planes Actuales")
+    df_vista = pd.read_csv(ARCHIVO_USUARIOS)
+    st.dataframe(df_vista[['Usuario', 'Nombre_Real', 'Plan', 'Correo', 'Debe_Cambiar_Clave']], use_container_width=True)
