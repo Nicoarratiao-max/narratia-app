@@ -1739,48 +1739,83 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
 # 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
 elif st.session_state['menu_radio'] == "👑 Panel Admin":
     st.title("👑 Panel de Control - SaaS JuriSync")
-    st.markdown("Crea las cuentas de tus clientes y asígnales un plan. Al ingresar con su clave provisoria, el sistema los obligará a registrar un correo y crear una clave definitiva.")
+    st.markdown("Crea cuentas nuevas, asigna planes o modifica el nivel de acceso de tus clientes actuales.")
     
-    with st.container(border=True):
-        st.subheader("➕ Vender Plan / Crear Usuario")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)", placeholder="Ej: EstudioPerez")
-            nuevo_nombre = st.text_input("Nombre Real del Abogado / Cliente", placeholder="Ej: Juan Pérez")
-        with col2:
-            nueva_clave = st.text_input("Clave Provisoria", placeholder="Ej: JuriSync123")
-            nuevo_plan = st.selectbox("Plan Asignado", ["Básico", "Medio", "Full"])
+    tab_crear, tab_editar = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes Actuales"])
+    
+    with tab_crear:
+        with st.container(border=True):
+            st.subheader("Vender Plan / Crear Usuario")
             
-        if st.button("🚀 Crear Usuario en el Sistema", type="primary", use_container_width=True):
-            if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
-                st.error("⚠️ Faltan datos obligatorios (Usuario, Nombre o Clave).")
-            else:
-                df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
+            col1, col2 = st.columns(2)
+            with col1:
+                nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)", placeholder="Ej: EstudioPerez")
+                nuevo_nombre = st.text_input("Nombre Real del Abogado / Cliente", placeholder="Ej: Juan Pérez")
+            with col2:
+                nueva_clave = st.text_input("Clave Provisoria", placeholder="Ej: JuriSync123")
+                nuevo_plan = st.selectbox("Plan Asignado al Crear", ["Básico", "Medio", "Full"])
                 
-                if nuevo_user in df_usuarios_admin['Usuario'].values:
-                    st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema. Inventa otro nombre de acceso.")
+            if st.button("🚀 Crear Usuario en el Sistema", type="primary", use_container_width=True):
+                if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
+                    st.error("⚠️ Faltan datos obligatorios (Usuario, Nombre o Clave).")
                 else:
-                    # Llenamos la fila exacta con las columnas de tu base_usuarios.csv original
-                    nuevo_registro = {
-                        "Usuario": nuevo_user.strip(),
-                        "Password": nueva_clave.strip(),
-                        "Nombre_Real": nuevo_nombre.strip(),
-                        "Correo": "pendiente",  # Esto dispara tu pantalla de bienvenida
-                        "Debe_Cambiar_Clave": True, # Esto obliga a cambiar la clave
-                        "Plan": nuevo_plan
-                    }
+                    df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
                     
-                    df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                    if nuevo_user in df_usuarios_admin['Usuario'].values:
+                        st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema. Inventa otro nombre de acceso.")
+                    else:
+                        nuevo_registro = {
+                            "Usuario": nuevo_user.strip(),
+                            "Password": nueva_clave.strip(),
+                            "Nombre_Real": nuevo_nombre.strip(),
+                            "Correo": "pendiente",  
+                            "Debe_Cambiar_Clave": True, 
+                            "Plan": nuevo_plan
+                        }
+                        
+                        df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                        df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
+                        
+                        # Le creamos su base de tareas lista para operar y evitar errores
+                        archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
+                        if not os.path.exists(archivo_tareas_nuevo):
+                            pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(archivo_tareas_nuevo, index=False)
+                        
+                        st.success(f"✅ ¡Cuenta lista! Usuario **{nuevo_user}** creado con Plan {nuevo_plan}. Envíale el Usuario y la Clave por WhatsApp para que entre.")
+                        st.rerun()
+
+    with tab_editar:
+        with st.container(border=True):
+            st.subheader("Subir o Bajar de Plan a un Cliente")
+            df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
+            lista_usuarios = df_usuarios_admin['Usuario'].tolist()
+            
+            c_ed1, c_ed2, c_ed3 = st.columns(3)
+            with c_ed1:
+                usuario_editar = st.selectbox("Seleccionar Cliente a Modificar", lista_usuarios)
+            with c_ed2:
+                # Buscar qué plan tiene ahora para mostrarlo por defecto
+                try:
+                    plan_actual_usr = df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'].values[0]
+                    idx_plan = ["Básico", "Medio", "Full"].index(plan_actual_usr)
+                except:
+                    idx_plan = 0 # Básico por defecto si algo falla
+                    
+                nuevo_plan_edit = st.selectbox("Seleccionar Nuevo Plan", ["Básico", "Medio", "Full"], index=idx_plan)
+            with c_ed3:
+                st.write("") # Espaciador para alinear el botón
+                st.write("")
+                if st.button("🔄 Actualizar Nivel de Acceso", type="primary", use_container_width=True):
+                    df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
                     df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
-                    
-                    # Le creamos su base de tareas lista para operar y evitar errores
-                    archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
-                    if not os.path.exists(archivo_tareas_nuevo):
-                        pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(archivo_tareas_nuevo, index=False)
-                    
-                    st.success(f"✅ ¡Cuenta lista! Usuario **{nuevo_user}** creado con Plan {nuevo_plan}. Envíale el Usuario y la Clave por WhatsApp para que entre.")
+                    st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados a Plan {nuevo_plan_edit}.")
+                    st.rerun()
     
     st.subheader("👥 Clientes y Planes Actuales")
     df_vista = pd.read_csv(ARCHIVO_USUARIOS)
     st.dataframe(df_vista[['Usuario', 'Nombre_Real', 'Plan', 'Correo', 'Debe_Cambiar_Clave']], use_container_width=True)
+
+# 15. RESTO DE PESTAÑAS (EN DESARROLLO / PRÓXIMAS)
+else:
+    st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
+    st.info("🚧 Módulo en desarrollo. Estará disponible en futuras actualizaciones de JuriSync.")
