@@ -735,7 +735,7 @@ with st.sidebar:
     opciones_flujo = [
         "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
         "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
-        "💼 Causas", "👥 Clientes", "✈️ Mensajería", "⚙️ Automatizaciones", 
+        "💼 Causas", "👥 Clientes", "✈️ Mensajería", "🧠 Estrategia", 
         "📊 Informes", "📥 Excel", "📈 Marketing"
     ]
 
@@ -1011,9 +1011,9 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                         st.download_button("📥 Descargar PDF", data=base64.b64decode(doc_ed['Doc_B64']), file_name=doc_ed['Doc_Nombre'], key=f"bj_{doc_ed['ID_ED']}")
 
 
-# 5. AUTOMATIZACIONES E INFORMES (IA INTEGRADA)
-elif st.session_state['menu_radio'] in ["⚙️ Automatizaciones", "📊 Informes"]:
-    st.title(f"🤖 Asistente de Inteligencia Legal - {st.session_state['menu_radio'].split(' ')[1]}")
+# 5. INFORMES (IA PARA CLIENTES)
+elif st.session_state['menu_radio'] == "📊 Informes":
+    st.title("📊 Asistente de Inteligencia Legal - Informes")
     st.markdown("Carga el historial de movimientos o Ebook del Poder Judicial. El sistema analizará el lenguaje técnico y redactará un informe ejecutivo comprensible para tu cliente.")
     
     df_causas_ia = pd.read_csv(ARCHIVO_BD)
@@ -1061,6 +1061,37 @@ elif st.session_state['menu_radio'] in ["⚙️ Automatizaciones", "📊 Informe
                             type="primary",
                             use_container_width=True
                         )
+
+# 6. ESTRATEGIA JURÍDICA (ASISTENTE PRIVADO)
+elif st.session_state['menu_radio'] == "🧠 Estrategia":
+    st.title("🧠 Asistente de Estrategia Jurídica")
+    st.markdown("Describe los hechos del caso, el estado procesal o el problema legal. La IA analizará los antecedentes y te propondrá los pasos a seguir, excepciones o acciones a interponer bajo la normativa chilena.")
+    
+    with st.container(border=True):
+        caso_texto = st.text_area("📝 Relato del Caso:", height=200, placeholder="Ej: Cliente notificado hace 3 días por demanda ejecutiva de Banco Falabella. Se constata que la obligación se hizo exigible hace más de 1 año y 2 meses...")
+        
+        if st.button("💡 Generar Propuesta Estratégica", type="primary", use_container_width=True):
+            if not caso_texto.strip():
+                st.error("⚠️ Tienes que escribir los antecedentes del caso para que la IA pueda analizarlo.")
+            else:
+                with st.spinner("🧠 Analizando antecedentes procesales y buscando salidas legales..."):
+                    # Simulación de respuesta de la IA (Aquí a futuro se conecta la API real)
+                    respuesta_ia = """
+                    **🔍 Análisis Preliminar del Caso:**
+                    Basado en los antecedentes proporcionados, estamos frente a un escenario procesal que requiere una acción defensiva inmediata, prestando especial atención a los plazos fatales del juicio ejecutivo.
+
+                    **⚖️ Estrategia Propuesta:**
+                    1. **Oposición de Excepciones:** Atendido el relato, la estrategia principal debe enfocarse en oponer excepciones del artículo 464 del Código de Procedimiento Civil. Se sugiere evaluar la viabilidad de la **Excepción N° 17** (Prescripción de la deuda o de la acción ejecutiva) si los plazos calzan con el mérito del título.
+                    2. **Examen Alternativo:** En caso de que exista algún vicio formal en el título o en la notificación, preparar en subsidio la **Excepción N° 2** (Falta de capacidad del demandante o de personería o representación legal del que comparece a su nombre).
+                    3. **Acciones Inmediatas:** Solicitar de inmediato al cliente la copia íntegra del expediente y certificar las fechas de notificación.
+                    
+                    *Nota del sistema: Revisa siempre la liquidación del crédito antes de presentar el escrito.*
+                    """
+                    st.success("✅ Análisis estratégico formulado.")
+                    
+                    st.markdown("<div class='dash-card'><h4 style='color:#0052cc;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
+                    st.write(respuesta_ia)
+                    st.markdown("</div>", unsafe_allow_html=True)
 
 # 6. CONTRATOS WORD
 elif st.session_state['menu_radio'] == "📄 Contratos":
