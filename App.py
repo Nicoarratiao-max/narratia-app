@@ -1068,30 +1068,50 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
     st.markdown("Describe los hechos del caso, el estado procesal o el problema legal. La IA analizará los antecedentes y te propondrá los pasos a seguir, excepciones o acciones a interponer bajo la normativa chilena.")
     
     with st.container(border=True):
-        caso_texto = st.text_area("📝 Relato del Caso:", height=200, placeholder="Ej: Cliente notificado hace 3 días por demanda ejecutiva de Banco Falabella. Se constata que la obligación se hizo exigible hace más de 1 año y 2 meses...")
+        caso_texto = st.text_area("📝 Relato del Caso:", height=200, placeholder="Ej: Cliente notificado hace 3 días por demanda ejecutiva. Título es un pagaré a la vista que se hizo exigible hace más de 1 año y 2 meses...")
         
         if st.button("💡 Generar Propuesta Estratégica", type="primary", use_container_width=True):
             if not caso_texto.strip():
                 st.error("⚠️ Tienes que escribir los antecedentes del caso para que la IA pueda analizarlo.")
             else:
                 with st.spinner("🧠 Analizando antecedentes procesales y buscando salidas legales..."):
-                    # Simulación de respuesta de la IA (Aquí a futuro se conecta la API real)
-                    respuesta_ia = """
-                    **🔍 Análisis Preliminar del Caso:**
-                    Basado en los antecedentes proporcionados, estamos frente a un escenario procesal que requiere una acción defensiva inmediata, prestando especial atención a los plazos fatales del juicio ejecutivo.
-
-                    **⚖️ Estrategia Propuesta:**
-                    1. **Oposición de Excepciones:** Atendido el relato, la estrategia principal debe enfocarse en oponer excepciones del artículo 464 del Código de Procedimiento Civil. Se sugiere evaluar la viabilidad de la **Excepción N° 17** (Prescripción de la deuda o de la acción ejecutiva) si los plazos calzan con el mérito del título.
-                    2. **Examen Alternativo:** En caso de que exista algún vicio formal en el título o en la notificación, preparar en subsidio la **Excepción N° 2** (Falta de capacidad del demandante o de personería o representación legal del que comparece a su nombre).
-                    3. **Acciones Inmediatas:** Solicitar de inmediato al cliente la copia íntegra del expediente y certificar las fechas de notificación.
-                    
-                    *Nota del sistema: Revisa siempre la liquidación del crédito antes de presentar el escrito.*
-                    """
-                    st.success("✅ Análisis estratégico formulado.")
-                    
-                    st.markdown("<div class='dash-card'><h4 style='color:#0052cc;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
-                    st.write(respuesta_ia)
-                    st.markdown("</div>", unsafe_allow_html=True)
+                    try:
+                        # Conexión directa a Gemini usando la clave secreta
+                        import google.generativeai as genai
+                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        
+                        # Usamos el modelo rápido y eficiente
+                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        # El Prompt Maestro integrado al sistema
+                        prompt_maestro = f"""
+                        Actúa como un Abogado Supervisor experto en litigación civil en Chile y defensa de deudores.
+                        Analiza los siguientes antecedentes procesales entregados por un abogado de tu equipo:
+                        
+                        CASO:
+                        {caso_texto}
+                        
+                        Tu tarea es proponer una estrategia jurídica clara, directa y estructurada en el Código de Procedimiento Civil chileno.
+                        Estructura tu respuesta estrictamente en 3 puntos:
+                        1. **Análisis Preliminar:** Identifica el estado procesal actual y los riesgos inmediatos.
+                        2. **Estrategia Propuesta:** Propón qué excepciones del art. 464 interponer. Evalúa siempre la viabilidad de la Excepción N° 17 (prescripción) y, si hay vicios formales, la Excepción N° 2. 
+                        3. **Acciones Inmediatas:** Lista de 2 o 3 pasos tácticos a ejecutar esta misma semana.
+                        
+                        Habla con lenguaje técnico, resolutivo y profesional.
+                        """
+                        
+                        # Generamos la respuesta real
+                        respuesta = modelo.generate_content(prompt_maestro)
+                        respuesta_ia = respuesta.text
+                        
+                        st.success("✅ Análisis estratégico formulado con éxito.")
+                        
+                        st.markdown("<div class='dash-card'><h4 style='color:#0052cc;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
+                        st.write(respuesta_ia)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Hubo un error al conectar con la IA. Revisa tu panel de Streamlit Secrets. Detalle técnico: {e}")
 
 # 6. CONTRATOS WORD
 elif st.session_state['menu_radio'] == "📄 Contratos":
