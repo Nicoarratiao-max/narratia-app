@@ -6,3 +6,4 @@ python-docx
 requests
 beautifulsoup4
 lxml
+google-generativeai
