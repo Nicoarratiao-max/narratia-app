@@ -732,12 +732,40 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    opciones_flujo = [
-        "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
-        "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
-        "💼 Causas", "👥 Clientes", "✈️ Mensajería", "🧠 Estrategia", 
-        "📊 Informes", "📥 Excel", "📈 Marketing"
-    ]
+   # --- SISTEMA DE PLANES Y PERMISOS ---
+    df_usuarios_plan = pd.read_csv(ARCHIVO_USUARIOS)
+    
+    # Si la columna 'Plan' no existe aún, la creamos automáticamente para evitar errores
+    if 'Plan' not in df_usuarios_plan.columns:
+        df_usuarios_plan['Plan'] = 'Full' 
+        df_usuarios_plan.to_csv(ARCHIVO_USUARIOS, index=False)
+        
+    # Rescatar el plan del usuario que inició sesión
+    try:
+        usuario_actual = st.session_state['usuario']
+        plan_actual = df_usuarios_plan.loc[df_usuarios_plan['Usuario'] == usuario_actual, 'Plan'].values[0]
+    except:
+        plan_actual = "Básico" # Nivel de seguridad por defecto
+
+    # --- RENDERIZAR MENÚ SEGÚN EL PLAN ---
+    if plan_actual == "Básico":
+        opciones_flujo = [
+            "🏠 Inicio", "📅 Calendario", "📋 Agenda", 
+            "☑️ Tareas", "💼 Causas", "👥 Clientes"
+        ]
+    elif plan_actual == "Medio":
+        opciones_flujo = [
+            "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
+            "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
+            "💼 Causas", "👥 Clientes"
+        ]
+    else: # Nivel "Full" (Tú y quienes paguen el premium)
+        opciones_flujo = [
+            "🏠 Inicio", "📅 Calendario", "📋 Agenda", "📄 Contratos", 
+            "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "☑️ Tareas", 
+            "💼 Causas", "👥 Clientes", "✈️ Mensajería", "🧠 Estrategia", 
+            "📊 Informes", "📥 Excel", "📈 Marketing"
+        ]
 
     for i, opcion in enumerate(opciones_flujo):
         if st.button(opcion, use_container_width=True, key=f"btn_nav_{i}"):
