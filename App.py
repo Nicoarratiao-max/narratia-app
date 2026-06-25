@@ -1244,7 +1244,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 "Derecho Administrativo": [
                     "Reclamo de Ilegalidad Municipal",
                     "Defensa en Sumario Administrativo",
-                    "Demanda de Nulidad de Derecho Público"
+                    "Demanda de Nulidad de Derecho Público",
+                    "Procedimiento de Cobro Obligaciones Tributarias"
                 ]
             }
             
