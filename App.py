@@ -1667,114 +1667,81 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 df_msgs.to_csv(ARCHIVO_MENSAJES, index=False)
                 st.rerun()
 
-# 10. CLIENTES DIRECTOS (LISTA ELEGANTE CLARA)
 elif st.session_state['menu_radio'] == "👥 Clientes":
     df_causas = pd.read_csv(ARCHIVO_BD)
     
     if st.session_state['cliente_seleccionado'] is None:
         st.title("👥 Directorio de Clientes")
-        
         if st.button("➕ Crear Nuevo Cliente", type="primary"):
             st.session_state['creando_cliente'] = not st.session_state.get('creando_cliente', False)
             
         if st.session_state.get('creando_cliente'):
             with st.container(border=True):
-                st.markdown("#### Ingresar Datos del Nuevo Cliente")
                 with st.form("form_crear_cliente"):
-                    c_c1, c_c2 = st.columns(2)
-                    n_cli_nom = c_c1.text_input("Nombre Completo")
-                    n_cli_rut = c_c2.text_input("RUT del Cliente")
-                    n_cli_tel = st.text_input("Teléfono")
-                    
-                    if st.form_submit_button("Guardar Cliente"):
-                        if n_cli_nom.strip() == "":
-                            st.error("El nombre del cliente es obligatorio.")
-                        else:
-                            nueva_ficha_cli = {
-                                'ROL': 'Sin Causa Aún', 'TRIBUNAL': '--', 'CARATULADO': '--', 'Cliente': n_cli_nom,
-                                'RUT': n_cli_rut, 'Teléfono': n_cli_tel, 'Tipo_Negocio': 'Propio', 'Clave_unica': '--',
-                                'Correo': '--', 'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
-                                'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0
-                            }
-                            df_causas = pd.concat([df_causas, pd.DataFrame([nueva_ficha_cli])], ignore_index=True)
-                            df_causas.to_csv(ARCHIVO_BD, index=False)
-                            st.session_state['creando_cliente'] = False
-                            st.success("Cliente guardado en el directorio.")
-                            st.rerun()
+                    n_cli_nom = st.text_input("Nombre Completo")
+                    n_cli_rut = st.text_input("RUT del Cliente")
+                    if st.form_submit_button("Guardar"):
+                        nueva_ficha = {'Cliente': n_cli_nom, 'RUT': n_cli_rut, 'Tipo_Negocio': 'Propio', 'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 1, 'Cuotas_Pagadas': 0}
+                        df_causas = pd.concat([df_causas, pd.DataFrame([nueva_ficha])], ignore_index=True)
+                        df_causas.to_csv(ARCHIVO_BD, index=False); st.rerun()
 
-        st.write("---")
-        clientes_unicos = df_causas['Cliente'].dropna().unique().tolist() if 'Cliente' in df_causas.columns else []
-        
-        st.markdown("### Listado de Clientes Activos")
-        
-        with st.container(height=600):
-            ch1, ch2, ch3, ch4 = st.columns([1, 4, 3, 2])
-            ch1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>PERFIL</span>", unsafe_allow_html=True)
-            ch2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>NOMBRE COMPLETO</span>", unsafe_allow_html=True)
-            ch3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>DATOS CONTACTO</span>", unsafe_allow_html=True)
-            ch4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px; text-align:center; display:block;'>ACCIÓN</span>", unsafe_allow_html=True)
-            st.markdown("<hr style='margin: 5px 0px 10px 0px; border-top: 2px solid #e0e4e8;'>", unsafe_allow_html=True)
-            
-            for cli_nom in clientes_unicos:
-                if cli_nom.strip() and cli_nom != "--":
-                    fila_ref = df_causas[df_causas['Cliente'] == cli_nom].iloc[0]
-                    c1, c2, c3, c4 = st.columns([1, 4, 3, 2])
-                    
-                    c1.markdown(f"<div style='font-size:24px; text-align:center;'>👤</div>", unsafe_allow_html=True)
-                    c2.markdown(f"<span style='color:#172b4d; font-weight:bold; font-size:15px; display:block; margin-top:5px;'>{cli_nom}</span>", unsafe_allow_html=True)
-                    c3.markdown(f"<span style='color:#6b778c; font-size:13px;'>RUT: {fila_ref.get('RUT', '--')}<br>Tel: {fila_ref.get('Teléfono', '--')}</span>", unsafe_allow_html=True)
-                    c4.button("Ver Ficha", key=f"v_cli_{cli_nom}", use_container_width=True, on_click=lambda c=cli_nom: st.session_state.update({'cliente_seleccionado': c}))
-                    st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
-                    
+        st.markdown("### Listado de Clientes")
+        for cli_nom in df_causas['Cliente'].dropna().unique():
+            if cli_nom != "--" and st.button(f"👤 {cli_nom}"):
+                st.session_state['cliente_seleccionado'] = cli_nom; st.rerun()
+    
     else:
         cli_actual = st.session_state['cliente_seleccionado']
-        df_cli = df_causas[df_causas['Cliente'] == cli_actual]
-        datos = df_cli.iloc[0]
+        datos = df_causas[df_causas['Cliente'] == cli_actual].iloc[0]
         
-        if st.button("⬅ Volver al Directorio", key="back_to_cli_list", on_click=nav_clientes): 
-            pass
+        if st.button("⬅ Volver al Directorio"): 
+            st.session_state['cliente_seleccionado'] = None; st.rerun()
             
-        st.markdown(f"""
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-            <h2 style="color:#172b4d; margin:0;">Ficha de cliente - {cli_actual}</h2>
-            <div style="display:flex; border: 1px solid #0052cc; border-radius:6px; overflow:hidden;">
-                <div style="background:#0052cc; color:white; padding:8px 20px; font-weight:bold; font-size:14px;">Información</div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.title(f"Ficha: {cli_actual}")
+        tab1, tab2, tab3 = st.tabs(["👤 Información", "💰 Contabilidad", "📄 Contratos"])
         
-        c_izq, c_der = st.columns([1, 2.5])
-        with c_izq:
-            st.markdown(f"""
-            <div style="background:white; padding:25px; border-radius:12px; border:1px solid #e0e4e8; margin-bottom:20px;">
-                <div style="display:flex; justify-content:space-between; margin-bottom:25px;">
-                    <span style="font-weight:bold; color:#172b4d; font-size:16px;">Información</span>
-                    <span style="background:#57a15a; color:white; padding:4px 12px; border-radius:15px; font-size:13px; font-weight:bold; display:flex; align-items:center; gap:6px;">Activo <span style="height:8px; width:8px; background:white; border-radius:50%; display:inline-block;"></span></span>
-                </div>
-                <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Nombre:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('Cliente','--')}</div>
-                <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Rut cliente:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('RUT','--')}</div>
-                <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Clave única:</div><div style="color:#172b4d; font-size:15px; margin-bottom:20px;"><span>🛡️ {datos.get('Clave_unica','*****')}</span></div>
-                <div style="color:#172b4d; font-size:15px; margin-bottom:12px;">📞 {datos.get('Teléfono','--')}</div>
-                <div style="color:#172b4d; font-size:15px; margin-bottom:12px;">📄 {datos.get('Correo','--')}</div>
-                <div style="color:#172b4d; font-size:15px; margin-bottom:30px;">📍 {datos.get('Direccion','--')}</div>
-                <div style="font-weight:bold; color:#172b4d; font-size:15px; margin-bottom:15px;">Información SAC</div>
-                <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">SAC asignado:</div><div style="color:#172b4d; font-size:15px; margin-bottom:15px;">👤 {datos.get('SAC','--')}</div>
-                <div style="color:#6b778c; font-size:13px; margin-bottom:4px;">Sucursal:</div><div style="color:#172b4d; font-size:15px; margin-bottom:10px;">{datos.get('Sucursal','--')}</div>
-            </div>
-            """, unsafe_allow_html=True)
+        with tab1:
+            col_i, col_d = st.columns([1, 2])
+            with col_i:
+                with st.container(border=True):
+                    if st.session_state.get('editando_cli'):
+                        with st.form("edit_cli"):
+                            n_nom = st.text_input("Nombre", datos['Cliente'])
+                            n_rut = st.text_input("RUT", datos.get('RUT', ''))
+                            if st.form_submit_button("Guardar"):
+                                df_causas.loc[df_causas['Cliente'] == cli_actual, ['Cliente', 'RUT']] = [n_nom, n_rut]
+                                df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['editando_cli'] = False; st.rerun()
+                    else:
+                        st.write(f"**Nombre:** {datos['Cliente']}")
+                        st.write(f"**RUT:** {datos.get('RUT', '--')}")
+                        if st.button("✏️ Editar Ficha"): st.session_state['editando_cli'] = True; st.rerun()
             
-        with c_der:
-            st.markdown("<div class='dash-card'><h3 style='color:#172b4d; margin-top:0; margin-bottom:20px;'>Causas Asociadas</h3>", unsafe_allow_html=True)
-            for i, causa in df_cli.iterrows():
-                if causa.get('ROL') != "Sin Causa Aún":
-                    with st.container(border=True):
-                        col_card1, col_card2 = st.columns([5, 1])
-                        with col_card1:
-                            st.markdown(f"<div><strong style='color:#172b4d; font-size:16px;'>{causa.get('CARATULADO','--')}</strong><br><span style='color:#42526e; font-size:14px;'>Rol: {causa.get('ROL','--')}</span><br><span style='color:#42526e; font-size:14px;'>👥 {causa.get('Servicio', 'Ejecutivo')}</span><br><span style='color:#42526e; font-size:14px;'>🏛️ {causa.get('TRIBUNAL', 'Sin Tribunal')}</span></div>", unsafe_allow_html=True)
-                        with col_card2:
-                            st.write("<br>", unsafe_allow_html=True)
-                            st.button("Abrir Expediente", key=f"ficha_ir_{causa.get('ROL')}", on_click=ir_a_expediente, args=(causa.get('ROL'),), use_container_width=True)
-            st.markdown("</div>", unsafe_allow_html=True)
+            with col_d:
+                if st.button("➕ Crear Nueva Causa para este Cliente"):
+                    st.session_state['creando_causa'] = True
+                
+                if st.session_state.get('creando_causa'):
+                    with st.form("nueva_causa_form"):
+                        n_rol = st.text_input("Nuevo ROL")
+                        if st.form_submit_button("Guardar Causa"):
+                            nueva_c = {'ROL': n_rol, 'Cliente': cli_actual, 'Tipo_Negocio': 'Propio'}
+                            df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
+                            df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['creando_causa'] = False; st.rerun()
+
+                st.subheader("Causas Asociadas")
+                for _, c in df_causas[df_causas['Cliente'] == cli_actual].iterrows():
+                    if pd.notna(c.get('ROL')) and c.get('ROL') != "Sin Causa Aún":
+                        st.info(f"Rol: {c['ROL']} | Caratulado: {c.get('CARATULADO', '--')}")
+
+        with tab2:
+            st.subheader("Estado Financiero")
+            # Aquí se visualizaría el mismo resumen de cuotas que hicimos antes
+            st.write(f"Total: ${datos.get('Total_Honorarios', 0):,.0f} | Pendiente: ${datos.get('Total_Honorarios', 0) - ((datos.get('Total_Honorarios',0)/datos.get('Cuotas_Totales',1))*datos.get('Cuotas_Pagadas',0)):,.0f}")
+
+        with tab3:
+            st.subheader("Documentos")
+            df_con = pd.read_csv(ARCHIVO_CONTRATOS)
+            st.dataframe(df_con[df_con['Cliente'] == cli_actual])
 
 # 11. GESTOR GLOBAL DE TAREAS
 elif st.session_state['menu_radio'] == "☑️ Tareas":
