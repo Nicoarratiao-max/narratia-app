@@ -1194,59 +1194,14 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.markdown("### Módulo 1: Naturaleza Jurídica del Juicio")
             st.markdown("<span style='color:#6b778c; font-size:14px;'>Selecciona primero la especialidad y la acción para activar el contrato:</span>", unsafe_allow_html=True)
             
-            # --- DICCIONARIO INTELIGENTE FUERA DEL FORM PARA TRABAJAR EN TIEMPO REAL ---
             diccionario_servicios = {
-                "Derecho Civil y Patrimonial": [
-                    "Juicio Ejecutivo (Cobro de Pagaré / Facturas)", 
-                    "Tercería de Posesión / Dominio",
-                    "Liquidación Voluntaria (Ley de Quiebras)",
-                    "Renegociación de Deudas",
-                    "Juicio de Arrendamiento (Ley Devuélveme mi Casa)",
-                    "Juicio Ordinario de Indemnización de Perjuicios",
-                    "Juicio de Precario",
-                    "Posesión Efectiva y Partición",
-                    "Estudio de Títulos y Redacción de Escrituras"
-                ],
-                "Derecho de Familia": [
-                    "Pensión de Alimentos Mayores",
-                    "Pensión de Alimentos Menores",
-                    "Aumento / Rebaja / Cese de Pensión de Alimentos",
-                    "Autorización de Salida del País",
-                    "Divorcio de Mutuo Acuerdo",
-                    "Divorcio Unilateral por Cese de Convivencia",
-                    "Divorcio Culposo",
-                    "Cuidado Personal (Tuición)",
-                    "Relación Directa y Regular (Visitas)",
-                    "Medidas de Protección y VIF"
-                ],
-                "Derecho Laboral": [
-                    "Demanda por Despido Injustificado / Indebido",
-                    "Demanda por Despido Indirecto (Autodespido)",
-                    "Tutela Laboral por Vulneración de Derechos Fundamentales",
-                    "Cobro de Prestaciones y Cotizaciones Adeudadas (Ley Bustos)",
-                    "Defensa Corporativa del Empleador"
-                ],
-                "Derecho Penal": [
-                    "Querella Criminal",
-                    "Defensa Penal (Etapa de Garantía)",
-                    "Defensa Penal (Juicio Oral en lo Penal)",
-                    "Negociación de Salidas Alternativas (SCP / AR)",
-                    "Eliminación de Antecedentes Penales"
-                ],
-                "Derecho Constitucional": [
-                    "Recurso de Protección",
-                    "Recurso de Amparo"
-                ],
-                "Derecho del Consumidor": [
-                    "Querella Infraccional y Demanda Civil (JPL)",
-                    "Defensa en Demanda Colectiva ante SERNAC"
-                ],
-                "Derecho Administrativo": [
-                    "Reclamo de Ilegalidad Municipal",
-                    "Defensa en Sumario Administrativo",
-                    "Demanda de Nulidad de Derecho Público",
-                    "Procedimiento de Cobro Obligaciones Tributarias"
-                ]
+                "Derecho Civil y Patrimonial": ["Juicio Ejecutivo (Cobro de Pagaré / Facturas)", "Tercería de Posesión / Dominio", "Liquidación Voluntaria (Ley de Quiebras)", "Renegociación de Deudas", "Juicio de Arrendamiento", "Juicio Ordinario", "Juicio de Precario", "Posesión Efectiva y Partición", "Estudio de Títulos"],
+                "Derecho de Familia": ["Pensión de Alimentos Mayores", "Pensión de Alimentos Menores", "Aumento / Rebaja / Cese de Alimentos", "Autorización de Salida del País", "Divorcio de Mutuo Acuerdo", "Divorcio Unilateral", "Divorcio Culposo", "Cuidado Personal (Tuición)", "Visitas", "VIF"],
+                "Derecho Laboral": ["Despido Injustificado / Indebido", "Despido Indirecto (Autodespido)", "Tutela Laboral", "Cobro de Prestaciones (Ley Bustos)", "Defensa Corporativa"],
+                "Derecho Penal": ["Querella Criminal", "Defensa Penal (Garantía)", "Defensa Penal (Juicio Oral)", "Salidas Alternativas", "Eliminación de Antecedentes"],
+                "Derecho Constitucional": ["Recurso de Protección", "Recurso de Amparo"],
+                "Derecho del Consumidor": ["Querella Infraccional (JPL)", "Defensa Demanda Colectiva (SERNAC)"],
+                "Derecho Administrativo": ["Reclamo de Ilegalidad Municipal", "Sumario Administrativo", "Nulidad de Derecho Público", "Cobro Obligaciones Tributarias"]
             }
             
             with st.container(border=True):
@@ -1258,46 +1213,44 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 
                 tipo_servicio_final = f"{materia_sel}: {accion_sel}"
 
-            # --- AQUÍ EMPIEZA EL FORMULARIO PARA EL RESTO DE LOS DATOS ---
             with st.form("form_generador", clear_on_submit=False):
-                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas en la Representación", height=100, placeholder="Ej: Redacción y presentación de demanda, asistencia a audiencias de conciliación y prueba, alegatos en Corte de Apelaciones...")
+                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100)
                 
                 col_ab, col_cl = st.columns(2)
                 with col_ab:
                     with st.container(border=True):
-                        st.markdown("#### Módulo 2: Litigante Patrocinante (Abogado)")
-                        abog_nom = st.text_input("Nombre Completo del Abogado", placeholder="Ej: Eduardo Riquelme Zambrano")
-                        abog_rut = st.text_input("Cédula de Identidad Abogado", placeholder="Ej: 17.427.459-2")
-                        abog_dom = st.text_input("Domicilio Profesional Completo", placeholder="Ej: Huérfanos 1160, Santiago")
-                        abog_tel = st.text_input("Teléfono de Contacto", placeholder="Ej: +569 1234 5678")
-                        abog_correo = st.text_input("Correo Electrónico de Coordinación", placeholder="Ej: abogado@correo.cl")
+                        st.markdown("#### Módulo 2: Litigante Patrocinante")
+                        abog_nom = st.text_input("Nombre Abogado", "Eduardo Riquelme Zambrano")
+                        abog_rut = st.text_input("RUT Abogado", "17.427.459-2")
+                        abog_dom = st.text_input("Domicilio Profesional")
+                        abog_tel = st.text_input("Teléfono")
+                        abog_correo = st.text_input("Correo")
                 with col_cl:
                     with st.container(border=True):
-                        st.markdown("#### Módulo 3: Mandante Judicial (Cliente)")
-                        cli_nom = st.text_input("Nombre Completo del Cliente", placeholder="Ej: Natalia Vásquez Lagos")
-                        cli_rut = st.text_input("Cédula de Identidad Cliente", placeholder="Ej: 17.578.045-9")
-                        cli_dom = st.text_input("Domicilio Particular", placeholder="Ej: Camino Huape Km 12, Malloa")
-                        cli_tel = st.text_input("Teléfono Particular", placeholder="Ej: +569 8765 4321")
-                        cli_correo = st.text_input("Correo Electrónico Cliente", placeholder="Ej: cliente@correo.cl")
+                        st.markdown("#### Módulo 3: Mandante Judicial")
+                        cli_nom = st.text_input("Nombre Cliente")
+                        cli_rut = st.text_input("RUT Cliente")
+                        cli_dom = st.text_input("Domicilio")
+                        cli_tel = st.text_input("Teléfono")
+                        cli_correo = st.text_input("Correo")
                         
                 with st.container(border=True):
-                    st.markdown("#### Módulo 4: Estipulación de Honorarios y Cuenta de Abono")
+                    st.markdown("#### Módulo 4: Honorarios y Cuenta")
                     c_p1, c_p2 = st.columns(2)
                     with c_p1: 
-                        hon_num = st.text_input("Valor Total en Números", placeholder="Ej: $2.500.000") 
-                        hon_let = st.text_input("Valor Total en Letras", placeholder="Ej: dos millones quinientos mil pesos")
-                        cuotas_c = st.number_input("Número de Mensualidades Fijadas", min_value=1, value=12)
-                        cuotas_m = st.text_input("Valor de la Cuota Mensual", placeholder="Ej: $208.333")
-                        fecha_pago = st.date_input("Vencimiento de la Primera Mensualidad")
+                        hon_num = st.text_input("Valor Total ($)", "2500000") 
+                        hon_let = st.text_input("Valor en Letras")
+                        cuotas_c = st.number_input("Cuotas", 12)
+                        cuotas_m = st.text_input("Valor Cuota ($)")
+                        fecha_pago = st.date_input("Primera Mensualidad")
                     with c_p2: 
-                        banco = st.text_input("Banco de Destino", placeholder="Ej: Banco Estado")
-                        tipo_cta = st.selectbox("Tipo de Cuenta Bancaria", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
-                        num_cta = st.text_input("Número de Cuenta", placeholder="Ej: 17578045")
+                        banco = st.text_input("Banco")
+                        tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
+                        num_cta = st.text_input("Número de Cuenta")
                         
                 if st.form_submit_button("📄 Estructurar Contrato en Formato Word", type="primary", use_container_width=True):
                     datos_c = {
-                        'tipo_servicio': tipo_servicio_final, 
-                        'detalle_servicio': detalle_servicio,
+                        'tipo_servicio': tipo_servicio_final, 'detalle_servicio': detalle_servicio,
                         'abogado_nombre': abog_nom, 'abogado_rut': abog_rut, 'abogado_domicilio': abog_dom, 'abogado_tel': abog_tel, 'abogado_correo': abog_correo,
                         'cliente_nombre': cli_nom, 'cliente_rut': cli_rut, 'cliente_domicilio': cli_dom, 'cliente_tel': cli_tel, 'cliente_correo': cli_correo,
                         'honorarios_num': hon_num, 'honorarios_letras': hon_let, 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m, 'fecha_inicio': fecha_pago,
@@ -1316,20 +1269,16 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
                         nuevo_con = {
-                            'ID': str(uuid.uuid4())[:8], 
-                            'Fecha': datetime.now().strftime("%d/%m/%Y"), 
-                            'Cliente': cli_nom, 
-                            'Servicio': accion_sel, 
-                            'Honorarios': hon_num,
-                            'Archivo_B64': b64_docx
+                            'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 
+                            'Cliente': cli_nom, 'Servicio': accion_sel, 'Honorarios': hon_num, 'Archivo_B64': b64_docx
                         }
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         st.rerun()
                         
         if st.session_state.get('contrato_generado'):
-            st.success("✅ Contrato estructurado y GUARDADO permanentemente en tu historial.")
-            st.download_button(label="📥 Descargar Documento Word (.docx)", data=st.session_state['contrato_generado'], file_name=st.session_state['nombre_archivo'], mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
+            st.success("✅ Contrato guardado en el historial.")
+            st.download_button(label="📥 Descargar Documento (.docx)", data=st.session_state['contrato_generado'], file_name=st.session_state['nombre_archivo'], mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
             
     with tab_reg:
         df_contratos_reg = pd.read_csv(ARCHIVO_CONTRATOS)
@@ -1337,9 +1286,9 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.info("No registras copias históricas guardadas.")
         else: 
             st.markdown("### 🗄️ Archivo Histórico de Contratos Generados")
-            for _, row in df_contratos_reg[::-1].iterrows():
+            for idx, row in df_contratos_reg[::-1].iterrows():
                 with st.container(border=True):
-                    c1, c2 = st.columns([4, 1])
+                    c1, c2, c3 = st.columns([3, 1, 1])
                     with c1:
                         st.markdown(f"**Cliente:** {row.get('Cliente', 'Sin Nombre')} | **Servicio:** {row.get('Servicio', '--')}")
                         st.markdown(f"<span style='color:#6b778c; font-size:14px;'>Fecha Emisión: {row.get('Fecha', '--')} | Honorarios Pactados: ${row.get('Honorarios', '0')}</span>", unsafe_allow_html=True)
@@ -1347,37 +1296,36 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     with c2:
                         if 'Archivo_B64' in row and pd.notna(row['Archivo_B64']) and str(row['Archivo_B64']).strip() != "":
                             bytes_doc = base64.b64decode(row['Archivo_B64'])
-                            st.download_button(
-                                "📥 Descargar Copia", 
-                                data=bytes_doc, 
-                                file_name=f"Copia_{str(row.get('Cliente', 'Contrato')).replace(' ', '_')}.docx", 
-                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                key=f"dl_con_{row.get('ID', str(uuid.uuid4())[:8])}"
-                            )
+                            st.download_button("📥 Descargar", data=bytes_doc, file_name=f"Copia_{str(row.get('Cliente', 'Contrato')).replace(' ', '_')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_con_{row.get('ID', str(uuid.uuid4())[:8])}")
                         else:
-                            st.markdown("<span style='color:#ff5630; font-size:12px;'>Contrato antiguo (Sin archivo)</span>", unsafe_allow_html=True)
+                            st.write("*(Sin archivo)*")
+                            
+                    with c3:
+                        # BOTÓN DE ELIMINACIÓN
+                        if st.button("🗑️ Eliminar", key=f"del_con_{row.get('ID', idx)}"):
+                            df_contratos_reg = df_contratos_reg.drop(idx)
+                            df_contratos_reg.to_csv(ARCHIVO_CONTRATOS, index=False)
+                            st.rerun()
 
     with tab_importar:
-        st.markdown("Sube un contrato ya firmado en PDF o Word. La Inteligencia Artificial lo leerá, extraerá los datos clave y poblará tu directorio de clientes y contabilidad.")
+        st.markdown("Sube un contrato ya firmado en PDF o Word para extraer sus datos y guardarlos.")
         archivo_contrato = st.file_uploader("📂 Subir Contrato del Cliente", type=["pdf", "docx"])
         
         if st.button("🧠 Leer Contrato y Registrar Cliente", type="primary", use_container_width=True):
             if not archivo_contrato:
                 st.error("⚠️ Tienes que subir un archivo primero compadre.")
             else:
-                with st.spinner("🤖 Leyendo cláusulas y extrayendo datos jurídicos (incluyendo mensualidades)..."):
+                with st.spinner("🤖 Leyendo cláusulas..."):
                     try:
                         texto_contrato = ""
                         if archivo_contrato.name.endswith('.pdf'):
                             import PyPDF2
                             lector = PyPDF2.PdfReader(archivo_contrato)
-                            for pagina in lector.pages:
-                                texto_contrato += pagina.extract_text() + "\n"
+                            for pagina in lector.pages: texto_contrato += pagina.extract_text() + "\n"
                         elif archivo_contrato.name.endswith('.docx'):
                             from docx import Document
                             doc = Document(archivo_contrato)
-                            for p in doc.paragraphs:
-                                texto_contrato += p.text + "\n"
+                            for p in doc.paragraphs: texto_contrato += p.text + "\n"
                                 
                         import google.generativeai as genai
                         import json
@@ -1385,83 +1333,43 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         modelo_elegido = "gemini-1.0-pro"
                         for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods:
-                                md_name = m.name.replace("models/", "")
-                                if 'flash' in md_name:
-                                    modelo_elegido = md_name
-                                    break
+                            if 'generateContent' in m.supported_generation_methods and 'flash' in m.name:
+                                modelo_elegido = m.name.replace("models/", ""); break
                                     
                         modelo = genai.GenerativeModel(modelo_elegido)
                         
                         prompt_extractor = f"""
-                        Eres un asistente legal experto en Chile. Lee el contrato adjunto y extrae los datos del CLIENTE.
-                        
-                        Debes identificar:
-                        1. Nombre completo del cliente.
-                        2. RUT del cliente.
-                        3. Servicio o materia del juicio.
-                        4. Honorarios totales pactados (número entero).
-                        5. Número total de cuotas.
-                        6. FECHA DE INICIO DE PAGO: Busca en las cláusulas de honorarios cuándo debe pagarse la primera cuota. 
-                           Si el contrato dice "febrero", asume "2026-02-05". Si no especifica día, usa el día 05 del mes indicado. 
-                           Si no aparece mes/año, usa hoy: {datetime.now().strftime("%Y-%m-%d")}.
-                        
-                        Devuelve ÚNICAMENTE un objeto JSON válido (sin markdown ni texto adicional) con esta estructura:
-                        {{
-                            "cliente_nombre": "nombre completo",
-                            "cliente_rut": "RUT con guion",
-                            "servicio": "tipo de juicio o servicio",
-                            "honorarios_total": 0,
-                            "cuotas_totales": 1,
-                            "fecha_inicio_pago": "YYYY-MM-DD"
-                        }}
-                        
-                        CONTRATO:
-                        {texto_contrato[:15000]}
+                        Eres un asistente legal experto en Chile. Extrae los datos del CLIENTE.
+                        Devuelve ÚNICAMENTE un objeto JSON válido (sin markdown) con esta estructura:
+                        {{ "cliente_nombre": "nombre", "cliente_rut": "RUT", "servicio": "tipo", "honorarios_total": 0, "cuotas_totales": 1, "fecha_inicio_pago": "YYYY-MM-DD" }}
+                        CONTRATO: {texto_contrato[:15000]}
                         """
                         
                         respuesta = modelo.generate_content(prompt_extractor)
-                        
-                        texto_json = respuesta.text
-                        texto_json = texto_json.replace('```json', '')
-                        texto_json = texto_json.replace('```', '')
-                        texto_json = texto_json.strip()
-                        
+                        texto_json = respuesta.text.replace('```json', '').replace('```', '').strip()
                         datos_extraidos = json.loads(texto_json)
                         
                         df_causas = pd.read_csv(ARCHIVO_BD)
                         nombre_extraido = datos_extraidos.get('cliente_nombre', 'Cliente Importado')
                         
                         nuevo_cliente = {
-                            'ROL': 'Sin Causa Aún', 'TRIBUNAL': '--', 'CARATULADO': '--',
-                            'Cliente': nombre_extraido,
-                            'RUT': datos_extraidos.get('cliente_rut', '--'), 'Teléfono': '--',
-                            'Tipo_Negocio': 'Propio', 'Clave_unica': '--', 'Correo': '--',
-                            'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
-                            'Estado_Honorarios': 'Pendientes' if int(datos_extraidos.get('honorarios_total', 0)) > 0 else 'Sin fijar',
-                            'Total_Honorarios': int(datos_extraidos.get('honorarios_total', 0)),
-                            'Cuotas_Totales': int(datos_extraidos.get('cuotas_totales', 1)), 
-                            'Cuotas_Pagadas': 0,
-                            'Fecha_Inicio': datos_extraidos.get('fecha_inicio_pago', datetime.now().strftime("%Y-%m-%d"))
+                            'ROL': 'Sin Causa Aún', 'TRIBUNAL': '--', 'CARATULADO': '--', 'Cliente': nombre_extraido,
+                            'RUT': datos_extraidos.get('cliente_rut', '--'), 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--', 'Correo': '--',
+                            'Direccion': '--', 'SAC': '--', 'Sucursal': '--', 'Estado_Honorarios': 'Pendientes' if int(datos_extraidos.get('honorarios_total', 0)) > 0 else 'Sin fijar',
+                            'Total_Honorarios': int(datos_extraidos.get('honorarios_total', 0)), 'Cuotas_Totales': int(datos_extraidos.get('cuotas_totales', 1)), 
+                            'Cuotas_Pagadas': 0, 'Fecha_Inicio': datos_extraidos.get('fecha_inicio_pago', datetime.now().strftime("%Y-%m-%d"))
                         }
-                        df_causas = pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True)
-                        df_causas.to_csv(ARCHIVO_BD, index=False)
+                        pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True).to_csv(ARCHIVO_BD, index=False)
                         
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
                         nuevo_con = {
-                            'ID': str(uuid.uuid4())[:8],
-                            'Fecha': datetime.now().strftime("%d/%m/%Y"),
-                            'Cliente': nombre_extraido,
-                            'Servicio': datos_extraidos.get('servicio', 'Servicio Legal'),
-                            'Honorarios': datos_extraidos.get('honorarios_total', 0)
+                            'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"),
+                            'Cliente': nombre_extraido, 'Servicio': datos_extraidos.get('servicio', 'Servicio Legal'), 'Honorarios': datos_extraidos.get('honorarios_total', 0)
                         }
-                        df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
-                        df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
+                        pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True).to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        st.success(f"✅ ¡Operación exitosa! La IA analizó el contrato y agregó a **{nombre_extraido}** directo a tu listado de clientes y módulo de contabilidad.")
-                        
-                    except Exception as e:
-                        st.error(f"❌ Error técnico al procesar el archivo o contactar a la IA: {e}")
+                        st.success(f"✅ ¡La IA agregó a **{nombre_extraido}** directo a tu listado de clientes!")
+                    except Exception as e: st.error(f"❌ Error técnico: {e}")
 
 # 7. CAUSAS / EXPEDIENTES (MEJORADO VISUALMENTE EN MODO CLARO)
 elif st.session_state['menu_radio'] == "💼 Causas":
