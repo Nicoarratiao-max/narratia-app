@@ -1318,7 +1318,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             'ID': str(uuid.uuid4())[:8], 
                             'Fecha': datetime.now().strftime("%d/%m/%Y"), 
                             'Cliente': cli_nom, 
-                            'Servicio': accion_sel, # Guardamos solo la acción específica en el historial para que quede más limpio
+                            'Servicio': accion_sel, 
                             'Honorarios': hon_num,
                             'Archivo_B64': b64_docx
                         }
@@ -1421,10 +1421,10 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         respuesta = modelo.generate_content(prompt_extractor)
                         
+                        # --- LA CORRECCIÓN DE COMILLAS ESTÁ AQUÍ ---
                         texto_json = respuesta.text
-                        texto_json = texto_json.replace("```json", "")
-                        texto_json = texto_json.replace("
-```", "")
+                        texto_json = texto_json.replace('```json', '')
+                        texto_json = texto_json.replace('```', '')
                         texto_json = texto_json.strip()
                         
                         datos_extraidos = json.loads(texto_json)
