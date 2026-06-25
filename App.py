@@ -1191,12 +1191,75 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         if not DOCX_READY: 
             st.error("⚠️ El motor `python-docx` no está instalado en el servidor.")
         else:
-            st.markdown("Formulario completamente limpio para redacción de contratos desde cero:")
+            st.markdown("Formulario parametrizado para redacción de contratos desde cero:")
             with st.form("form_generador", clear_on_submit=False):
                 with st.container(border=True):
                     st.markdown("#### Módulo 1: Naturaleza Jurídica del Juicio")
-                    tipo_servicio = st.selectbox("Servicio a Contratar", ["Liquidación voluntaria", "Juicio ejecutivo", "Derecho de familia", "Derecho penal", "Derecho civil"])
-                    detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas en la Representación", height=120, placeholder="Ej: Redacción y presentación de demanda, asistencia a audiencias...")
+                    
+                    # --- DICCIONARIO INTELIGENTE DE MATERIAS Y ACCIONES CHILENAS ---
+                    diccionario_servicios = {
+                        "Derecho Civil y Patrimonial": [
+                            "Juicio Ejecutivo (Cobro de Pagaré / Facturas)", 
+                            "Tercería de Posesión / Dominio",
+                            "Liquidación Voluntaria (Ley de Quiebras)",
+                            "Renegociación de Deudas",
+                            "Juicio de Arrendamiento (Ley Devuélveme mi Casa)",
+                            "Juicio Ordinario de Indemnización de Perjuicios",
+                            "Juicio de Precario",
+                            "Posesión Efectiva y Partición",
+                            "Estudio de Títulos y Redacción de Escrituras"
+                        ],
+                        "Derecho de Familia": [
+                            "Pensión de Alimentos Mayores",
+                            "Pensión de Alimentos Menores",
+                            "Aumento / Rebaja / Cese de Pensión de Alimentos",
+                            "Autorización de Salida del País",
+                            "Divorcio de Mutuo Acuerdo",
+                            "Divorcio Unilateral por Cese de Convivencia",
+                            "Divorcio Culposo",
+                            "Cuidado Personal (Tuición)",
+                            "Relación Directa y Regular (Visitas)",
+                            "Medidas de Protección y VIF"
+                        ],
+                        "Derecho Laboral": [
+                            "Demanda por Despido Injustificado / Indebido",
+                            "Demanda por Despido Indirecto (Autodespido)",
+                            "Tutela Laboral por Vulneración de Derechos Fundamentales",
+                            "Cobro de Prestaciones y Cotizaciones Adeudadas (Ley Bustos)",
+                            "Defensa Corporativa del Empleador"
+                        ],
+                        "Derecho Penal": [
+                            "Querella Criminal",
+                            "Defensa Penal (Etapa de Garantía)",
+                            "Defensa Penal (Juicio Oral en lo Penal)",
+                            "Negociación de Salidas Alternativas (SCP / AR)",
+                            "Eliminación de Antecedentes Penales"
+                        ],
+                        "Derecho Constitucional": [
+                            "Recurso de Protección",
+                            "Recurso de Amparo"
+                        ],
+                        "Derecho del Consumidor": [
+                            "Querella Infraccional y Demanda Civil (JPL)",
+                            "Defensa en Demanda Colectiva ante SERNAC"
+                        ],
+                        "Derecho Administrativo": [
+                            "Reclamo de Ilegalidad Municipal",
+                            "Defensa en Sumario Administrativo",
+                            "Demanda de Nulidad de Derecho Público"
+                        ]
+                    }
+                    
+                    col_mat1, col_mat2 = st.columns(2)
+                    with col_mat1:
+                        materia_sel = st.selectbox("Rama del Derecho", list(diccionario_servicios.keys()))
+                    with col_mat2:
+                        accion_sel = st.selectbox("Acción / Procedimiento Específico", diccionario_servicios[materia_sel])
+                        
+                    # Unificamos el texto para que el Word lo lea de corrido
+                    tipo_servicio_final = f"{materia_sel}: {accion_sel}"
+                    
+                    detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas en la Representación", height=100, placeholder="Ej: Redacción y presentación de demanda, asistencia a audiencias de conciliación y prueba, alegatos en Corte de Apelaciones...")
                 
                 col_ab, col_cl = st.columns(2)
                 with col_ab:
@@ -1232,7 +1295,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                 if st.form_submit_button("📄 Estructurar Contrato en Formato Word", type="primary", use_container_width=True):
                     datos_c = {
-                        'tipo_servicio': tipo_servicio, 'detalle_servicio': detalle_servicio,
+                        'tipo_servicio': tipo_servicio_final, 
+                        'detalle_servicio': detalle_servicio,
                         'abogado_nombre': abog_nom, 'abogado_rut': abog_rut, 'abogado_domicilio': abog_dom, 'abogado_tel': abog_tel, 'abogado_correo': abog_correo,
                         'cliente_nombre': cli_nom, 'cliente_rut': cli_rut, 'cliente_domicilio': cli_dom, 'cliente_tel': cli_tel, 'cliente_correo': cli_correo,
                         'honorarios_num': hon_num, 'honorarios_letras': hon_let, 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m, 'fecha_inicio': fecha_pago,
@@ -1247,7 +1311,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         st.session_state['contrato_generado'] = bytes_contrato
                         st.session_state['nombre_archivo'] = f"Contrato_{cli_nom.replace(' ', '_')}.docx"
                         
-                        # TRUCO: Convertimos el Word a texto base64 para guardarlo adentro del CSV
                         b64_docx = base64.b64encode(bytes_contrato).decode('utf-8')
                         
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
@@ -1255,7 +1318,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             'ID': str(uuid.uuid4())[:8], 
                             'Fecha': datetime.now().strftime("%d/%m/%Y"), 
                             'Cliente': cli_nom, 
-                            'Servicio': tipo_servicio, 
+                            'Servicio': accion_sel, # Guardamos solo la acción específica en el historial para que quede más limpio
                             'Honorarios': hon_num,
                             'Archivo_B64': b64_docx
                         }
@@ -1273,7 +1336,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.info("No registras copias históricas guardadas.")
         else: 
             st.markdown("### 🗄️ Archivo Histórico de Contratos Generados")
-            # Invertimos para ver los más nuevos arriba
             for _, row in df_contratos_reg[::-1].iterrows():
                 with st.container(border=True):
                     c1, c2 = st.columns([4, 1])
@@ -1359,10 +1421,10 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         respuesta = modelo.generate_content(prompt_extractor)
                         
-                        # Limpieza del JSON a prueba de cortes de línea
                         texto_json = respuesta.text
                         texto_json = texto_json.replace("```json", "")
-                        texto_json = texto_json.replace("```", "")
+                        texto_json = texto_json.replace("
+```", "")
                         texto_json = texto_json.strip()
                         
                         datos_extraidos = json.loads(texto_json)
