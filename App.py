@@ -1844,7 +1844,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                     try:
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        modelo = genai.GenerativeModel('gemini-pro')
                         
                         prompt_redactor = f"""
                         Actúa como un abogado litigante chileno con impecable ortografía y redacción procesal formal.
