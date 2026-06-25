@@ -1226,7 +1226,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         else: 
             st.dataframe(df_contratos_reg, use_container_width=True)
 
-   with tab_importar:
+    with tab_importar:
         st.markdown("Sube un contrato ya firmado en PDF o Word. La Inteligencia Artificial lo leerá, extraerá los datos clave y poblará tu directorio de clientes y contabilidad.")
         archivo_contrato = st.file_uploader("📂 Subir Contrato del Cliente", type=["pdf", "docx"])
         
