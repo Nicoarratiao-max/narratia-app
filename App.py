@@ -1748,8 +1748,28 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
 
         with tab2:
             st.subheader("Estado Financiero")
-            st.write(f"Saldo: ${ (datos.get('Total_Honorarios',0) - ((datos.get('Total_Honorarios',0)/datos.get('Cuotas_Totales',1))*datos.get('Cuotas_Pagadas',0))):,.0f }")
-
+            
+            # Blindaje matemático: forzamos a que todo sea número y evitamos división por cero
+            try:
+                t_hon = float(datos.get('Total_Honorarios', 0))
+                if pd.isna(t_hon): t_hon = 0.0
+            except:
+                t_hon = 0.0
+                
+            try:
+                c_tot = float(datos.get('Cuotas_Totales', 1))
+                if pd.isna(c_tot) or c_tot == 0: c_tot = 1.0
+            except:
+                c_tot = 1.0
+                
+            try:
+                c_pag = float(datos.get('Cuotas_Pagadas', 0))
+                if pd.isna(c_pag): c_pag = 0.0
+            except:
+                c_pag = 0.0
+                
+            saldo_calculado = t_hon - ((t_hon / c_tot) * c_pag)
+            st.write(f"Saldo Pendiente: **${saldo_calculado:,.0f}**")
         with tab3:
             st.subheader("Contratos Vinculados")
             df_con = pd.read_csv(ARCHIVO_CONTRATOS)
