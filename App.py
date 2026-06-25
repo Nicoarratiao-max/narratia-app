@@ -871,36 +871,52 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     st.title("💰 Panel de Honorarios y Contabilidad")
     df_c = pd.read_csv(ARCHIVO_BD)
     
-    if df_c.empty or 'Total_Honorarios' not in df_c.columns:
-        st.info("Aún no existen registros financieros en el sistema.")
+    if df_c.empty:
+        st.info("Aún no existen registros financieros.")
     else:
-        df_financiero = df_c[df_c['Estado_Honorarios'].isin(["Pagados", "Pendientes"])].copy()
-        for col in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']:
-            df_financiero[col] = pd.to_numeric(df_financiero[col], errors='coerce').fillna(0)
-            
-        total_facturado = df_financiero['Total_Honorarios'].sum()
-        recaudado = 0
-        for _, row in df_financiero.iterrows():
-            if row['Estado_Honorarios'] == 'Pagados':
-                recaudado += row['Total_Honorarios']
-            elif row['Estado_Honorarios'] == 'Pendientes' and row['Cuotas_Totales'] > 0:
-                valor_cuota = row['Total_Honorarios'] / row['Cuotas_Totales']
-                recaudado += (valor_cuota * row['Cuotas_Pagadas'])
-        por_cobrar = total_facturado - recaudado
+        # Selección de cliente
+        cliente_sel = st.selectbox("Selecciona un Cliente para ver su Ficha Contable:", df_c['Cliente'].unique())
+        datos_cli = df_c[df_c['Cliente'] == cliente_sel].iloc[0]
         
         c_f1, c_f2, c_f3 = st.columns(3)
-        with c_f1: 
-            st.markdown(f"<div class='dash-card' style='border-left: 4px solid #0052cc;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TOTAL FACTURADO</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>${total_facturado:,.0f}</h2></div>", unsafe_allow_html=True)
-        with c_f2: 
-            st.markdown(f"<div class='dash-card' style='border-left: 4px solid #57a15a;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>RECAUDADO REGISTRADO</h3><h2 style='margin:0; font-size:28px; color:#57a15a;'>${recaudado:,.0f}</h2></div>", unsafe_allow_html=True)
-        with c_f3: 
-            st.markdown(f"<div class='dash-card' style='border-left: 4px solid #ff5630;'><h3 style='margin:0; font-size:14px; color:#6b778c;'>SALDO POR COBRAR</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>${por_cobrar:,.0f}</h2></div>", unsafe_allow_html=True)
-
-        st.markdown("### Estado de Cuentas por Cliente")
-        df_mostrar = df_financiero[['Cliente', 'ROL', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']].copy()
-        df_mostrar.columns = ['Cliente', 'Rol Causa', 'Estado', 'Total ($)', 'Mensualidades', 'Cuotas Pagadas']
-        df_mostrar['Deuda ($)'] = df_mostrar.apply(lambda x: 0 if x['Estado'] == 'Pagados' else (x['Total ($)'] - ((x['Total ($)'] / x['Mensualidades'] * x['Cuotas Pagadas']) if x['Mensualidades'] > 0 else 0)), axis=1)
-        st.dataframe(df_mostrar.style.format({"Total ($)": "${:,.0f}", "Deuda ($)": "${:,.0f}"}), use_container_width=True)
+        c_f1.metric("Total Pactado", f"${datos_cli['Total_Honorarios']:,.0f}")
+        c_f2.metric("Cuotas Pagadas", f"{datos_cli['Cuotas_Pagadas']} de {datos_cli['Cuotas_Totales']}")
+        saldo_pendiente = datos_cli['Total_Honorarios'] - ((datos_cli['Total_Honorarios'] / datos_cli['Cuotas_Totales']) * datos_cli['Cuotas_Pagadas'])
+        c_f3.metric("Saldo Pendiente", f"${saldo_pendiente:,.0f}")
+        
+        st.write("---")
+        st.subheader(f"Detalle de Cuotas: {cliente_sel}")
+        
+        # Generar lista de cuotas
+        valor_cuota = datos_cli['Total_Honorarios'] / datos_cli['Cuotas_Totales']
+        cuotas_data = []
+        for i in range(1, int(datos_cli['Cuotas_Totales']) + 1):
+            estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else "❌ Pendiente"
+            cuotas_data.append({"Cuota N°": i, "Monto": valor_cuota, "Estado": estado})
+            
+        df_cuotas = pd.DataFrame(cuotas_data)
+        st.table(df_cuotas)
+        
+        # Botones de acción rápida
+        c_b1, c_b2 = st.columns(2)
+        if c_b1.button("📥 Registrar Pago de una Cuota", type="primary"):
+            if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
+                df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] += 1
+                # Si llegó al tope, marcar como Pagados
+                if df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'].values[0] == datos_cli['Cuotas_Totales']:
+                    df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pagados"
+                df_c.to_csv(ARCHIVO_BD, index=False)
+                st.success("¡Pago registrado! Actualizando tabla...")
+                st.rerun()
+            else:
+                st.warning("El cliente ya tiene todas sus cuotas pagadas.")
+                
+        if c_b2.button("⏪ Revertir último pago"):
+            if datos_cli['Cuotas_Pagadas'] > 0:
+                df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] -= 1
+                df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pendientes"
+                df_c.to_csv(ARCHIVO_BD, index=False)
+                st.rerun()
 
 # 3. TRÁMITES Y CONTROL DE AUXILIARES
 elif st.session_state['menu_radio'] == "📝 Trámites":
