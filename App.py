@@ -25,20 +25,13 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="expanded"
 )
-# --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE INVISIBLE) ---
+# --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE AGRESIVO) ---
 st.markdown("""
 <iframe src="javascript:void(0);" style="display:none;" onload="
     setInterval(function(){
         window.parent.document.dispatchEvent(new Event('mousemove'));
-    }, 50000);
-"></iframe>
-""", unsafe_allow_html=True)
-# --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE INVISIBLE) ---
-st.markdown("""
-<iframe src="javascript:void(0);" style="display:none;" onload="
-    setInterval(function(){
-        window.parent.document.dispatchEvent(new Event('mousemove'));
-    }, 50000);
+        window.parent.document.dispatchEvent(new KeyboardEvent('keydown', {'key': 'Shift'}));
+    }, 30000);
 "></iframe>
 """, unsafe_allow_html=True)
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
