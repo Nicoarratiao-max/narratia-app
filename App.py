@@ -1249,7 +1249,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         
                         # Usamos gemini-pro para evitar el error de conexión 404
-                        modelo = genai.GenerativeModel('gemini-pro')
+                        modelo = genai.GenerativeModel('gemini-1.5-flash')
                         
                         prompt_extractor = f"""
                         Eres un asistente legal. Lee el siguiente contrato.
@@ -1928,7 +1928,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                     try:
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo = genai.GenerativeModel('gemini-pro')
+                        modelo = genai.GenerativeModel('gemini-1.5-flash')
                         
                         prompt_redactor = f"""
                         Actúa como un abogado litigante chileno con impecable ortografía y redacción procesal formal.
