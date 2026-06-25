@@ -1285,8 +1285,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         respuesta = modelo.generate_content(prompt_extractor)
                         
                         # Limpieza del JSON ultra segura en una sola línea
-                        texto_json = respuesta.text.replace("```json", "").replace("
-```", "").strip()
+                        texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
                         datos_extraidos = json.loads(texto_json)
                         
                         df_causas = pd.read_csv(ARCHIVO_BD)
