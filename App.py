@@ -1272,8 +1272,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         respuesta = modelo.generate_content(prompt_extractor)
                         
                         # Limpiar el texto por si Gemini le pone comillas raras
-                        texto_json = respuesta.text.replace('```json', '').replace('
-```', '').strip()
+                       texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
                         datos_extraidos = json.loads(texto_json)
                         
                         # 3. Guardar el nuevo cliente en la Base de Causas (Directorio)
