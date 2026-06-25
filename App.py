@@ -758,7 +758,7 @@ with st.sidebar:
     else: # Nivel "Full"
         opciones_flujo = opciones_basicas + [
             "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
-            "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📈 Marketing"
+            "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📝 Redactor IA"
         ]
         
     # El botón secreto de Admin: Solo aparece si el que entró eres tú (Narratia)
@@ -1091,53 +1091,56 @@ elif st.session_state['menu_radio'] == "📊 Informes":
 # 6. ESTRATEGIA JURÍDICA (ASISTENTE PRIVADO)
 elif st.session_state['menu_radio'] == "🧠 Estrategia":
     st.title("🧠 Asistente de Estrategia Jurídica")
-    st.markdown("Describe los hechos del caso, el estado procesal o el problema legal. La IA analizará los antecedentes y te propondrá los pasos a seguir, excepciones o acciones a interponer bajo la normativa chilena.")
+    st.markdown("Describe los hechos o adjunta el PDF de la demanda/notificación. La IA analizará los antecedentes y te propondrá la mejor salida legal bajo la normativa chilena.")
     
     with st.container(border=True):
-        caso_texto = st.text_area("📝 Relato del Caso:", height=200, placeholder="Ej: Cliente notificado hace 3 días por demanda ejecutiva. Título es un pagaré a la vista que se hizo exigible hace más de 1 año y 2 meses...")
+        materia = st.selectbox("Rama del Derecho", ["Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Policía Local"])
+        caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
         
-        if st.button("💡 Generar Propuesta Estratégica", type="primary", use_container_width=True):
-            if not caso_texto.strip():
-                st.error("⚠️ Tienes que escribir los antecedentes del caso para que la IA pueda analizarlo.")
+        archivo_legal = st.file_uploader("📎 Adjuntar PDF del caso (Demanda, contrato, resolución)", type=['pdf'])
+        
+        if st.button("💡 Analizar y Generar Propuesta", type="primary", use_container_width=True):
+            if not caso_texto.strip() and not archivo_legal:
+                st.error("⚠️ Debes escribir los antecedentes o adjuntar un PDF.")
             else:
-                with st.spinner("🧠 Analizando antecedentes procesales y buscando salidas legales..."):
+                with st.spinner("🧠 Leyendo documentos y buscando jurisprudencia/normativa aplicable..."):
                     try:
-                        # Conexión directa a Gemini usando la clave secreta
+                        texto_pdf = ""
+                        if archivo_legal:
+                            import PyPDF2
+                            lector = PyPDF2.PdfReader(archivo_legal)
+                            for pagina in lector.pages:
+                                texto_pdf += pagina.extract_text() + "\n"
+                        
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        
-                        # Usamos el modelo rápido y eficiente
                         modelo = genai.GenerativeModel('gemini-1.5-flash')
                         
-                        # El Prompt Maestro integrado al sistema
                         prompt_maestro = f"""
-                        Actúa como un Abogado Supervisor experto en litigación civil en Chile y defensa de deudores.
-                        Analiza los siguientes antecedentes procesales entregados por un abogado de tu equipo:
+                        Actúa como un Abogado Supervisor experto en litigación en Chile, específicamente en el área: {materia}.
+                        Analiza los siguientes antecedentes entregados por tu equipo:
                         
-                        CASO:
+                        RELATO DEL ABOGADO:
                         {caso_texto}
                         
-                        Tu tarea es proponer una estrategia jurídica clara, directa y estructurada en el Código de Procedimiento Civil chileno.
-                        Estructura tu respuesta estrictamente en 3 puntos:
-                        1. **Análisis Preliminar:** Identifica el estado procesal actual y los riesgos inmediatos.
-                        2. **Estrategia Propuesta:** Propón qué excepciones del art. 464 interponer. Evalúa siempre la viabilidad de la Excepción N° 17 (prescripción) y, si hay vicios formales, la Excepción N° 2. 
-                        3. **Acciones Inmediatas:** Lista de 2 o 3 pasos tácticos a ejecutar esta misma semana.
+                        TEXTO DEL DOCUMENTO ADJUNTO:
+                        {texto_pdf}
                         
-                        Habla con lenguaje técnico, resolutivo y profesional.
+                        Tu tarea es proponer una estrategia jurídica basándote estrictamente en la legislación chilena vigente.
+                        Estructura tu respuesta en:
+                        1. **Análisis del Escenario:** Identifica riesgos y plazos procesales.
+                        2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer.
+                        3. **Siguientes Pasos:** Tareas inmediatas a ejecutar.
                         """
                         
-                        # Generamos la respuesta real
                         respuesta = modelo.generate_content(prompt_maestro)
-                        respuesta_ia = respuesta.text
-                        
                         st.success("✅ Análisis estratégico formulado con éxito.")
-                        
                         st.markdown("<div class='dash-card'><h4 style='color:#0052cc;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
-                        st.write(respuesta_ia)
+                        st.write(respuesta.text)
                         st.markdown("</div>", unsafe_allow_html=True)
                         
                     except Exception as e:
-                        st.error(f"❌ Hubo un error al conectar con la IA. Revisa tu panel de Streamlit Secrets. Detalle técnico: {e}")
+                        st.error(f"❌ Error al conectar con la IA o leer el PDF: {e}")
 
 # 6. CONTRATOS WORD
 elif st.session_state['menu_radio'] == "📄 Contratos":
@@ -1811,7 +1814,64 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
     df_vista = pd.read_csv(ARCHIVO_USUARIOS)
     st.dataframe(df_vista[['Usuario', 'Nombre_Real', 'Plan', 'Correo', 'Debe_Cambiar_Clave']], use_container_width=True)
 
-# 15. RESTO DE PESTAÑAS (EN DESARROLLO / PRÓXIMAS)
-else:
-    st.title(f"{st.session_state['menu_radio'].split(' ')[1]}")
-    st.info("🚧 Módulo en desarrollo. Estará disponible en futuras actualizaciones de JuriSync.")
+# NUEVO MÓDULO: REDACTOR AUTOMÁTICO IA
+elif st.session_state['menu_radio'] == "📝 Redactor IA":
+    st.title("📝 Redactor Automático de Escritos")
+    st.markdown("La IA redactará el borrador del escrito judicial con el formato y lenguaje formal de los tribunales chilenos, listo para revisar y presentar.")
+    
+    with st.container(border=True):
+        col_r1, col_r2 = st.columns(2)
+        tipo_escrito = col_r1.selectbox("Tipo de Escrito", [
+            "Oposición de Excepciones (Ejecutivo)", 
+            "Contesta Demanda (General)", 
+            "Incidente de Nulidad", 
+            "Recurso de Reposición", 
+            "Solicitud de Abandono del Procedimiento",
+            "Otro (Especificar en instrucciones)"
+        ])
+        tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)")
+        
+        rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026")
+        caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
+        
+        instrucciones_red = st.text_area("Instrucciones específicas para el escrito:", height=150, placeholder="Ej: Redactar excepción N° 17 de prescripción. La deuda se hizo exigible en marzo de 2024 y notificaron recién ayer. Alega también costas.")
+        
+        if st.button("✍️ Generar Borrador del Escrito", type="primary", use_container_width=True):
+            if not instrucciones_red.strip():
+                st.error("⚠️ Debes darle las instrucciones jurídicas a la IA.")
+            else:
+                with st.spinner("⚖️ Redactando escrito en lenguaje procesal chileno..."):
+                    try:
+                        import google.generativeai as genai
+                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        prompt_redactor = f"""
+                        Actúa como un abogado litigante chileno con impecable ortografía y redacción procesal formal.
+                        Debes redactar un escrito judicial completo con los siguientes datos:
+                        
+                        Tipo de Escrito: {tipo_escrito}
+                        Tribunal: {tribunal_red}
+                        Rol: {rol_red}
+                        Caratulado: {caratula_red}
+                        
+                        INSTRUCCIONES DE FONDO:
+                        {instrucciones_red}
+                        
+                        Estructura requerida:
+                        1. Suma(s) y Tribunal.
+                        2. Individualización de la parte y personería.
+                        3. Cuerpo del escrito (hechos y derecho de forma persuasiva y técnica, citando la ley chilena).
+                        4. Petitorio claro ("POR TANTO: Ruego a S.S...").
+                        5. Peticiones subsidiarias o un "Otrosí" si corresponde según las instrucciones.
+                        
+                        Usa el lenguaje propio del Código de Procedimiento Civil chileno. No agregues notas explicativas para mí, entrégame SOLO el texto del escrito listo para copiar.
+                        """
+                        
+                        respuesta_escrito = modelo.generate_content(prompt_redactor)
+                        
+                        st.success("✅ Borrador redactado. Cópialo, revísalo y pásalo a Word.")
+                        st.text_area("Escrito Generado:", value=respuesta_escrito.text, height=500)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Hubo un error de conexión: {e}")
