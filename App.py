@@ -34,6 +34,7 @@ st.markdown("""
     }, 30000);
 "></iframe>
 """, unsafe_allow_html=True)
+
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
     # Forzamos la hora de Chile restando 4 horas al servidor UTC (Ajustable a -3 en verano)
@@ -58,28 +59,21 @@ def get_logo_src():
     # NUEVO LOGO VECTORIAL: Diosa Themis + Flechas Sync
     svg_logo = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <!-- Flechas Sync Orbitando (Tecnología/Automatización) -->
         <path d="M 30 20 A 35 35 0 0 1 85 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
         <polygon points="85,60 76,46 94,46" fill="#0052cc"/>
         <path d="M 70 80 A 35 35 0 0 1 15 50" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
         <polygon points="15,40 6,54 24,54" fill="#172b4d"/>
 
-        <!-- DIOSA THEMIS (Centro) -->
-        <!-- Espada de la Justicia (Eje central de fondo) -->
         <line x1="50" y1="15" x2="50" y2="70" stroke="#0052cc" stroke-width="3.5" stroke-linecap="round"/>
         <line x1="43" y1="28" x2="57" y2="28" stroke="#0052cc" stroke-width="3" stroke-linecap="round"/>
         <circle cx="50" cy="72" r="3" fill="#0052cc"/>
 
-        <!-- Toga / Cuerpo -->
         <path d="M 50 35 Q 40 55 33 75 L 67 75 Q 60 55 50 35 Z" fill="#172b4d" stroke-linejoin="round"/>
 
-        <!-- Cabeza Themis -->
         <circle cx="50" cy="35" r="7" fill="#172b4d"/>
         
-        <!-- Venda en los ojos -->
         <path d="M 41 35 Q 50 38 59 35" fill="none" stroke="#0052cc" stroke-width="2.5" stroke-linecap="round"/>
         
-        <!-- Balanza minimalista al frente -->
         <path d="M 40 52 L 60 52" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M 40 52 L 36 64 L 44 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
         <path d="M 60 52 L 56 64 L 64 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
@@ -728,7 +722,7 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-# --- SISTEMA DE PLANES Y PERMISOS ---
+    # --- SISTEMA DE PLANES Y PERMISOS ---
     df_usuarios_plan = pd.read_csv(ARCHIVO_USUARIOS)
     
     # Si la columna 'Plan' no existe aún, la creamos automáticamente
@@ -736,7 +730,7 @@ with st.sidebar:
         df_usuarios_plan['Plan'] = 'Full' 
         df_usuarios_plan.to_csv(ARCHIVO_USUARIOS, index=False)
         
-    # Rescatar el plan del usuario que inició sesión (Corregido a 'username')
+    # Rescatar el plan del usuario que inició sesión
     usuario_actual = st.session_state.get('username', 'Desconocido')
     
     try:
@@ -1114,7 +1108,17 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo = genai.GenerativeModel('gemini-1.5-flash-latest')
+                        
+                        # TRUCO MAESTRO: Buscar modelo activo automáticamente
+                        modelo_elegido = "gemini-1.0-pro"
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                md_name = m.name.replace("models/", "")
+                                if 'flash' in md_name:
+                                    modelo_elegido = md_name
+                                    break
+                                    
+                        modelo = genai.GenerativeModel(modelo_elegido)
                         
                         prompt_maestro = f"""
                         Actúa como un Abogado Supervisor experto en litigación en Chile, específicamente en el área: {materia}.
@@ -1142,7 +1146,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                     except Exception as e:
                         st.error(f"❌ Error al conectar con la IA o leer el PDF: {e}")
 
-# 6. CONTRATOS WORD
+# 6. CONTRATOS WORD E IMPORTACIÓN IA
 elif st.session_state['menu_radio'] == "📄 Contratos":
     st.title("📄 Generador e Historial de Contratos Jurídicos")
     
@@ -1248,8 +1252,16 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         import json
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         
-                        # Usamos gemini-pro para evitar el error de conexión 404
-                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        # TRUCO MAESTRO: Buscar modelo activo automáticamente
+                        modelo_elegido = "gemini-1.0-pro"
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                md_name = m.name.replace("models/", "")
+                                if 'flash' in md_name:
+                                    modelo_elegido = md_name
+                                    break
+                                    
+                        modelo = genai.GenerativeModel(modelo_elegido)
                         
                         prompt_extractor = f"""
                         Eres un asistente legal. Lee el siguiente contrato.
@@ -1928,7 +1940,17 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                     try:
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        # TRUCO MAESTRO: Buscar modelo activo automáticamente
+                        modelo_elegido = "gemini-1.0-pro"
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                md_name = m.name.replace("models/", "")
+                                if 'flash' in md_name:
+                                    modelo_elegido = md_name
+                                    break
+                                    
+                        modelo = genai.GenerativeModel(modelo_elegido)
                         
                         prompt_redactor = f"""
                         Actúa como un abogado litigante chileno con impecable ortografía y redacción procesal formal.
