@@ -1185,7 +1185,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
 elif st.session_state['menu_radio'] == "📄 Contratos":
     st.title("📄 Generador e Historial de Contratos Jurídicos")
     
-    tab_gen, tab_reg, tab_importar = st.tabs(["Generar Nuevo Contrato", "Registro de Copias Guardadas", "🤖 Importar Contrato con IA"])
+    tab_gen, tab_reg, tab_importar = st.tabs(["Generar Nuevo Contrato", "Registro Histórico", "🤖 Importar Contrato IA"])
     
     with tab_gen:
         if not DOCX_READY: 
@@ -1242,16 +1242,29 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     if doc_final:
                         buffer_memoria = io.BytesIO()
                         doc_final.save(buffer_memoria)
-                        st.session_state['contrato_generado'] = buffer_memoria.getvalue()
+                        bytes_contrato = buffer_memoria.getvalue()
+                        
+                        st.session_state['contrato_generado'] = bytes_contrato
                         st.session_state['nombre_archivo'] = f"Contrato_{cli_nom.replace(' ', '_')}.docx"
                         
+                        # TRUCO: Convertimos el Word a texto base64 para guardarlo adentro del CSV
+                        b64_docx = base64.b64encode(bytes_contrato).decode('utf-8')
+                        
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
-                        df_con = pd.concat([df_con, pd.DataFrame([{'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'Cliente': cli_nom, 'Servicio': tipo_servicio, 'Honorarios': hon_num}])], ignore_index=True)
+                        nuevo_con = {
+                            'ID': str(uuid.uuid4())[:8], 
+                            'Fecha': datetime.now().strftime("%d/%m/%Y"), 
+                            'Cliente': cli_nom, 
+                            'Servicio': tipo_servicio, 
+                            'Honorarios': hon_num,
+                            'Archivo_B64': b64_docx
+                        }
+                        df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         st.rerun()
                         
         if st.session_state.get('contrato_generado'):
-            st.success("Contrato estructurado perfectamente conforme al modelo base de la oficina.")
+            st.success("✅ Contrato estructurado y GUARDADO permanentemente en tu historial.")
             st.download_button(label="📥 Descargar Documento Word (.docx)", data=st.session_state['contrato_generado'], file_name=st.session_state['nombre_archivo'], mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
             
     with tab_reg:
@@ -1259,7 +1272,27 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         if df_contratos_reg.empty: 
             st.info("No registras copias históricas guardadas.")
         else: 
-            st.dataframe(df_contratos_reg, use_container_width=True)
+            st.markdown("### 🗄️ Archivo Histórico de Contratos Generados")
+            # Invertimos para ver los más nuevos arriba
+            for _, row in df_contratos_reg[::-1].iterrows():
+                with st.container(border=True):
+                    c1, c2 = st.columns([4, 1])
+                    with c1:
+                        st.markdown(f"**Cliente:** {row.get('Cliente', 'Sin Nombre')} | **Servicio:** {row.get('Servicio', '--')}")
+                        st.markdown(f"<span style='color:#6b778c; font-size:14px;'>Fecha Emisión: {row.get('Fecha', '--')} | Honorarios Pactados: ${row.get('Honorarios', '0')}</span>", unsafe_allow_html=True)
+                    
+                    with c2:
+                        if 'Archivo_B64' in row and pd.notna(row['Archivo_B64']) and str(row['Archivo_B64']).strip() != "":
+                            bytes_doc = base64.b64decode(row['Archivo_B64'])
+                            st.download_button(
+                                "📥 Descargar Copia", 
+                                data=bytes_doc, 
+                                file_name=f"Copia_{str(row.get('Cliente', 'Contrato')).replace(' ', '_')}.docx", 
+                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                key=f"dl_con_{row.get('ID', str(uuid.uuid4())[:8])}"
+                            )
+                        else:
+                            st.markdown("<span style='color:#ff5630; font-size:12px;'>Contrato antiguo (Sin archivo)</span>", unsafe_allow_html=True)
 
     with tab_importar:
         st.markdown("Sube un contrato ya firmado en PDF o Word. La Inteligencia Artificial lo leerá, extraerá los datos clave y poblará tu directorio de clientes y contabilidad.")
@@ -1287,7 +1320,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         import json
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         
-                        # TRUCO MAESTRO: Buscar modelo activo automáticamente
                         modelo_elegido = "gemini-1.0-pro"
                         for m in genai.list_models():
                             if 'generateContent' in m.supported_generation_methods:
@@ -1298,20 +1330,28 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                                     
                         modelo = genai.GenerativeModel(modelo_elegido)
                         
-                        # PROMPT ACTUALIZADO: Ahora le exigimos que busque las cuotas/mensualidades
                         prompt_extractor = f"""
-                        Eres un asistente legal. Lee el siguiente contrato.
-                        Extrae los datos del CLIENTE (no del abogado).
-                        Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta, sin texto adicional ni formato markdown:
+                        Eres un asistente legal experto en Chile. Lee el contrato adjunto y extrae los datos del CLIENTE.
+                        
+                        Debes identificar:
+                        1. Nombre completo del cliente.
+                        2. RUT del cliente.
+                        3. Servicio o materia del juicio.
+                        4. Honorarios totales pactados (número entero).
+                        5. Número total de cuotas.
+                        6. FECHA DE INICIO DE PAGO: Busca en las cláusulas de honorarios cuándo debe pagarse la primera cuota. 
+                           Si el contrato dice "febrero", asume "2026-02-05". Si no especifica día, usa el día 05 del mes indicado. 
+                           Si no aparece mes/año, usa hoy: {datetime.now().strftime("%Y-%m-%d")}.
+                        
+                        Devuelve ÚNICAMENTE un objeto JSON válido (sin markdown ni texto adicional) con esta estructura:
                         {{
                             "cliente_nombre": "nombre completo",
                             "cliente_rut": "RUT con guion",
                             "servicio": "tipo de juicio o servicio",
                             "honorarios_total": 0,
-                            "cuotas_totales": 1
+                            "cuotas_totales": 1,
+                            "fecha_inicio_pago": "YYYY-MM-DD"
                         }}
-                        Nota: En "honorarios_total" pon SOLO el número entero (ej: 2500000), sin signos de peso ni puntos. 
-                        En "cuotas_totales" pon SOLO el número entero de mensualidades o cuotas pactadas (ej: 12). Si se paga al contado o no especifica, pon 1.
                         
                         CONTRATO:
                         {texto_contrato[:15000]}
@@ -1319,8 +1359,12 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         respuesta = modelo.generate_content(prompt_extractor)
                         
-                        # Limpieza del JSON ultra segura en una sola línea
-                        texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
+                        # Limpieza del JSON a prueba de cortes de línea
+                        texto_json = respuesta.text
+                        texto_json = texto_json.replace("```json", "")
+                        texto_json = texto_json.replace("```", "")
+                        texto_json = texto_json.strip()
+                        
                         datos_extraidos = json.loads(texto_json)
                         
                         df_causas = pd.read_csv(ARCHIVO_BD)
@@ -1334,9 +1378,9 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
                             'Estado_Honorarios': 'Pendientes' if int(datos_extraidos.get('honorarios_total', 0)) > 0 else 'Sin fijar',
                             'Total_Honorarios': int(datos_extraidos.get('honorarios_total', 0)),
-                            # AQUÍ LEEMOS LAS CUOTAS DIRECTO DE LA IA:
                             'Cuotas_Totales': int(datos_extraidos.get('cuotas_totales', 1)), 
-                            'Cuotas_Pagadas': 0
+                            'Cuotas_Pagadas': 0,
+                            'Fecha_Inicio': datos_extraidos.get('fecha_inicio_pago', datetime.now().strftime("%Y-%m-%d"))
                         }
                         df_causas = pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True)
                         df_causas.to_csv(ARCHIVO_BD, index=False)
@@ -1352,7 +1396,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        st.success(f"✅ ¡Operación exitosa! La IA analizó el contrato y agregó a **{nombre_extraido}** (con sus cuotas correspondientes) directo a tu listado de clientes y módulo de contabilidad.")
+                        st.success(f"✅ ¡Operación exitosa! La IA analizó el contrato y agregó a **{nombre_extraido}** directo a tu listado de clientes y módulo de contabilidad.")
                         
                     except Exception as e:
                         st.error(f"❌ Error técnico al procesar el archivo o contactar a la IA: {e}")
