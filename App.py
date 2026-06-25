@@ -43,11 +43,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
-    hora = datetime.now().hour
-    if 0 <= hora < 12:
+    # Forzamos la hora de Chile restando 4 horas al servidor UTC (Ajustable a -3 en verano)
+    hora_chile = (datetime.utcnow() - timedelta(hours=4)).hour
+    if 0 <= hora_chile < 12:
         return "Buenos días"
-    else:
+    elif 12 <= hora_chile < 19:
         return "Buenas tardes"
+    else:
+        return "Buenas noches"
 
 def get_logo_src():
     ruta_base = os.path.dirname(os.path.abspath(__file__))
