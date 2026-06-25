@@ -1561,16 +1561,47 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         t_d = st.text_area("Descripción de la gestión")
                         t_p = st.selectbox("Prioridad", ["Alta", "Media", "Baja"])
                         t_f = st.date_input("Fecha de Cumplimiento")
-                        if st.form_submit_button("Registrar Tarea"):
-                            df_t = pd.read_csv(ARCHIVO_TAREAS)
+                        
+                        st.markdown("---")
+                        st.markdown("<span style='font-size:13px; color:#6b778c;'>Dejar en blanco para asignarla a ti mismo. Para delegar, escribe el nombre del colega.</span>", unsafe_allow_html=True)
+                        t_delegado = st.text_input("Asignar Tarea a (Opcional)", placeholder="Ej: Eduardo Riquelme")
+                        
+                        if st.form_submit_button("Registrar y Asignar Tarea", type="primary"):
+                            # Lógica de Asignación Ciega
+                            destinatario_file = ARCHIVO_TAREAS # Por defecto, mi propio archivo
+                            destinatario_usr = usuario_actual
+                            
+                            if t_delegado.strip():
+                                nombre_buscado = t_delegado.strip().lower()
+                                # Buscar en secreto en la base de nombres reales
+                                for user_key, real_name in NOMBRES_REALES.items():
+                                    if nombre_buscado in real_name.lower() or nombre_buscado == user_key.lower():
+                                        destinatario_usr = user_key
+                                        destinatario_file = f"base_tareas_{user_key}.csv"
+                                        break
+                            
+                            # Validar que el archivo de destino exista (por si es una cuenta muy nueva)
+                            if not os.path.exists(destinatario_file):
+                                pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(destinatario_file, index=False)
+                                
+                            df_t_destino = pd.read_csv(destinatario_file)
                             nueva_t = {
-                                'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': usuario_actual,
-                                'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
+                                'ID_Tarea': str(uuid.uuid4())[:8], 
+                                'ROL': rol_actual, 
+                                'Creador': nombre_real_usuario, # Queda registrado quién la mandó
+                                'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
+                                'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
                                 'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p
                             }
-                            df_t = pd.concat([df_t, pd.DataFrame([nueva_t])], ignore_index=True)
-                            df_t.to_csv(ARCHIVO_TAREAS, index=False)
+                            df_t_destino = pd.concat([df_t_destino, pd.DataFrame([nueva_t])], ignore_index=True)
+                            df_t_destino.to_csv(destinatario_file, index=False)
+                            
                             st.session_state['creando_tarea'] = False
+                            
+                            if destinatario_usr == usuario_actual:
+                                st.success("Tarea registrada en tu agenda.")
+                            else:
+                                st.success("Tarea enviada y delegada exitosamente de forma confidencial.")
                             st.rerun()
                             
                 df_t_local = pd.read_csv(ARCHIVO_TAREAS)
@@ -1919,7 +1950,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
     st.title("👑 Panel de Control - SaaS JuriSync")
     st.markdown("Crea cuentas nuevas, asigna planes o modifica el nivel de acceso de tus clientes actuales.")
     
-    tab_crear, tab_editar = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes Actuales"])
+    tab_crear, tab_editar, tab_vision = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes", "👁️ Visión Global (God Mode)"])
     
     with tab_crear:
         with st.container(border=True):
@@ -1954,7 +1985,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                         df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
                         df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
                         
-                        # Le creamos su base de tareas lista para operar y evitar errores
+                        # Le creamos su base de tareas lista para operar y evitar errores futuros
                         archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
                         if not os.path.exists(archivo_tareas_nuevo):
                             pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(archivo_tareas_nuevo, index=False)
@@ -1988,10 +2019,57 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                     df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
                     st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados a Plan {nuevo_plan_edit}.")
                     st.rerun()
-    
-    st.subheader("👥 Clientes y Planes Actuales")
-    df_vista = pd.read_csv(ARCHIVO_USUARIOS)
-    st.dataframe(df_vista[['Usuario', 'Nombre_Real', 'Plan', 'Correo', 'Debe_Cambiar_Clave']], use_container_width=True)
+        
+        st.subheader("👥 Clientes y Planes Actuales")
+        df_vista = pd.read_csv(ARCHIVO_USUARIOS)
+        st.dataframe(df_vista[['Usuario', 'Nombre_Real', 'Plan', 'Correo', 'Debe_Cambiar_Clave']], use_container_width=True)
+
+    with tab_vision:
+        st.subheader("Monitoreo Absoluto de la Oficina")
+        st.markdown("Visualización en tiempo real de toda la información ingresada por los usuarios del sistema. **Solo tú tienes este nivel de acceso.**")
+        
+        df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
+        todas_causas = []
+        todas_tareas = []
+        
+        # El sistema recorre los archivos de todos los usuarios como un fantasma
+        for u in df_usuarios_admin['Usuario']:
+            arch_c = f"base_causas_{u}.csv"
+            arch_t = f"base_tareas_{u}.csv"
+            
+            if os.path.exists(arch_c):
+                temp_c = pd.read_csv(arch_c)
+                if not temp_c.empty:
+                    temp_c['Usuario_Propietario'] = u # Etiqueta para saber de quién es
+                    todas_causas.append(temp_c)
+                    
+            if os.path.exists(arch_t):
+                temp_t = pd.read_csv(arch_t)
+                if not temp_t.empty:
+                    temp_t['Usuario_Propietario'] = u
+                    todas_tareas.append(temp_t)
+        
+        col_v1, col_v2 = st.columns(2)
+        
+        with col_v1:
+            st.markdown("<div class='dash-card'><h4>Causas Globales</h4>", unsafe_allow_html=True)
+            if todas_causas:
+                df_full_causas = pd.concat(todas_causas, ignore_index=True)
+                st.metric("Total de Causas en JuriSync", len(df_full_causas))
+                st.dataframe(df_full_causas[['Usuario_Propietario', 'ROL', 'Cliente', 'TRIBUNAL', 'Total_Honorarios']], use_container_width=True)
+            else:
+                st.info("No hay causas registradas en el sistema aún.")
+            st.markdown("</div>", unsafe_allow_html=True)
+            
+        with col_v2:
+            st.markdown("<div class='dash-card'><h4>Tareas Operativas Globales</h4>", unsafe_allow_html=True)
+            if todas_tareas:
+                df_full_tareas = pd.concat(todas_tareas, ignore_index=True)
+                st.metric("Total de Gestiones Pendientes", len(df_full_tareas[df_full_tareas['Estado'] == 'En progreso']))
+                st.dataframe(df_full_tareas[['Usuario_Propietario', 'Titulo', 'Estado', 'Fecha_Vencimiento']], use_container_width=True)
+            else:
+                st.info("No hay tareas creadas.")
+            st.markdown("</div>", unsafe_allow_html=True)
 
 # NUEVO MÓDULO: REDACTOR AUTOMÁTICO IA
 elif st.session_state['menu_radio'] == "📝 Redactor IA":
