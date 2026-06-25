@@ -1226,7 +1226,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         else: 
             st.dataframe(df_contratos_reg, use_container_width=True)
 
-    with tab_importar:
+   with tab_importar:
         st.markdown("Sube un contrato ya firmado en PDF o Word. La Inteligencia Artificial lo leerá, extraerá los datos clave y poblará tu directorio de clientes y contabilidad.")
         archivo_contrato = st.file_uploader("📂 Subir Contrato del Cliente", type=["pdf", "docx"])
         
@@ -1234,7 +1234,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             if not archivo_contrato:
                 st.error("⚠️ Tienes que subir un archivo primero compadre.")
             else:
-                with st.spinner("🤖 Leyendo cláusulas y extrayendo datos jurídicos..."):
+                with st.spinner("🤖 Leyendo cláusulas y extrayendo datos jurídicos (incluyendo mensualidades)..."):
                     try:
                         texto_contrato = ""
                         if archivo_contrato.name.endswith('.pdf'):
@@ -1263,6 +1263,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                                     
                         modelo = genai.GenerativeModel(modelo_elegido)
                         
+                        # PROMPT ACTUALIZADO: Ahora le exigimos que busque las cuotas/mensualidades
                         prompt_extractor = f"""
                         Eres un asistente legal. Lee el siguiente contrato.
                         Extrae los datos del CLIENTE (no del abogado).
@@ -1271,9 +1272,11 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             "cliente_nombre": "nombre completo",
                             "cliente_rut": "RUT con guion",
                             "servicio": "tipo de juicio o servicio",
-                            "honorarios_total": 0 
+                            "honorarios_total": 0,
+                            "cuotas_totales": 1
                         }}
-                        Nota: En "honorarios_total" pon SOLO el número entero (ej: 2500000), sin signos de peso ni puntos. Si no sale, pon 0.
+                        Nota: En "honorarios_total" pon SOLO el número entero (ej: 2500000), sin signos de peso ni puntos. 
+                        En "cuotas_totales" pon SOLO el número entero de mensualidades o cuotas pactadas (ej: 12). Si se paga al contado o no especifica, pon 1.
                         
                         CONTRATO:
                         {texto_contrato[:15000]}
@@ -1282,7 +1285,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         respuesta = modelo.generate_content(prompt_extractor)
                         
                         # Limpieza del JSON ultra segura en una sola línea
-                        texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
+                        texto_json = respuesta.text.replace("```json", "").replace("
+```", "").strip()
                         datos_extraidos = json.loads(texto_json)
                         
                         df_causas = pd.read_csv(ARCHIVO_BD)
@@ -1296,7 +1300,9 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
                             'Estado_Honorarios': 'Pendientes' if int(datos_extraidos.get('honorarios_total', 0)) > 0 else 'Sin fijar',
                             'Total_Honorarios': int(datos_extraidos.get('honorarios_total', 0)),
-                            'Cuotas_Totales': 1, 'Cuotas_Pagadas': 0
+                            # AQUÍ LEEMOS LAS CUOTAS DIRECTO DE LA IA:
+                            'Cuotas_Totales': int(datos_extraidos.get('cuotas_totales', 1)), 
+                            'Cuotas_Pagadas': 0
                         }
                         df_causas = pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True)
                         df_causas.to_csv(ARCHIVO_BD, index=False)
@@ -1312,7 +1318,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        st.success(f"✅ ¡Operación exitosa! La IA analizó el contrato y agregó a **{nombre_extraido}** directo a tu listado de clientes y módulo de contabilidad.")
+                        st.success(f"✅ ¡Operación exitosa! La IA analizó el contrato y agregó a **{nombre_extraido}** (con sus cuotas correspondientes) directo a tu listado de clientes y módulo de contabilidad.")
                         
                     except Exception as e:
                         st.error(f"❌ Error técnico al procesar el archivo o contactar a la IA: {e}")
