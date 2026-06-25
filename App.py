@@ -872,7 +872,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     df_c = pd.read_csv(ARCHIVO_BD)
     
     # FILTRO: Solo mostramos contratos con honorarios activos
-    # Excluimos causas sin honorarios o marcadas como 'Pagados'
+    # Excluimos causas sin honorarios o ya marcadas como 'Pagados'
     df_activos = df_c[
         (df_c['Total_Honorarios'] > 0) & 
         (df_c['Estado_Honorarios'] == "Pendientes")
@@ -881,21 +881,22 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     if df_activos.empty:
         st.info("No hay contratos activos con honorarios pendientes de pago.")
     else:
-        # Centramos el contenido
+        # Centramos el contenido usando columnas laterales como márgenes
         col_padre_l, col_padre_c, col_padre_r = st.columns([0.5, 5, 0.5])
         
         with col_padre_c:
+            # Selección de cliente
             cliente_sel = st.selectbox("Selecciona un Cliente para ver su Ficha Contable:", df_activos['Cliente'].unique())
             datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
             
-            # Recuperamos fecha de inicio guardada por la IA
+            # Lógica para recuperar la fecha de inicio extraída por la IA
             fecha_inicio_str = datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))
             try:
                 fecha_inicio = datetime.strptime(str(fecha_inicio_str), "%Y-%m-%d")
             except:
                 fecha_inicio = datetime.now()
             
-            # Métricas rápidas
+            # Métricas
             c_f1, c_f2, c_f3 = st.columns(3)
             c_f1.metric("Total Pactado", f"${datos_cli['Total_Honorarios']:,.0f}")
             c_f2.metric("Cuotas Pagadas", f"{datos_cli['Cuotas_Pagadas']} de {datos_cli['Cuotas_Totales']}")
@@ -907,21 +908,23 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             st.write("---")
             st.subheader(f"Detalle de Cuotas: {cliente_sel}")
             
-            # Generar tabla de cuotas
+            # Generar lista de cuotas con cálculo de vencimiento
             cuotas_data = []
             hoy = datetime.now()
             
             for i in range(1, int(datos_cli['Cuotas_Totales']) + 1):
-                # Calcular vencimiento mensual
+                # Calcular vencimiento mensual preciso
                 mes = (fecha_inicio.month + i - 2) % 12 + 1
                 anio = fecha_inicio.year + (fecha_inicio.month + i - 2) // 12
-                # Manejo de error si el día excede días del mes
+                # Ajuste por días del mes para evitar error en fechas (ej: 31 de feb)
                 try:
                     fecha_venc = datetime(anio, mes, fecha_inicio.day)
                 except ValueError:
                     fecha_venc = datetime(anio, mes, 28)
                 
                 estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else "❌ Pendiente"
+                
+                # Alerta visual si está pendiente y ya venció
                 if estado == "❌ Pendiente" and fecha_venc < hoy:
                     estado = "⚠️ VENCIDA"
                 
@@ -932,14 +935,12 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                     "Estado": estado
                 })
                 
-            df_cuotas = pd.DataFrame(cuotas_data)
-            st.table(df_cuotas.style.format({"Monto": "${:,.0f}"}))
+            st.table(pd.DataFrame(cuotas_data).style.format({"Monto": "${:,.0f}"}))
             
-            # Acciones de pago
+            # Botones de acción centrados
             c_b1, c_b2 = st.columns(2)
             if c_b1.button("📥 Registrar Pago de una Cuota", type="primary", use_container_width=True):
                 if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
-                    # Actualizar en el df base
                     df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] += 1
                     # Si completó todas, cerramos el caso en contabilidad
                     if df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
