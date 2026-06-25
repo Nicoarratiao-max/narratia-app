@@ -1114,7 +1114,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        modelo = genai.GenerativeModel('gemini-1.5-flash-latest')
                         
                         prompt_maestro = f"""
                         Actúa como un Abogado Supervisor experto en litigación en Chile, específicamente en el área: {materia}.
