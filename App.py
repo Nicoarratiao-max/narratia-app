@@ -1191,75 +1191,75 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         if not DOCX_READY: 
             st.error("⚠️ El motor `python-docx` no está instalado en el servidor.")
         else:
-            st.markdown("Formulario parametrizado para redacción de contratos desde cero:")
+            st.markdown("### Módulo 1: Naturaleza Jurídica del Juicio")
+            st.markdown("<span style='color:#6b778c; font-size:14px;'>Selecciona primero la especialidad y la acción para activar el contrato:</span>", unsafe_allow_html=True)
+            
+            # --- DICCIONARIO INTELIGENTE FUERA DEL FORM PARA TRABAJAR EN TIEMPO REAL ---
+            diccionario_servicios = {
+                "Derecho Civil y Patrimonial": [
+                    "Juicio Ejecutivo (Cobro de Pagaré / Facturas)", 
+                    "Tercería de Posesión / Dominio",
+                    "Liquidación Voluntaria (Ley de Quiebras)",
+                    "Renegociación de Deudas",
+                    "Juicio de Arrendamiento (Ley Devuélveme mi Casa)",
+                    "Juicio Ordinario de Indemnización de Perjuicios",
+                    "Juicio de Precario",
+                    "Posesión Efectiva y Partición",
+                    "Estudio de Títulos y Redacción de Escrituras"
+                ],
+                "Derecho de Familia": [
+                    "Pensión de Alimentos Mayores",
+                    "Pensión de Alimentos Menores",
+                    "Aumento / Rebaja / Cese de Pensión de Alimentos",
+                    "Autorización de Salida del País",
+                    "Divorcio de Mutuo Acuerdo",
+                    "Divorcio Unilateral por Cese de Convivencia",
+                    "Divorcio Culposo",
+                    "Cuidado Personal (Tuición)",
+                    "Relación Directa y Regular (Visitas)",
+                    "Medidas de Protección y VIF"
+                ],
+                "Derecho Laboral": [
+                    "Demanda por Despido Injustificado / Indebido",
+                    "Demanda por Despido Indirecto (Autodespido)",
+                    "Tutela Laboral por Vulneración de Derechos Fundamentales",
+                    "Cobro de Prestaciones y Cotizaciones Adeudadas (Ley Bustos)",
+                    "Defensa Corporativa del Empleador"
+                ],
+                "Derecho Penal": [
+                    "Querella Criminal",
+                    "Defensa Penal (Etapa de Garantía)",
+                    "Defensa Penal (Juicio Oral en lo Penal)",
+                    "Negociación de Salidas Alternativas (SCP / AR)",
+                    "Eliminación de Antecedentes Penales"
+                ],
+                "Derecho Constitucional": [
+                    "Recurso de Protección",
+                    "Recurso de Amparo"
+                ],
+                "Derecho del Consumidor": [
+                    "Querella Infraccional y Demanda Civil (JPL)",
+                    "Defensa en Demanda Colectiva ante SERNAC"
+                ],
+                "Derecho Administrativo": [
+                    "Reclamo de Ilegalidad Municipal",
+                    "Defensa en Sumario Administrativo",
+                    "Demanda de Nulidad de Derecho Público"
+                ]
+            }
+            
+            with st.container(border=True):
+                col_mat1, col_mat2 = st.columns(2)
+                with col_mat1:
+                    materia_sel = st.selectbox("Rama del Derecho", list(diccionario_servicios.keys()))
+                with col_mat2:
+                    accion_sel = st.selectbox("Acción / Procedimiento Específico", diccionario_servicios[materia_sel])
+                
+                tipo_servicio_final = f"{materia_sel}: {accion_sel}"
+
+            # --- AQUÍ EMPIEZA EL FORMULARIO PARA EL RESTO DE LOS DATOS ---
             with st.form("form_generador", clear_on_submit=False):
-                with st.container(border=True):
-                    st.markdown("#### Módulo 1: Naturaleza Jurídica del Juicio")
-                    
-                    # --- DICCIONARIO INTELIGENTE DE MATERIAS Y ACCIONES CHILENAS ---
-                    diccionario_servicios = {
-                        "Derecho Civil y Patrimonial": [
-                            "Juicio Ejecutivo (Cobro de Pagaré / Facturas)", 
-                            "Tercería de Posesión / Dominio",
-                            "Liquidación Voluntaria (Ley de Quiebras)",
-                            "Renegociación de Deudas",
-                            "Juicio de Arrendamiento (Ley Devuélveme mi Casa)",
-                            "Juicio Ordinario de Indemnización de Perjuicios",
-                            "Juicio de Precario",
-                            "Posesión Efectiva y Partición",
-                            "Estudio de Títulos y Redacción de Escrituras"
-                        ],
-                        "Derecho de Familia": [
-                            "Pensión de Alimentos Mayores",
-                            "Pensión de Alimentos Menores",
-                            "Aumento / Rebaja / Cese de Pensión de Alimentos",
-                            "Autorización de Salida del País",
-                            "Divorcio de Mutuo Acuerdo",
-                            "Divorcio Unilateral por Cese de Convivencia",
-                            "Divorcio Culposo",
-                            "Cuidado Personal (Tuición)",
-                            "Relación Directa y Regular (Visitas)",
-                            "Medidas de Protección y VIF"
-                        ],
-                        "Derecho Laboral": [
-                            "Demanda por Despido Injustificado / Indebido",
-                            "Demanda por Despido Indirecto (Autodespido)",
-                            "Tutela Laboral por Vulneración de Derechos Fundamentales",
-                            "Cobro de Prestaciones y Cotizaciones Adeudadas (Ley Bustos)",
-                            "Defensa Corporativa del Empleador"
-                        ],
-                        "Derecho Penal": [
-                            "Querella Criminal",
-                            "Defensa Penal (Etapa de Garantía)",
-                            "Defensa Penal (Juicio Oral en lo Penal)",
-                            "Negociación de Salidas Alternativas (SCP / AR)",
-                            "Eliminación de Antecedentes Penales"
-                        ],
-                        "Derecho Constitucional": [
-                            "Recurso de Protección",
-                            "Recurso de Amparo"
-                        ],
-                        "Derecho del Consumidor": [
-                            "Querella Infraccional y Demanda Civil (JPL)",
-                            "Defensa en Demanda Colectiva ante SERNAC"
-                        ],
-                        "Derecho Administrativo": [
-                            "Reclamo de Ilegalidad Municipal",
-                            "Defensa en Sumario Administrativo",
-                            "Demanda de Nulidad de Derecho Público"
-                        ]
-                    }
-                    
-                    col_mat1, col_mat2 = st.columns(2)
-                    with col_mat1:
-                        materia_sel = st.selectbox("Rama del Derecho", list(diccionario_servicios.keys()))
-                    with col_mat2:
-                        accion_sel = st.selectbox("Acción / Procedimiento Específico", diccionario_servicios[materia_sel])
-                        
-                    # Unificamos el texto para que el Word lo lea de corrido
-                    tipo_servicio_final = f"{materia_sel}: {accion_sel}"
-                    
-                    detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas en la Representación", height=100, placeholder="Ej: Redacción y presentación de demanda, asistencia a audiencias de conciliación y prueba, alegatos en Corte de Apelaciones...")
+                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas en la Representación", height=100, placeholder="Ej: Redacción y presentación de demanda, asistencia a audiencias de conciliación y prueba, alegatos en Corte de Apelaciones...")
                 
                 col_ab, col_cl = st.columns(2)
                 with col_ab:
@@ -1421,7 +1421,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         respuesta = modelo.generate_content(prompt_extractor)
                         
-                        # --- LA CORRECCIÓN DE COMILLAS ESTÁ AQUÍ ---
                         texto_json = respuesta.text
                         texto_json = texto_json.replace('```json', '')
                         texto_json = texto_json.replace('```', '')
