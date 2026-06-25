@@ -871,92 +871,71 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     st.title("💰 Panel de Honorarios y Contabilidad")
     df_c = pd.read_csv(ARCHIVO_BD)
     
-    # FILTRO: Solo mostramos contratos con honorarios activos
-    # Excluimos causas sin honorarios o ya marcadas como 'Pagados'
-    df_activos = df_c[
-        (df_c['Total_Honorarios'] > 0) & 
-        (df_c['Estado_Honorarios'] == "Pendientes")
-    ].copy()
+    df_activos = df_c[(df_c['Total_Honorarios'] > 0) & (df_c['Estado_Honorarios'] == "Pendientes")].copy()
     
     if df_activos.empty:
         st.info("No hay contratos activos con honorarios pendientes de pago.")
     else:
-        # Centramos el contenido usando columnas laterales como márgenes
-        col_padre_l, col_padre_c, col_padre_r = st.columns([0.5, 5, 0.5])
+        # Contenedor centralizado para mejor armonía
+        col_l, col_c, col_r = st.columns([0.2, 8, 0.2])
         
-        with col_padre_c:
-            # Selección de cliente
-            cliente_sel = st.selectbox("Selecciona un Cliente para ver su Ficha Contable:", df_activos['Cliente'].unique())
+        with col_c:
+            cliente_sel = st.selectbox("Selecciona un Cliente para gestionar su ficha:", df_activos['Cliente'].unique())
             datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
             
-            # Lógica para recuperar la fecha de inicio extraída por la IA
-            fecha_inicio_str = datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))
-            try:
-                fecha_inicio = datetime.strptime(str(fecha_inicio_str), "%Y-%m-%d")
-            except:
-                fecha_inicio = datetime.now()
-            
-            # Métricas
+            # --- SECCIÓN DE EDICIÓN MANUAL DE FECHA ---
+            with st.expander("⚙️ Ajustar Fecha de Inicio de Pagos"):
+                fecha_actual_cli = datetime.strptime(str(datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))), "%Y-%m-%d")
+                nueva_fecha = st.date_input("Fecha de inicio de la primera cuota:", value=fecha_actual_cli)
+                if st.button("Guardar nueva fecha de inicio"):
+                    df_c.loc[df_c['Cliente'] == cliente_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
+                    df_c.to_csv(ARCHIVO_BD, index=False)
+                    st.rerun()
+
+            # Métricas centradas
             c_f1, c_f2, c_f3 = st.columns(3)
             c_f1.metric("Total Pactado", f"${datos_cli['Total_Honorarios']:,.0f}")
             c_f2.metric("Cuotas Pagadas", f"{datos_cli['Cuotas_Pagadas']} de {datos_cli['Cuotas_Totales']}")
-            
             valor_cuota = datos_cli['Total_Honorarios'] / datos_cli['Cuotas_Totales']
-            saldo_pendiente = datos_cli['Total_Honorarios'] - (valor_cuota * datos_cli['Cuotas_Pagadas'])
-            c_f3.metric("Saldo Pendiente", f"${saldo_pendiente:,.0f}")
+            saldo = datos_cli['Total_Honorarios'] - (valor_cuota * datos_cli['Cuotas_Pagadas'])
+            c_f3.metric("Saldo Pendiente", f"${saldo:,.0f}")
             
             st.write("---")
             st.subheader(f"Detalle de Cuotas: {cliente_sel}")
             
-            # Generar lista de cuotas con cálculo de vencimiento
+            # Lógica de cálculo
+            fecha_inicio = datetime.strptime(str(datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))), "%Y-%m-%d")
             cuotas_data = []
             hoy = datetime.now()
             
             for i in range(1, int(datos_cli['Cuotas_Totales']) + 1):
-                # Calcular vencimiento mensual preciso
+                # Calcular vencimiento mensual
                 mes = (fecha_inicio.month + i - 2) % 12 + 1
                 anio = fecha_inicio.year + (fecha_inicio.month + i - 2) // 12
-                # Ajuste por días del mes para evitar error en fechas (ej: 31 de feb)
                 try:
                     fecha_venc = datetime(anio, mes, fecha_inicio.day)
                 except ValueError:
                     fecha_venc = datetime(anio, mes, 28)
                 
-                estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else "❌ Pendiente"
-                
-                # Alerta visual si está pendiente y ya venció
-                if estado == "❌ Pendiente" and fecha_venc < hoy:
-                    estado = "⚠️ VENCIDA"
-                
-                cuotas_data.append({
-                    "Cuota N°": i, 
-                    "Fecha Vencimiento": fecha_venc.strftime("%d/%m/%Y"),
-                    "Monto": valor_cuota, 
-                    "Estado": estado
-                })
-                
+                estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else ("⚠️ VENCIDA" if fecha_venc < hoy else "❌ Pendiente")
+                cuotas_data.append({"Cuota": i, "Vencimiento": fecha_venc.strftime("%d/%m/%Y"), "Monto": valor_cuota, "Estado": estado})
+            
+            # Tabla con estilo más armónico
             st.table(pd.DataFrame(cuotas_data).style.format({"Monto": "${:,.0f}"}))
             
-            # Botones de acción centrados
+            # Botones de acción
             c_b1, c_b2 = st.columns(2)
-            if c_b1.button("📥 Registrar Pago de una Cuota", type="primary", use_container_width=True):
+            if c_b1.button("📥 Registrar Pago", type="primary", use_container_width=True):
                 if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
                     df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] += 1
-                    # Si completó todas, cerramos el caso en contabilidad
                     if df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
                         df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pagados"
-                    df_c.to_csv(ARCHIVO_BD, index=False)
-                    st.success("¡Pago registrado!")
-                    st.rerun()
-                else:
-                    st.warning("El cliente ya está al día.")
-                    
-            if c_b2.button("⏪ Revertir último pago", use_container_width=True):
+                    df_c.to_csv(ARCHIVO_BD, index=False); st.rerun()
+            if c_b2.button("⏪ Revertir Pago", use_container_width=True):
                 if datos_cli['Cuotas_Pagadas'] > 0:
                     df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] -= 1
                     df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pendientes"
-                    df_c.to_csv(ARCHIVO_BD, index=False)
-                    st.rerun()
+                    df_c.to_csv(ARCHIVO_BD, index=False); st.rerun()
 
 # 3. TRÁMITES Y CONTROL DE AUXILIARES
 elif st.session_state['menu_radio'] == "📝 Trámites":
