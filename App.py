@@ -1710,11 +1710,11 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 df_msgs = pd.concat([df_msgs, pd.DataFrame([nuevo_msj])], ignore_index=True)
                 df_msgs.to_csv(ARCHIVO_MENSAJES, index=False)
                 st.rerun()
-# 10. CLIENTES DIRECTOS (LISTA ELEGANTE CLARA)
+# 10. CLIENTES DIRECTOS (CON PESTAÑAS Y EDICIÓN COMPLETA)
 elif st.session_state['menu_radio'] == "👥 Clientes":
     df_causas = pd.read_csv(ARCHIVO_BD)
     
-    if st.session_state['cliente_seleccionado'] is None:
+    if st.session_state.get('cliente_seleccionado') is None:
         st.title("👥 Directorio de Clientes")
         if st.button("➕ Crear Nuevo Cliente", type="primary"):
             st.session_state['creando_cliente'] = not st.session_state.get('creando_cliente', False)
@@ -1727,12 +1727,14 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     if st.form_submit_button("Guardar"):
                         nueva_ficha = {'Cliente': n_cli_nom, 'RUT': n_cli_rut, 'Tipo_Negocio': 'Propio', 'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 1, 'Cuotas_Pagadas': 0}
                         df_causas = pd.concat([df_causas, pd.DataFrame([nueva_ficha])], ignore_index=True)
-                        df_causas.to_csv(ARCHIVO_BD, index=False); st.rerun()
+                        df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['creando_cliente'] = False; st.rerun()
 
         st.markdown("### Listado de Clientes")
-        for cli_nom in df_causas['Cliente'].dropna().unique():
-            if cli_nom != "--" and st.button(f"👤 {cli_nom}"):
-                st.session_state['cliente_seleccionado'] = cli_nom; st.rerun()
+        clientes_unicos = df_causas['Cliente'].dropna().unique().tolist()
+        for cli_nom in clientes_unicos:
+            if cli_nom != "--" and str(cli_nom).strip() != "":
+                if st.button(f"👤 {cli_nom}", key=f"v_cli_{cli_nom}"):
+                    st.session_state['cliente_seleccionado'] = cli_nom; st.rerun()
     
     else:
         cli_actual = st.session_state['cliente_seleccionado']
@@ -1742,21 +1744,21 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
             st.session_state['cliente_seleccionado'] = None; st.rerun()
             
         st.title(f"Ficha: {cli_actual}")
-        tab1, tab2, tab3 = st.tabs(["👤 Información", "💰 Contabilidad", "📄 Contratos"])
+        tab_info, tab_cont, tab_docs = st.tabs(["👤 Información", "💰 Contabilidad", "📄 Contratos"])
         
-        with tab1:
-            col_i, col_d = st.columns([1, 2])
+        with tab_info:
+            col_i, col_d = st.columns([1, 2.5])
             with col_i:
                 with st.container(border=True):
                     if st.session_state.get('editando_cli'):
                         with st.form("edit_cli"):
-                            n_nom = st.text_input("Nombre", datos.get('Cliente', ''))
-                            n_rut = st.text_input("RUT", datos.get('RUT', ''))
-                            n_tel = st.text_input("Teléfono", datos.get('Teléfono', ''))
-                            n_cor = st.text_input("Correo", datos.get('Correo', ''))
-                            n_cla = st.text_input("Clave Única", datos.get('Clave_unica', ''))
-                            n_dom = st.text_input("Domicilio", datos.get('Direccion', ''))
-                            if st.form_submit_button("💾 Guardar"):
+                            n_nom = st.text_input("Nombre", str(datos.get('Cliente', '')))
+                            n_rut = st.text_input("RUT", str(datos.get('RUT', '')))
+                            n_tel = st.text_input("Teléfono", str(datos.get('Teléfono', '')))
+                            n_cor = st.text_input("Correo", str(datos.get('Correo', '')))
+                            n_cla = st.text_input("Clave Única", str(datos.get('Clave_unica', '')))
+                            n_dom = st.text_input("Domicilio", str(datos.get('Direccion', '')))
+                            if st.form_submit_button("💾 Guardar Datos"):
                                 df_causas.loc[df_causas['Cliente'] == cli_actual, ['Cliente', 'RUT', 'Teléfono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
                                 df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['editando_cli'] = False; st.rerun()
                     else:
@@ -1766,19 +1768,49 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                         st.write(f"**Correo:** {datos.get('Correo', '--')}")
                         st.write(f"**Clave Única:** {datos.get('Clave_unica', '--')}")
                         st.write(f"**Domicilio:** {datos.get('Direccion', '--')}")
-                        if st.button("✏️ Editar Datos"): st.session_state['editando_cli'] = True; st.rerun()
+                        if st.button("✏️ Editar Datos", use_container_width=True): st.session_state['editando_cli'] = True; st.rerun()
             
             with col_d:
-                if st.button("➕ Crear Nueva Causa"):
-                    st.session_state['creando_causa'] = True
+                if st.button("➕ Crear Nueva Causa para este Cliente"):
+                    st.session_state['creando_causa_cli'] = True
                 
-                if st.session_state.get('creando_causa'):
-                    with st.form("nueva_causa_form"):
-                        n_rol = st.text_input("Nuevo ROL")
-                        if st.form_submit_button("Guardar Causa"):
-                            nueva_c = {'ROL': n_rol, 'Cliente': cli_actual, 'Tipo_Negocio': 'Propio'}
-                            df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
-                            df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['creando_causa'] = False; st.rerun()
+                if st.session_state.get('creando_causa_cli'):
+                    with st.container(border=True):
+                        with st.form("nueva_causa_form"):
+                            st.markdown("#### Datos de la Nueva Causa")
+                            c_nc1, c_nc2 = st.columns(2)
+                            n_rol = c_nc1.text_input("ROL / RIT", placeholder="Ej: C-1234-2026")
+                            n_trib = c_nc2.text_input("Tribunal", placeholder="Ej: 1° Juzgado Civil")
+                            n_carat = st.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
+                            n_serv = st.selectbox("Materia / Servicio", ["Juicio ejecutivo", "Derecho de familia", "Derecho civil", "Derecho penal", "Liquidación voluntaria", "Otro"])
+                            
+                            c_btn1, c_btn2 = st.columns(2)
+                            if c_btn1.form_submit_button("💾 Guardar Causa", type="primary"):
+                                if n_rol.strip() == "":
+                                    st.error("⚠️ El ROL es obligatorio.")
+                                else:
+                                    nueva_c = {
+                                        'ROL': n_rol, 
+                                        'TRIBUNAL': n_trib, 
+                                        'CARATULADO': n_carat, 
+                                        'Cliente': cli_actual,
+                                        'Servicio': n_serv,
+                                        'RUT': datos.get('RUT', '--'), 
+                                        'Teléfono': datos.get('Teléfono', '--'), 
+                                        'Tipo_Negocio': 'Propio', 
+                                        'Clave_unica': datos.get('Clave_unica', '--'),
+                                        'Correo': datos.get('Correo', '--'), 
+                                        'Direccion': datos.get('Direccion', '--'), 
+                                        'SAC': '--', 'Sucursal': '--',
+                                        'Estado_Honorarios': 'Sin fijar', 
+                                        'Total_Honorarios': 0, 
+                                        'Cuotas_Totales': 1, 
+                                        'Cuotas_Pagadas': 0
+                                    }
+                                    df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
+                                    df_causas.to_csv(ARCHIVO_BD, index=False)
+                                    st.session_state['creando_causa_cli'] = False
+                                    st.rerun()
 
                 st.subheader("Causas Asociadas")
                 causas_cli = df_causas[df_causas['Cliente'] == cli_actual]
@@ -1787,37 +1819,29 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                         with st.container(border=True):
                             c1, c2 = st.columns([3, 1])
                             c1.markdown(f"**Rol:** {c['ROL']} | **Caratulado:** {c.get('CARATULADO', '--')}")
-                            if c2.button("📂 Ir al Expediente", key=f"btn_ir_{c['ROL']}"):
+                            if c2.button("📂 Ir al Expediente", key=f"btn_ir_{c['ROL']}", use_container_width=True):
                                 ir_a_expediente(c['ROL']); st.rerun()
 
-        with tab2:
-            st.subheader("Estado Financiero")
+        with tab_cont:
+            st.subheader("Resumen Financiero")
+            try: t_hon_c = float(datos.get('Total_Honorarios', 0)); t_hon_c = 0.0 if pd.isna(t_hon_c) else t_hon_c
+            except: t_hon_c = 0.0
+            try: c_tot_c = float(datos.get('Cuotas_Totales', 1)); c_tot_c = 1.0 if pd.isna(c_tot_c) or c_tot_c == 0 else c_tot_c
+            except: c_tot_c = 1.0
+            try: c_pag_c = float(datos.get('Cuotas_Pagadas', 0)); c_pag_c = 0.0 if pd.isna(c_pag_c) else c_pag_c
+            except: c_pag_c = 0.0
             
-            # Blindaje matemático: forzamos a que todo sea número y evitamos división por cero
-            try:
-                t_hon = float(datos.get('Total_Honorarios', 0))
-                if pd.isna(t_hon): t_hon = 0.0
-            except:
-                t_hon = 0.0
-                
-            try:
-                c_tot = float(datos.get('Cuotas_Totales', 1))
-                if pd.isna(c_tot) or c_tot == 0: c_tot = 1.0
-            except:
-                c_tot = 1.0
-                
-            try:
-                c_pag = float(datos.get('Cuotas_Pagadas', 0))
-                if pd.isna(c_pag): c_pag = 0.0
-            except:
-                c_pag = 0.0
-                
-            saldo_calculado = t_hon - ((t_hon / c_tot) * c_pag)
-            st.write(f"Saldo Pendiente: **${saldo_calculado:,.0f}**")
-        with tab3:
+            saldo_cli = t_hon_c - ((t_hon_c / c_tot_c) * c_pag_c)
+            st.write(f"**Monto Total:** ${t_hon_c:,.0f}")
+            st.write(f"**Cuotas Pagadas:** {int(c_pag_c)} de {int(c_tot_c)}")
+            st.write(f"**Saldo Pendiente:** ${saldo_cli:,.0f}")
+
+        with tab_docs:
             st.subheader("Contratos Vinculados")
             df_con = pd.read_csv(ARCHIVO_CONTRATOS)
-            st.dataframe(df_con[df_con['Cliente'] == cli_actual])
+            con_cli = df_con[df_con['Cliente'] == cli_actual]
+            if con_cli.empty: st.write("No hay contratos asociados.")
+            else: st.dataframe(con_cli)
 
 # 11. GESTOR GLOBAL DE TAREAS
 elif st.session_state['menu_radio'] == "☑️ Tareas":
