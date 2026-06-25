@@ -1146,7 +1146,6 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
 elif st.session_state['menu_radio'] == "📄 Contratos":
     st.title("📄 Generador e Historial de Contratos Jurídicos")
     
-    # Agregamos la tercera pestaña para la IA
     tab_gen, tab_reg, tab_importar = st.tabs(["Generar Nuevo Contrato", "Registro de Copias Guardadas", "🤖 Importar Contrato con IA"])
     
     with tab_gen:
@@ -1223,9 +1222,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
         else: 
             st.dataframe(df_contratos_reg, use_container_width=True)
 
-    # --- NUEVA PESTAÑA: MAGIA DE EXTRACCIÓN CON IA ---
     with tab_importar:
-        st.markdown("Sube un contrato ya firmado en PDF o Word. La Inteligencia Artificial lo leerá, extraerá los datos clave y poblará tu directorio de clientes y contabilidad al tiro.")
+        st.markdown("Sube un contrato ya firmado en PDF o Word. La Inteligencia Artificial lo leerá, extraerá los datos clave y poblará tu directorio de clientes y contabilidad.")
         archivo_contrato = st.file_uploader("📂 Subir Contrato del Cliente", type=["pdf", "docx"])
         
         if st.button("🧠 Leer Contrato y Registrar Cliente", type="primary", use_container_width=True):
@@ -1234,7 +1232,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             else:
                 with st.spinner("🤖 Leyendo cláusulas y extrayendo datos jurídicos..."):
                     try:
-                        # 1. Extraer el texto dependiendo si es PDF o Word
                         texto_contrato = ""
                         if archivo_contrato.name.endswith('.pdf'):
                             import PyPDF2
@@ -1247,14 +1244,15 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             for p in doc.paragraphs:
                                 texto_contrato += p.text + "\n"
                                 
-                        # 2. Mandar a Gemini para que nos devuelva todo armadito
                         import google.generativeai as genai
                         import json
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo = genai.GenerativeModel('gemini-1.5-flash')
+                        
+                        # Usamos gemini-pro para evitar el error de conexión 404
+                        modelo = genai.GenerativeModel('gemini-pro')
                         
                         prompt_extractor = f"""
-                        Eres un asistente legal en Chile. Lee el siguiente contrato de prestación de servicios u honorarios.
+                        Eres un asistente legal. Lee el siguiente contrato.
                         Extrae los datos del CLIENTE (no del abogado).
                         Devuelve ÚNICAMENTE un objeto JSON válido con esta estructura exacta, sin texto adicional ni formato markdown:
                         {{
@@ -1271,11 +1269,10 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         respuesta = modelo.generate_content(prompt_extractor)
                         
-                        # Limpiar el texto por si Gemini le pone comillas raras
-                       texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
+                        # Limpieza del JSON ultra segura en una sola línea
+                        texto_json = respuesta.text.replace("```json", "").replace("```", "").strip()
                         datos_extraidos = json.loads(texto_json)
                         
-                        # 3. Guardar el nuevo cliente en la Base de Causas (Directorio)
                         df_causas = pd.read_csv(ARCHIVO_BD)
                         nombre_extraido = datos_extraidos.get('cliente_nombre', 'Cliente Importado')
                         
@@ -1292,7 +1289,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_causas = pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True)
                         df_causas.to_csv(ARCHIVO_BD, index=False)
                         
-                        # 4. Dejar el registro en el historial de contratos
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8],
@@ -1307,7 +1303,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         st.success(f"✅ ¡Operación exitosa! La IA analizó el contrato y agregó a **{nombre_extraido}** directo a tu listado de clientes y módulo de contabilidad.")
                         
                     except Exception as e:
-                        st.error(f"❌ Pucha, hubo un error al procesar el archivo. Revisa que el PDF/Word no esté dañado. Detalle técnico: {e}")
+                        st.error(f"❌ Error técnico al procesar el archivo o contactar a la IA: {e}")
 
 # 7. CAUSAS / EXPEDIENTES (MEJORADO VISUALMENTE EN MODO CLARO)
 elif st.session_state['menu_radio'] == "💼 Causas":
