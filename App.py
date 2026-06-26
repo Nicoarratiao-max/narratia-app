@@ -1428,7 +1428,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 c_h1, c_h2, c_h3, c_h4 = st.columns([2, 3, 4, 2])
                 c_h1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>ROL DE CAUSA</span>", unsafe_allow_html=True)
                 c_h2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>TRIBUNAL ASIGNADO</span>", unsafe_allow_html=True)
-                c_h3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CARATULADO</span>", unsafe_allow_html=True)
+                c_h3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CARATULADO Y TITULAR</span>", unsafe_allow_html=True)
                 c_h4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px; text-align:center; display:block;'>ACCIÓN</span>", unsafe_allow_html=True)
                 st.markdown("<hr style='margin: 5px 0px 10px 0px; border-top: 2px solid #e0e4e8;'>", unsafe_allow_html=True)
                 
@@ -1436,7 +1436,15 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     c1, c2, c3, c4 = st.columns([2, 3, 4, 2])
                     c1.markdown(f"<span style='color:#0052cc; font-weight:bold; font-size:15px;'>{row['ROL']}</span>", unsafe_allow_html=True)
                     c2.markdown(f"<span style='color:#172b4d; font-size:14px;'>{row['TRIBUNAL']}</span>", unsafe_allow_html=True)
-                    c3.markdown(f"<span style='color:#172b4d; font-size:14px;'>{row['CARATULADO']}</span>", unsafe_allow_html=True)
+                    
+                    # --- MEJORA VISUAL AQUÍ: CARATULADO + CLIENTE Y RUT ---
+                    val_cliente = str(row.get('Cliente', '--'))
+                    val_rut = str(row.get('RUT', '--'))
+                    c3.markdown(f"""
+                    <span style='color:#172b4d; font-weight:600; font-size:14px;'>{row['CARATULADO']}</span><br>
+                    <span style='color:#6b778c; font-size:12px;'>👤 {val_cliente} • RUT: {val_rut}</span>
+                    """, unsafe_allow_html=True)
+                    
                     c4.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
                     st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
         
@@ -1537,20 +1545,17 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         t_delegado = st.text_input("Asignar Tarea a (Opcional)", placeholder="Ej: Eduardo Riquelme")
                         
                         if st.form_submit_button("Registrar y Asignar Tarea", type="primary"):
-                            # Lógica de Asignación Ciega
-                            destinatario_file = ARCHIVO_TAREAS # Por defecto, mi propio archivo
+                            destinatario_file = ARCHIVO_TAREAS
                             destinatario_usr = usuario_actual
                             
                             if t_delegado.strip():
                                 nombre_buscado = t_delegado.strip().lower()
-                                # Buscar en secreto en la base de nombres reales
                                 for user_key, real_name in NOMBRES_REALES.items():
                                     if nombre_buscado in real_name.lower() or nombre_buscado == user_key.lower():
                                         destinatario_usr = user_key
                                         destinatario_file = f"base_tareas_{user_key}.csv"
                                         break
                             
-                            # Validar que el archivo de destino exista (por si es una cuenta muy nueva)
                             if not os.path.exists(destinatario_file):
                                 pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(destinatario_file, index=False)
                                 
@@ -1558,7 +1563,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             nueva_t = {
                                 'ID_Tarea': str(uuid.uuid4())[:8], 
                                 'ROL': rol_actual, 
-                                'Creador': nombre_real_usuario, # Queda registrado quién la mandó
+                                'Creador': nombre_real_usuario, 
                                 'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
                                 'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
                                 'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p
