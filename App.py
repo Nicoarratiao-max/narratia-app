@@ -1425,27 +1425,26 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             if df_filtrado.empty:
                 st.info("No hay causas que coincidan con la búsqueda.")
             else:
-                c_h1, c_h2, c_h3, c_h4 = st.columns([2, 3, 4, 2])
+                # --- AQUÍ ESTÁ LA NUEVA GRILLA DE 5 COLUMNAS ---
+                c_h1, c_h2, c_h3, c_h4, c_h5 = st.columns([1.5, 2.5, 3, 2.5, 1.5])
                 c_h1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>ROL DE CAUSA</span>", unsafe_allow_html=True)
                 c_h2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>TRIBUNAL ASIGNADO</span>", unsafe_allow_html=True)
-                c_h3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CARATULADO Y TITULAR</span>", unsafe_allow_html=True)
-                c_h4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px; text-align:center; display:block;'>ACCIÓN</span>", unsafe_allow_html=True)
+                c_h3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CARATULADO</span>", unsafe_allow_html=True)
+                c_h4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CLIENTE TITULAR</span>", unsafe_allow_html=True)
+                c_h5.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px; text-align:center; display:block;'>ACCIÓN</span>", unsafe_allow_html=True)
                 st.markdown("<hr style='margin: 5px 0px 10px 0px; border-top: 2px solid #e0e4e8;'>", unsafe_allow_html=True)
                 
                 for idx, row in df_filtrado.iterrows():
-                    c1, c2, c3, c4 = st.columns([2, 3, 4, 2])
+                    c1, c2, c3, c4, c5 = st.columns([1.5, 2.5, 3, 2.5, 1.5])
                     c1.markdown(f"<span style='color:#0052cc; font-weight:bold; font-size:15px;'>{row['ROL']}</span>", unsafe_allow_html=True)
                     c2.markdown(f"<span style='color:#172b4d; font-size:14px;'>{row['TRIBUNAL']}</span>", unsafe_allow_html=True)
+                    c3.markdown(f"<span style='color:#172b4d; font-weight:600; font-size:14px;'>{row['CARATULADO']}</span>", unsafe_allow_html=True)
                     
-                    # --- MEJORA VISUAL AQUÍ: CARATULADO + CLIENTE Y RUT ---
                     val_cliente = str(row.get('Cliente', '--'))
                     val_rut = str(row.get('RUT', '--'))
-                    c3.markdown(f"""
-                    <span style='color:#172b4d; font-weight:600; font-size:14px;'>{row['CARATULADO']}</span><br>
-                    <span style='color:#6b778c; font-size:12px;'>👤 {val_cliente} • RUT: {val_rut}</span>
-                    """, unsafe_allow_html=True)
+                    c4.markdown(f"<span style='color:#172b4d; font-size:14px;'>👤 {val_cliente}</span><br><span style='color:#6b778c; font-size:12px;'>RUT: {val_rut}</span>", unsafe_allow_html=True)
                     
-                    c4.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
+                    c5.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
                     st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
         
     else:
@@ -1638,7 +1637,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
                                         df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
                                         df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-
 # 8. AGENDA DIARIA
 elif st.session_state['menu_radio'] == "📋 Agenda":
     st.title("📋 Agenda Diaria de Plazos")
