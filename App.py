@@ -110,7 +110,7 @@ def procesar_ojv_completo(archivo):
         df_consolidado = pd.concat(lista_final, ignore_index=True).dropna(subset=['ROL'])
         df_consolidado['Estado'] = "Pendiente"
         df_consolidado['Prioridad'] = "Normal"
-        df_consolidado['Tipo_Negocio'] = "Grupo Defensa"
+        df_consolidado['Tipo_Negocio'] = "Externo"
         
         cols_extra = [
             'Servicio', 'Teléfono', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 
@@ -384,6 +384,78 @@ if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state: 
     st.session_state['username'] = ""
+
+# =====================================================================
+# 🚦 PORTAL DEL CLIENTE (VISTA EXTERNA PARA SUBIR DOCUMENTOS)
+# =====================================================================
+query_params = st.query_params
+if "cliente_id" in query_params:
+    token_cliente = query_params["cliente_id"]
+    nombre_cliente_limpio = token_cliente.replace("_", " ")
+    
+    # Escondemos el menú lateral y centramos la pantalla para el cliente
+    st.markdown("""
+    <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        .block-container { max-width: 800px !important; padding-top: 3rem !important; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    st.markdown(f"<div style='text-align: center;'><img src='{LOGO_URL}' style='width: 100px;'></div>", unsafe_allow_html=True)
+    st.title("📥 Portal de Recepción de Antecedentes")
+    st.subheader(f"Bienvenido/a, {nombre_cliente_limpio}")
+    st.write("Por favor, cargue los documentos solicitados por su abogado en formato PDF o Imagen. El sistema notificará automáticamente al estudio jurídico cuando haya completado la entrega.")
+    
+    # Archivo base para controlar los documentos pedidos
+    ARCHIVO_DOCS = "base_documentos_clientes.csv"
+    if not os.path.exists(ARCHIVO_DOCS):
+        pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
+        
+    df_docs = pd.read_csv(ARCHIVO_DOCS)
+    mis_docs = df_docs[df_docs['Cliente_Token'] == token_cliente]
+    
+    if mis_docs.empty:
+        st.info("No registra solicitudes de documentos pendientes en este momento.")
+    else:
+        completados = 0
+        total = len(mis_docs)
+        
+        for idx, row in mis_docs.iterrows():
+            with st.container(border=True):
+                c1, c2 = st.columns([3, 1])
+                ya_subido = row['Estado'] == '✅ Completado'
+                
+                with c1:
+                    st.markdown(f"**Requisito:** {row['Documento_Nombre']}")
+                    if ya_subido:
+                        st.markdown("<span style='color:#57a15a; font-weight:bold;'>✅ Recibido con éxito</span>", unsafe_allow_html=True)
+                        completados += 1
+                    else:
+                        st.markdown("<span style='color:#ff5630; font-weight:bold;'>❌ Pendiente de carga</span>", unsafe_allow_html=True)
+                        
+                with c2:
+                    if not ya_subido:
+                        archivo = st.file_uploader("Subir Archivo", key=f"up_{row['ID_Req']}", label_visibility="collapsed")
+                        if archivo:
+                            with st.spinner("Guardando en la nube de JuriSync..."):
+                                b64_file = base64.b64encode(archivo.getvalue()).decode('utf-8')
+                                df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Archivo_B64', 'Fecha_Subida']] = ['✅ Completado', b64_file, datetime.now().strftime("%d/%m/%Y")]
+                                df_docs.to_csv(ARCHIVO_DOCS, index=False)
+                                st.success("¡Documento guardado!")
+                                st.rerun()
+        
+        # Barra de progreso visual
+        st.progress(completados / total if total > 0 else 0)
+        
+        if completados == total and total > 0:
+            st.success("🎉 ¡Excelente! Ha entregado la totalidad de la documentación solicitada.")
+            st.balloons()
+            st.info("📩 Se ha enviado un correo automático a su abogado notificando que su expediente está completo y listo para revisión.")
+            # AQUI CONECTAREMOS EL CORREO DE GMAIL EN EL SIGUIENTE PASO
+    
+    # 🛑 ESTO ES VITAL: Detiene la lectura del código aquí para que el cliente no vea el login.
+    st.stop() 
+# =====================================================================
 
 if not st.session_state['logged_in']:
     st.markdown("""
@@ -1469,7 +1541,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     st.markdown("#### Datos de Litigación")
                     n_tribunal = st.text_input("Tribunal", str(c_data.get('TRIBUNAL','')))
                     n_serv = st.text_input("Servicio Contratado", str(c_data.get('Servicio','')))
-                    n_negocio = st.selectbox("Origen de Cartera", ["Grupo Defensa", "Propio"], index=0 if c_data.get('Tipo_Negocio') == "Grupo Defensa" else 1)
+                    n_negocio = st.selectbox("Origen de Cartera", ["Externo", "Propio"], index=0 if c_data.get('Tipo_Negocio') == "Externo" else 1)
                     
                     st.markdown("#### Datos de Ficha de Cliente")
                     n_cliente = st.text_input("Nombre Completo Titular", str(c_data.get('Cliente','')))
@@ -1510,7 +1582,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.session_state['modo_edicion'] = False
                             st.rerun()
             else:
-                clase_div = "badge-active" if c_data.get('Tipo_Negocio') == "Grupo Defensa" else "badge-propio"
+                clase_div = "badge-active" if c_data.get('Tipo_Negocio') == "Externo" else "badge-propio"
                 st.markdown(f"""
                 <div class="dash-card">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
