@@ -470,92 +470,44 @@ if "cliente_id" in query_params:
     st.stop() 
 # =====================================================================
 
-# 5. PANTALLA DE LOGIN CON CONFIGURACIÓN EN LA NUBE
+# --- LOGIN SIMPLIFICADO Y ROBUSTO ---
 if not st.session_state['logged_in']:
-    st.markdown("""
-    <style>
-        [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
-        #MainMenu {visibility: hidden;} footer {visibility: hidden;} header {visibility: hidden;}
-        .block-container { max-width: 1300px !important; margin: 0 auto !important; padding-top: 2rem !important; }
-        [data-testid="stForm"] { background-color: white !important; border-radius: 16px !important; border: 1px solid #e0e4e8 !important; padding: 40px 30px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
-        p, label, span, div { color: #172b4d !important; }
-        [data-testid="stFormSubmitButton"] button { background-color: #0052cc !important; color: white !important; border: none !important; font-weight: bold !important;}
-        [data-testid="stFormSubmitButton"] button:hover { background-color: #0047b3 !important; }
-        .stTextInput input { border: 1px solid #cbd2d9 !important; border-radius: 6px !important; padding: 10px !important; }
-    </style>
-    """, unsafe_allow_html=True)
+    st.markdown(f"<div style='text-align: center;'><img src='{LOGO_URL}' style='width: 150px;'></div>", unsafe_allow_html=True)
+    st.title("🔐 Acceso JuriSync")
     
-    st.title("🔐 Acceso al Sistema JuriSync")
+    user_input = st.text_input("Usuario")
+    pass_input = st.text_input("Contraseña", type="password")
     
-    with st.container(border=True):
-        user_input = st.text_input("Usuario Corporativo")
-        pass_input = st.text_input("Contraseña", type="password")
-        
-        if st.button("Ingresar al Estudio", type="primary"):
-            user_clean = user_input.strip()
-            
-            # Verificar si el usuario existe en nuestra base de datos
-            if user_clean in USUARIOS_DICT:
-                if str(USUARIOS_DICT[user_clean]) == str(pass_input):
-                    # Buscamos la fila del usuario para ver si tiene el candado de "Debe Cambiar Clave"
-                    idx_user = df_usuarios[df_usuarios['Usuario'] == user_clean].index[0]
-                    debe_cambiar = str(df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']).lower() == 'true'
-                    
-                    if debe_cambiar:
-                        st.session_state['requiere_registro_inicial'] = True
-                        st.session_state['usr_registro'] = user_clean
-                        st.warning("⚠️ Primera sesión detectada. Por seguridad, debes actualizar tus datos obligatoriamente.")
-                        st.rerun()
-                    else:
-                        # Si ya cambió su clave antes, entra directo al sistema comercial
-                        st.session_state['logged_in'] = True
-                        st.session_state['username'] = user_clean
-                        st.success(f"Bienvenido/a, {NOMBRES_REALES.get(user_clean)}")
-                        st.rerun()
-                else:
-                    st.error("La contraseña ingresada no es correcta.")
+    if st.button("Ingresar"):
+        user_clean = user_input.strip()
+        if user_clean in USUARIOS_DICT and str(USUARIOS_DICT[user_clean]) == str(pass_input):
+            # Verificamos si debe cambiar clave
+            idx_user = df_usuarios[df_usuarios['Usuario'] == user_clean].index[0]
+            if str(df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']).lower() == 'true':
+                st.session_state['requiere_registro'] = True
+                st.session_state['usr_reg'] = user_clean
+                st.rerun()
             else:
-                st.error("El usuario no está registrado en el sistema.")
+                st.session_state['logged_in'] = True
+                st.session_state['username'] = user_clean
+                st.rerun()
+        else:
+            st.error("Credenciales incorrectas.")
 
-    # --- MURO DE SEGURIDAD: CAMBIO OBLIGATORIO DE CONTRASEÑA ---
-    if st.session_state.get('requiere_registro_inicial', False):
-        with st.dialog("🔒 Registro Obligatorio de Contraseña Personal"):
-            st.write("Crea una nueva contraseña para tu cuenta. Esta clave se guardará de forma segura en la base de datos de la nube.")
-            
-            nueva_cl = st.text_input("Nueva Contraseña", type="password", key="new_pass_reg")
-            conf_cl = st.text_input("Confirmar Nueva Contraseña", type="password", key="conf_pass_reg")
-            nuevo_correo = st.text_input("Tu Correo Electrónico Institucional", placeholder="ejemplo@estudio.cl")
-            
-            if st.button("Actualizar Credenciales y Entrar", type="primary"):
-                usr_actualizar = st.session_state['usr_registro']
-                
-                if nueva_cl.strip() == "" or nuevo_correo.strip() == "":
-                    st.error("Todos los campos son obligatorios.")
-                elif "@" not in nuevo_correo:
-                    st.error("Por favor, ingresa un correo electrónico válido.")
-                elif nueva_cl != conf_cl:
-                    st.error("Las contraseñas no coinciden.")
-                elif nueva_cl == str(USUARIOS_DICT[usr_actualizar]):
-                    st.error("Por seguridad, no puedes usar la misma contraseña provisoria.")
-                else:
-                    # Buscamos la fila en el DataFrame para chanchar los datos viejos
-                    idx_mod = df_usuarios[df_usuarios['Usuario'] == usr_actualizar].index[0]
-                    
-                    df_usuarios.at[idx_mod, 'Password'] = nueva_cl
-                    df_usuarios.at[idx_mod, 'Correo'] = nuevo_correo
-                    df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = False # Le quitamos el candado
-                    
-                    # Guardamos de inmediato en la nube de Google Sheets
-                    guardar_en_nube(df_usuarios)
-                    
-                    # Le damos el paso al sistema
-                    st.session_state['logged_in'] = True
-                    st.session_state['username'] = usr_actualizar
-                    st.session_state['requiere_registro_inicial'] = False
-                    st.success("¡Datos guardados con éxito en la nube!")
-                    st.rerun()
-    
-    # Detiene la ejecución aquí para que nadie pueda ver el software sin logearse
+    # Cambio de clave SIN st.dialog (para evitar errores de versión)
+    if st.session_state.get('requiere_registro', False):
+        st.subheader("🔒 Configuración Obligatoria")
+        nueva_c = st.text_input("Nueva contraseña", type="password")
+        correo_c = st.text_input("Correo electrónico")
+        if st.button("Guardar cambios"):
+            idx_mod = df_usuarios[df_usuarios['Usuario'] == st.session_state['usr_reg']].index[0]
+            df_usuarios.at[idx_mod, 'Password'] = nueva_c
+            df_usuarios.at[idx_mod, 'Correo'] = correo_c
+            df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = False
+            guardar_en_nube(df_usuarios)
+            st.session_state['logged_in'] = True
+            st.session_state['username'] = st.session_state['usr_reg']
+            st.rerun()
     st.stop()
 
 # --- ARQUITECTURA DE ARCHIVOS DE DATOS LOCALES ---
