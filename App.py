@@ -332,26 +332,11 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
     doc.save(bio)
     return bio.getvalue()
 
-# --- SISTEMA DE CONTROL DE ACCESO AVANZADO (AHORA EN LA NUBE) ---
-from streamlit_gsheets import GSheetsConnection
+# --- SISTEMA DE CONTROL DE ACCESO AVANZADO ---
+ARCHIVO_USUARIOS = "base_usuarios.csv"
 
-# 1. Conectar a tu base de datos en Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# 2. Motor para guardar directamente en la nube
-def guardar_en_nube(df):
-    conn.update(worksheet="base_usuarios", data=df)
-    df.to_csv("base_usuarios.csv", index=False) # Respaldo por si se cae el internet
-
-# 3. Leer la base maestra desde LA NUBE (tu Google Sheet)
-try:
-    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4])
-    df_usuarios = df_usuarios.dropna(how="all") # Limpiamos filas vacías
-except:
-    # Si la hoja está vacía o es la primera vez, empezamos de cero
-    df_usuarios = pd.DataFrame()
-
-if df_usuarios.empty:
+# 1. Crear base maestra de usuarios si no existe o forzar actualización
+if not os.path.exists(ARCHIVO_USUARIOS):
     datos_iniciales = {
         "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes", "Jtrujillo", "Eriquelme"],
         "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123", "Eriquelme123"],
@@ -359,37 +344,39 @@ if df_usuarios.empty:
         "Correo": ["pendiente", "pendiente", "pendiente", "pendiente", "pendiente", "pendiente"],
         "Debe_Cambiar_Clave": [True, True, True, True, True, True] # TODOS deben registrarse
     }
-    df_usuarios = pd.DataFrame(datos_iniciales)
-    guardar_en_nube(df_usuarios) # ¡Se anota en Google Sheets!
+    pd.DataFrame(datos_iniciales).to_csv(ARCHIVO_USUARIOS, index=False)
 else:
-    # Validaciones para asegurar que tu equipo esté completo
+    # TRUCO: Forzar la actualización si la base vieja ya existe y se quedó pegada
+    df_temp = pd.read_csv(ARCHIVO_USUARIOS)
     cambios = False
     
-    # Añadir a Eduardo si no está en la nube
-    if "Eriquelme" not in df_usuarios['Usuario'].values:
+    # Añadir a Eduardo si no está
+    if "Eriquelme" not in df_temp['Usuario'].values:
         nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": "Eriquelme123", "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
-        df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
+        df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
         cambios = True
 
-    # Añadir a José si no está en la nube
-    if "Jtrujillo" not in df_usuarios['Usuario'].values:
+    # Añadir a José si no está
+    if "Jtrujillo" not in df_temp['Usuario'].values:
         nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": "Jtrujillo123", "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
-        df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
+        df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
         cambios = True
 
-    # Forzar a Narratia a que pida el correo
-    idx_narratia = df_usuarios[df_usuarios['Usuario'] == 'Narratia'].index
+    # EL MARTILLAZO: Forzar a tu usuario (Narratia) a que pida el correo sí o sí
+    idx_narratia = df_temp[df_temp['Usuario'] == 'Narratia'].index
     if not idx_narratia.empty:
-        correo_actual = str(df_usuarios.loc[idx_narratia[0], 'Correo'])
+        correo_actual = str(df_temp.loc[idx_narratia[0], 'Correo'])
+        # Si tu correo no tiene un "@", te devuelvo al estado de registro inicial
         if "@" not in correo_actual:
-            df_usuarios.loc[idx_narratia[0], 'Debe_Cambiar_Clave'] = True
-            df_usuarios.loc[idx_narratia[0], 'Correo'] = "pendiente"
+            df_temp.loc[idx_narratia[0], 'Debe_Cambiar_Clave'] = True
+            df_temp.loc[idx_narratia[0], 'Correo'] = "pendiente"
             cambios = True
 
     if cambios:
-        guardar_en_nube(df_usuarios) # ¡Se anota en Google Sheets!
+        df_temp.to_csv(ARCHIVO_USUARIOS, index=False)
 
-# 4. Cargar los diccionarios para que el programa reconozca a tu equipo
+# Cargar la base final para operar
+df_usuarios = pd.read_csv(ARCHIVO_USUARIOS)
 USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
 NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 
