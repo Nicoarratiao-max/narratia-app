@@ -1201,53 +1201,54 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 "Derecho Penal": ["Querella Criminal", "Defensa Penal (Garantía)", "Defensa Penal (Juicio Oral)", "Salidas Alternativas", "Eliminación de Antecedentes"],
                 "Derecho Constitucional": ["Recurso de Protección", "Recurso de Amparo"],
                 "Derecho del Consumidor": ["Querella Infraccional (JPL)", "Defensa Demanda Colectiva (SERNAC)"],
-                "Derecho Administrativo": ["Reclamo de Ilegalidad Municipal", "Sumario Administrativo", "Nulidad de Derecho Público", "Cobro Obligaciones Tributarias"]
+                "Derecho Administrativo": ["Reclamo de Ilegalidad Municipal", "Sumario Administrativo", "Nulidad de Derecho Público", "Cobro de Obligaciones Tibutarias"]
             }
             
             with st.container(border=True):
                 col_mat1, col_mat2 = st.columns(2)
                 with col_mat1:
-                    materia_sel = st.selectbox("Rama del Derecho", list(diccionario_servicios.keys()))
+                    materia_sel = st.selectbox("Rama del Derecho", list(diccionario_servicios.keys()), key="gen_con_rama")
                 with col_mat2:
-                    accion_sel = st.selectbox("Acción / Procedimiento Específico", diccionario_servicios[materia_sel])
+                    accion_sel = st.selectbox("Acción / Procedimiento Específico", diccionario_servicios[materia_sel], key="gen_con_accion")
                 
                 tipo_servicio_final = f"{materia_sel}: {accion_sel}"
 
-            with st.form("form_generador", clear_on_submit=False):
-                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100)
+            with st.form("form_generador_contratos", clear_on_submit=False):
+                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100, key="gen_con_detalle")
                 
                 col_ab, col_cl = st.columns(2)
                 with col_ab:
                     with st.container(border=True):
                         st.markdown("#### Módulo 2: Litigante Patrocinante")
-                        abog_nom = st.text_input("Nombre Abogado", "Eduardo Riquelme Zambrano")
-                        abog_rut = st.text_input("RUT Abogado", "17.427.459-2")
-                        abog_dom = st.text_input("Domicilio Profesional")
-                        abog_tel = st.text_input("Teléfono")
-                        abog_correo = st.text_input("Correo")
+                        abog_nom = st.text_input("Nombre Abogado", "Eduardo Riquelme Zambrano", key="gen_con_abnom")
+                        abog_rut = st.text_input("RUT Abogado", "17.427.459-2", key="gen_con_abrut")
+                        abog_dom = st.text_input("Domicilio Profesional", key="gen_con_abdom")
+                        abog_tel = st.text_input("Teléfono", key="gen_con_abtel")
+                        abog_correo = st.text_input("Correo", key="gen_con_abcor")
                 with col_cl:
                     with st.container(border=True):
                         st.markdown("#### Módulo 3: Mandante Judicial")
-                        cli_nom = st.text_input("Nombre Cliente")
-                        cli_rut = st.text_input("RUT Cliente")
-                        cli_dom = st.text_input("Domicilio")
-                        cli_tel = st.text_input("Teléfono")
-                        cli_correo = st.text_input("Correo")
+                        cli_nom = st.text_input("Nombre Cliente", key="gen_con_clinom")
+                        cli_rut = st.text_input("RUT Cliente", key="gen_con_clirut")
+                        cli_dom = st.text_input("Domicilio", key="gen_con_clidom")
+                        cli_tel = st.text_input("Teléfono Particular", key="gen_con_clitel")
+                        cli_correo = st.text_input("Correo Particular", key="gen_con_clicor")
                         
                 with st.container(border=True):
                     st.markdown("#### Módulo 4: Honorarios y Cuenta")
                     c_p1, c_p2 = st.columns(2)
                     with c_p1: 
-                        hon_num = st.text_input("Valor Total ($)", "2500000") 
-                        hon_let = st.text_input("Valor en Letras")
-                        cuotas_c = st.number_input("Cuotas", 12)
-                        cuotas_m = st.text_input("Valor Cuota ($)")
-                        fecha_pago = st.date_input("Primera Mensualidad")
+                        hon_num = st.text_input("Valor Total ($)", "2500000", key="gen_con_honnum") 
+                        hon_let = st.text_input("Valor en Letras", key="gen_con_honlet")
+                        cuotas_c = st.number_input("Cuotas", 12, key="gen_con_cuotasc")
+                        cuotas_m = st.text_input("Valor Cuota ($)", key="gen_con_cuotasm")
+                        fecha_pago = st.date_input("Primera Mensualidad", key="gen_con_fecha")
                     with c_p2: 
-                        banco = st.text_input("Banco")
-                        tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"])
-                        num_cta = st.text_input("Número de Cuenta")
+                        banco = st.text_input("Banco", key="gen_con_banco")
+                        tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"], key="gen_con_tipocta")
+                        num_cta = st.text_input("Número de Cuenta", key="gen_con_numcta")
                         
+                # ESTE ES EL BOTÓN QUE FALTABA (Alineado dentro del form)
                 if st.form_submit_button("📄 Estructurar Contrato en Formato Word", type="primary", use_container_width=True):
                     datos_c = {
                         'tipo_servicio': tipo_servicio_final, 'detalle_servicio': detalle_servicio,
@@ -1301,7 +1302,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             st.write("*(Sin archivo)*")
                             
                     with c3:
-                        # BOTÓN DE ELIMINACIÓN
                         if st.button("🗑️ Eliminar", key=f"del_con_{row.get('ID', idx)}"):
                             df_contratos_reg = df_contratos_reg.drop(idx)
                             df_contratos_reg.to_csv(ARCHIVO_CONTRATOS, index=False)
