@@ -1599,7 +1599,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 """, unsafe_allow_html=True)
                 
         with col_izq:
-            tab_movs, tab_tareas_internas, tab_legacy = st.tabs(["Movimientos", "Tareas Operativas", "Movimientos legacy"])
+            tab_movs, tab_tareas_internas, tab_legacy, tab_docs_solicitados = st.tabs(["Movimientos", "Tareas Operativas", "Movimientos legacy", "📥 Docs Cliente"])
             with tab_tareas_internas:
                 if st.button("+ Asignar Nueva Tarea Operativa", type="primary"):
                     st.session_state['creando_tarea'] = not st.session_state['creando_tarea']
@@ -1709,6 +1709,78 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
                                         df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
                                         df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+
+            # =====================================================================
+            # 📥 NUEVA PESTAÑA: SOLICITUD Y SEGUIMIENTO DE DOCUMENTOS DEL CLIENTE
+            # =====================================================================
+            with tab_docs_solicitados:
+                st.subheader("📋 Gestión de Requisitos del Cliente")
+                
+                # Definimos el token único del cliente para construir su link (Ej: Juan_Perez)
+                token_para_link = str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_")
+                
+                # Botón premium para copiar el link y mandárselo por WhatsApp al tiro
+                link_portal_final = f"https://narratia-app.streamlit.app/?cliente_id={token_para_link}"
+                st.info(f"🔗 **Enlace del Portal para el Cliente:**\n`{link_portal_final}`")
+                
+                # Formulario rápido para que el Abogado agregue un documento a la lista
+                with st.form(key=f"form_agregar_requisito_{rol_actual}", clear_on_submit=True):
+                    st.markdown("#### Solicitar Nuevo Documento")
+                    nuevo_doc_req = st.text_input("Nombre del documento solicitado", placeholder="Ej: Certificado de Matrimonio actualizado, Últimas 3 liquidaciones...")
+                    if st.form_submit_button("➕ Enviar Requisito al Portal", type="primary"):
+                        if nuevo_doc_req.strip() == "":
+                            st.error("Escribe el nombre del documento.")
+                        else:
+                            ARCHIVO_DOCS = "base_documentos_clientes.csv"
+                            if not os.path.exists(ARCHIVO_DOCS):
+                                pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
+                            
+                            df_docs_db = pd.read_csv(ARCHIVO_DOCS)
+                            nuevo_registro_doc = {
+                                'ID_Req': str(uuid.uuid4())[:8],
+                                'Cliente_Token': token_para_link,
+                                'Documento_Nombre': nuevo_doc_req.strip(),
+                                'Estado': '❌ Pendiente',
+                                'Archivo_B64': '',
+                                'Fecha_Subida': '--'
+                            }
+                            df_docs_db = pd.concat([df_docs_db, pd.DataFrame([nuevo_registro_doc])], ignore_index=True)
+                            df_docs_db.to_csv(ARCHIVO_DOCS, index=False)
+                            st.success(f"¡Solicitud de '{nuevo_doc_req}' agregada al portal del cliente!")
+                            st.rerun()
+                
+                # Despliegue de la lista de control para el Abogado
+                st.markdown("### Estado de la Documentación Solicitada")
+                ARCHIVO_DOCS = "base_documentos_clientes.csv"
+                if os.path.exists(ARCHIVO_DOCS):
+                    df_docs_db = pd.read_csv(ARCHIVO_DOCS)
+                    docs_causa_actual = df_docs_db[df_docs_db['Cliente_Token'] == token_para_link]
+                    
+                    if docs_causa_actual.empty:
+                        st.write("No se han solicitado documentos para este cliente todavía.")
+                    else:
+                        for idx_d, d_row in docs_causa_actual.iterrows():
+                            with st.container(border=True):
+                                cd1, cd2, cd3 = st.columns([3, 1.5, 1])
+                                with cd1:
+                                    st.markdown(f"**{d_row['Documento_Nombre']}**")
+                                    st.write(f"Fecha de carga: {d_row.get('Fecha_Subida', '--')}")
+                                with cd2:
+                                    if d_row['Estado'] == '✅ Completado':
+                                        st.markdown("<span style='color:#57a15a; font-weight:bold;'>✅ Recibido</span>", unsafe_allow_html=True)
+                                    else:
+                                        st.markdown("<span style='color:#ff5630; font-weight:bold;'>❌ Pendiente</span>", unsafe_allow_html=True)
+                                with cd3:
+                                    # Si el cliente ya lo subió, el abogado puede descargarlo al tiro
+                                    if d_row['Estado'] == '✅ Completado' and pd.notna(d_row.get('Archivo_B64')) and str(d_row['Archivo_B64']).strip() != "":
+                                        bytes_descarga = base64.b64decode(d_row['Archivo_B64'])
+                                        st.download_button("📥 Descargar", data=bytes_descarga, file_name=f"{d_row['Documento_Nombre'].replace(' ', '_')}_{token_para_link}.pdf", key=f"dl_abog_{d_row['ID_Req']}")
+                                    else:
+                                        # Botón por si el abogado quiere borrar el requerimiento de la lista
+                                        if st.button("🗑️", key=f"del_req_{d_row['ID_Req']}"):
+                                            df_docs_db = df_docs_db.drop(idx_d)
+                                            df_docs_db.to_csv(ARCHIVO_DOCS, index=False)
+                                            st.rerun()
 # 8. AGENDA DIARIA
 elif st.session_state['menu_radio'] == "📋 Agenda":
     st.title("📋 Agenda Diaria de Plazos")
