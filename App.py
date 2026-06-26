@@ -1220,8 +1220,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 with col_ab:
                     with st.container(border=True):
                         st.markdown("#### Módulo 2: Litigante Patrocinante")
-                        abog_nom = st.text_input("Nombre Abogado", "Eduardo Riquelme Zambrano", key="gen_con_abnom")
-                        abog_rut = st.text_input("RUT Abogado", "17.427.459-2", key="gen_con_abrut")
+                        abog_nom = st.text_input("Nombre Abogado", key="gen_con_abnom")
+                        abog_rut = st.text_input("RUT Abogado", key="gen_con_abrut")
                         abog_dom = st.text_input("Domicilio Profesional", key="gen_con_abdom")
                         abog_tel = st.text_input("Teléfono", key="gen_con_abtel")
                         abog_correo = st.text_input("Correo", key="gen_con_abcor")
