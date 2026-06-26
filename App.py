@@ -494,12 +494,12 @@ if not st.session_state['logged_in']:
         if st.button("Ingresar al Estudio", type="primary"):
             user_clean = user_input.strip()
             
-            # Verificar si el usuario existe en nuestra base de datos de Google Sheets
+            # Verificar si el usuario existe en nuestra base de datos
             if user_clean in USUARIOS_DICT:
                 if str(USUARIOS_DICT[user_clean]) == str(pass_input):
                     # Buscamos la fila del usuario para ver si tiene el candado de "Debe Cambiar Clave"
                     idx_user = df_usuarios[df_usuarios['Usuario'] == user_clean].index[0]
-                    debe_cambiar = df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']
+                    debe_cambiar = str(df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']).lower() == 'true'
                     
                     if debe_cambiar:
                         st.session_state['requiere_registro_inicial'] = True
