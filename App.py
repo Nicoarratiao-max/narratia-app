@@ -327,8 +327,10 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
     return bio.getvalue()
 
 # =====================================================================
-# --- SISTEMA DE CONTROL DE ACCESO (AHORA EN GOOGLE SHEETS) ---
+# --- SISTEMA DE CONTROL DE ACCESO (AHORA EN GOOGLE SHEETS Y COOKIES) ---
 # =====================================================================
+import extra_streamlit_components as stx
+
 ARCHIVO_USUARIOS = "base_usuarios.csv"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -338,9 +340,8 @@ def guardar_en_nube(df):
     st.cache_data.clear()
 
 try:
-    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5], ttl=10)
+    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5], ttl="10m")
     df_usuarios = df_usuarios.dropna(how="all")
-    # 💡 EL BLINDAJE: Obligamos a que la columna sea leída como texto siempre
     df_usuarios['Debe_Cambiar_Clave'] = df_usuarios['Debe_Cambiar_Clave'].astype(str)
 except:
     df_usuarios = pd.DataFrame()
@@ -389,10 +390,23 @@ df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
 USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
 NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 
+# --- MOTOR DE COOKIES (PARA QUE NO SE CIERRE LA SESIÓN CON F5) ---
+@st.cache_resource
+def get_manager():
+    return stx.CookieManager()
+
+cookie_manager = get_manager()
+
 if 'logged_in' not in st.session_state: 
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state: 
     st.session_state['username'] = ""
+
+# Si el navegador ya tiene la galleta guardada, lo dejamos pasar automático
+cookie_usuario = cookie_manager.get(cookie="jurisync_user")
+if cookie_usuario and cookie_usuario in USUARIOS_DICT:
+    st.session_state['logged_in'] = True
+    st.session_state['username'] = cookie_usuario
 
 # =====================================================================
 # 🚦 PORTAL DEL CLIENTE (VISTA EXTERNA PARA SUBIR DOCUMENTOS)
@@ -458,10 +472,9 @@ if "cliente_id" in query_params:
             st.balloons()
             st.info("📩 Se ha enviado un correo automático a su abogado notificando que su expediente está completo y listo para revisión.")
     st.stop() 
-# =====================================================================
 
 # =====================================================================
-# 🔐 PANTALLA DE LOGIN CON CONFIGURACIÓN EN LA NUBE (CORREGIDA)
+# 🔐 PANTALLA DE LOGIN CON CONFIGURACIÓN EN LA NUBE
 # =====================================================================
 if not st.session_state['logged_in']:
     st.markdown("""
@@ -501,7 +514,6 @@ if not st.session_state['logged_in']:
                     user_clean = user_input.strip()
                     if user_clean in USUARIOS_DICT and str(USUARIOS_DICT[user_clean]) == str(pass_input):
                         idx_user = df_usuarios[df_usuarios['Usuario'] == user_clean].index[0]
-                        # Verificamos como string para evitar errores booleanos
                         if str(df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']).lower() == 'true':
                             st.session_state['requiere_registro_inicial'] = True
                             st.session_state['usr_registro'] = user_clean
@@ -509,6 +521,7 @@ if not st.session_state['logged_in']:
                         else:
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = user_clean
+                            cookie_manager.set("jurisync_user", user_clean, key="cookie_login")
                             st.rerun()
                     else:
                         st.error("❌ Usuario o contraseña incorrectos.")
@@ -564,6 +577,7 @@ if not st.session_state['logged_in']:
                         st.session_state['logged_in'] = True
                         st.session_state['username'] = usr_actualizar
                         st.session_state['requiere_registro_inicial'] = False
+                        cookie_manager.set("jurisync_user", usr_actualizar, key="cookie_reg")
                         st.rerun()
     st.stop()
 
@@ -828,6 +842,7 @@ with st.sidebar:
 
     st.write("")
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
+        cookie_manager.delete("jurisync_user", key="cookie_logout")
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
