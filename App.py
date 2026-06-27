@@ -1718,7 +1718,7 @@ else:
                                         st.rerun()
                             
                             # --- MODO VISUALIZACIÓN NORMAL ---
-                                    else:
+                            else:
                                 c_top_l, c_top_r = st.columns([2.5, 2.3])
                                 with c_top_l:
                                     autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
