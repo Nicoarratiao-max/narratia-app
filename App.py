@@ -2043,9 +2043,8 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
             st.session_state['cliente_seleccionado'] = None
             st.rerun()
             
-        if st.session_state['username'] == "Narratia":
+        if st.session_state['username'] == "Narratia": 
             # BOTÓN DE ELIMINAR CLIENTE EN CASCADA (DESTRUCCIÓN TOTAL ASOCIADA)
-            if st.session_state['username'] == "Narratia":
             if c_del.button("🗑️ Eliminar Cliente", use_container_width=True):
                 with st.spinner("Borrando cliente y buscando sus causas para destruirlas..."):
                     # 1. Identificar las causas que le pertenecen a este RUT
