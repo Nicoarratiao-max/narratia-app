@@ -1430,10 +1430,50 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         st.success(f"✅ ¡La IA agregó a **{nombre_extraido}** directo a tu listado de clientes!")
                     except Exception as e: st.error(f"❌ Error técnico: {e}")
 
-# 7. CAUSAS / EXPEDIENTES (MEJORADO VISUALMENTE EN MODO CLARO)
+# # 7. CAUSAS / EXPEDIENTES (MEJORADO VISUALMENTE EN MODO CLARO)
 elif st.session_state['menu_radio'] == "💼 Causas":
     df_causas = pd.read_csv(ARCHIVO_BD)
     
+    # --- DEFINICIÓN DEL POP-UP MODAL DE EDICIÓN DE TAREAS ---
+    @st.dialog("Editar tarea")
+    def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
+        st.write(f"Modificando plazos para: **{tarea_titulo}**")
+        
+        # Campo Usuario (Solo lectura, estilio Jira/Trello)
+        st.text_input("Usuario", value=nombre_real_usuario, disabled=True)
+        
+        # Campo Fecha (Editable para mover el vencimiento)
+        try:
+            f_obj = datetime.strptime(tarea_fecha, "%d/%m/%Y")
+        except:
+            f_obj = datetime.now()
+        nueva_fecha = st.date_input("Fecha de vencimiento *", value=f_obj)
+        
+        # Campo Estado (Editable para cambiar el flujo interno)
+        opciones_estado = ["En progreso", "Aprobada", "Rechazada"]
+        nuevo_estado = st.selectbox("Estado", opciones_estado, index=opciones_estado.index(tarea_estado) if tarea_estado in opciones_estado else 0)
+        
+        if st.button("Guardar", type="primary", use_container_width=True):
+            # 1. Actualizar base de datos local
+            df_t_local = pd.read_csv(ARCHIVO_TAREAS)
+            df_t_local.loc[df_t_local['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
+            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+            
+            # 2. Respaldar actualización en la nube
+            try:
+                dn = conn.read(worksheet="base_tareas", ttl=0)
+                dn.loc[dn['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
+                conn.update(worksheet="base_tareas", data=dn)
+            except: 
+                pass
+                
+            st.session_state['editando_tarea'] = None
+            st.success("✅ Tarea actualizada correctamente.")
+            import time
+            time.sleep(1)
+            st.rerun()
+
+    # --- VISTA 1: LISTADO GENERAL DE CAUSAS ---
     if st.session_state['causa_seleccionada'] is None:
         st.session_state['modo_edicion'] = False
         st.title("💼 Gestión e Historial de Causas")
@@ -1460,27 +1500,22 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 'RUT': '--', 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--',
                                 'Correo': '--', 'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
                                 'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0,
-                                'Usuario_Propietario': usuario_actual # Marca tuya para que no se mezcle
+                                'Usuario_Propietario': usuario_actual
                             }
-                            # 1. Guardar en local
                             df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
                             df_causas.to_csv(ARCHIVO_BD, index=False)
                             
-                            # 2. SUBIR A GOOGLE SHEETS INMEDIATAMENTE
                             try:
-                                # Leemos la nube actual para no borrar lo de tus colegas
                                 df_nube = conn.read(worksheet="base_causas", ttl=0)
-                                # Juntamos la nube con tu nueva causa
                                 df_nube_actualizada = pd.concat([df_nube, pd.DataFrame([nueva_c])], ignore_index=True)
                                 conn.update(worksheet="base_causas", data=df_nube_actualizada)
                             except:
-                                # Si la hoja "base_causas" no existe en tu Google Sheets, la crea sola
                                 conn.update(worksheet="base_causas", data=df_causas)
                             
                             st.session_state['creando_causa'] = False
                             st.success("✅ Causa creada y respaldada en la nube exitosamente.")
                             import time
-                            time.sleep(1) # Pausa para que alcances a leer el mensaje verde
+                            time.sleep(1)
                             st.rerun()
 
         st.write("---")
@@ -1521,6 +1556,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     c5.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
                     st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
         
+    # --- VISTA 2: DENTRO DEL EXPEDIENTE SELECCIONADO ---
     else:
         rol_actual = st.session_state['causa_seleccionada']
         idx = df_causas[df_causas['ROL'] == rol_actual].index[0]
@@ -1602,11 +1638,14 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 
         with col_izq:
             tab_movs, tab_tareas_internas, tab_legacy, tab_docs_solicitados = st.tabs(["Movimientos", "Tareas Operativas", "Movimientos legacy", "📥 Docs Cliente"])
+            
+            # --- PESTAÑA: TAREAS OPERATIVAS (CORREGIDA SIN DUPLICADOS) ---
             with tab_tareas_internas:
                 if st.button("+ Asignar Nueva Tarea Operativa", type="primary"):
-                    st.session_state['creando_tarea'] = not st.session_state['creando_tarea']
+                    st.session_state['creando_tarea'] = not st.session_state.get('creando_tarea', False)
                     st.rerun()
-                if st.session_state['creando_tarea']:
+                    
+                if st.session_state.get('creando_tarea'):
                     with st.form("form_t_interna"):
                         t_t = st.text_input("Nomenclatura Breve")
                         t_d = st.text_area("Descripción de la gestión")
@@ -1628,7 +1667,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         destinatario_usr = user_key
                                         destinatario_file = f"base_tareas_{user_key}.csv"
                                         break
-                            
+                                
                             if not os.path.exists(destinatario_file):
                                 pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(destinatario_file, index=False)
                                 
@@ -1640,27 +1679,20 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
                                 'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
                                 'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p,
-                                'Usuario_Propietario': destinatario_usr # <--- NUEVO: Para saber de quién es en la nube
+                                'Usuario_Propietario': destinatario_usr
                             }
                             df_t_destino = pd.concat([df_t_destino, pd.DataFrame([nueva_t])], ignore_index=True)
                             df_t_destino.to_csv(destinatario_file, index=False)
                             
-                            # ☁️ NUEVO: RESPALDO AUTOMÁTICO EN LA NUBE
                             try:
                                 df_nube_t = conn.read(worksheet="base_tareas", ttl=0)
                                 df_nube_t_upd = pd.concat([df_nube_t, pd.DataFrame([nueva_t])], ignore_index=True)
                                 conn.update(worksheet="base_tareas", data=df_nube_t_upd)
                             except:
                                 conn.update(worksheet="base_tareas", data=df_t_destino)
-                            
-                            st.session_state['creando_tarea'] = False
-                            
-                            if destinatario_usr == usuario_actual:
-                                st.success("✅ Tarea registrada en tu agenda y en la nube.")
-                            else:
-                                st.success("✅ Tarea enviada, delegada y respaldada exitosamente.")
                                 
-                            # NUEVO: Pausa para que se vea el mensaje verde
+                            st.session_state['creando_tarea'] = False
+                            st.success("✅ Tarea registrada y respaldada en la nube exitosamente.")
                             import time
                             time.sleep(1)
                             st.rerun()
@@ -1676,136 +1708,80 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             b_prio_color = "#ff5630" if tarea.get('Prioridad') == "Alta" else ("#ffc400" if tarea.get('Prioridad') == "Media" else "#57a15a")
                             st.markdown(f"<div style='height: 5px; background-color: {b_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                             
-                            # --- MODO EDICIÓN DE TAREA ---
+                            # --- CONTROL DE FLUJO: EDICIÓN O MODO NORMAL ---
                             if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
-                                st.markdown("#### ✏️ Editar Tarea")
-                                with st.form(key=f"form_ed_t_{tarea['ID_Tarea']}"):
-                                    e_tit = st.text_input("Título", tarea['Titulo'])
-                                    e_desc = st.text_area("Descripción", tarea['Descripcion'])
-                                    c_ep1, c_ep2 = st.columns(2)
-                                    opciones_prio = ["Alta", "Media", "Baja"]
-                                    idx_prio = opciones_prio.index(tarea.get('Prioridad', 'Media')) if tarea.get('Prioridad', 'Media') in opciones_prio else 1
-                                    e_prio = c_ep1.selectbox("Prioridad", opciones_prio, index=idx_prio)
-                                    
-                                    try:
-                                        f_obj = datetime.strptime(tarea['Fecha_Vencimiento'], "%d/%m/%Y")
-                                    except:
-                                        f_obj = datetime.now()
-                                    e_fec = c_ep2.date_input("Fecha Vencimiento", f_obj)
-                                    
-                                    col_eb1, col_eb2 = st.columns(2)
-                                    if col_eb1.form_submit_button("💾 Guardar Cambios", type="primary", use_container_width=True):
-                                        # Guardar en local
-                                        df_t_local.at[idx_tarea_bd, 'Titulo'] = e_tit
-                                        df_t_local.at[idx_tarea_bd, 'Descripcion'] = e_desc
-                                        df_t_local.at[idx_tarea_bd, 'Prioridad'] = e_prio
-                                        df_t_local.at[idx_tarea_bd, 'Fecha_Vencimiento'] = e_fec.strftime("%d/%m/%Y")
-                                        df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                        
-                                        # Guardar en la Nube
-                                        try:
-                                            df_nube_t = conn.read(worksheet="base_tareas", ttl=0)
-                                            df_nube_t.loc[df_nube_t['ID_Tarea'] == tarea['ID_Tarea'], ['Titulo', 'Descripcion', 'Prioridad', 'Fecha_Vencimiento']] = [e_tit, e_desc, e_prio, e_fec.strftime("%d/%m/%Y")]
-                                            conn.update(worksheet="base_tareas", data=df_nube_t)
-                                        except: pass
-                                        
-                                        st.session_state['editando_tarea'] = None
-                                        st.success("✅ Cambios guardados correctamente.")
-                                        import time
-                                        time.sleep(1)
-                                        st.rerun()
-                                        
-                                    if col_eb2.form_submit_button("❌ Cancelar", use_container_width=True):
-                                        st.session_state['editando_tarea'] = None
-                                        st.rerun()
-                            
-                            # --- MODO VISUALIZACIÓN NORMAL ---
-                    else:
-                        c_top_l, c_top_r = st.columns([2.5, 2.3])
-                                    
-                                    # Lado Izquierdo: Autor y Fechas
-                        with c_top_l:
-                                        autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
-                                        st.markdown(f"""
-                                        <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                                            <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
-                                            <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{autor_real}</span>
-                                            <span style='font-size:12px; color:{b_prio_color}; font-weight:bold; margin-left:8px;'>[{tarea.get('Prioridad', 'Media')}]</span>
-                                        </div>
-                                        """, unsafe_html=True)
-                                        st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_html=True)
-                                    
-                                    # Lado Derecho: Botones (Estructura plana sin else anidado complejo)
-                        with c_top_r:
-                                        if tarea['Estado'] == 'En progreso':
-                                            botones = st.columns([1, 1, 1, 1] if usuario_actual == "Narratia" else [1, 1, 1])
-                                            if botones[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
-                                                df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                            if botones[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
-                                                df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                            if botones[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
-                                                st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
-                                            if usuario_actual == "Narratia" and botones[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
-                                                df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                        
-                                        # Estado Final separado
-                                        if tarea['Estado'] != 'En progreso':
-                                            bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
-                                            st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_html=True)
-                                            if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}"):
-                                                df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'])
                                 
-                        with c_top_r:
-                                    # --- LÓGICA DE BOTONES Y ESTADOS ---
+                            else:
+                                c_top_l, c_top_r = st.columns([2.5, 2.3])
+                                with c_top_l:
+                                    autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
+                                    st.markdown(f"""
+                                    <div style='display: flex; align-items: center; margin-bottom: 5px;'>
+                                        <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
+                                        <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{autor_real}</span>
+                                        <span style='font-size:12px; color:{b_prio_color}; font-weight:bold; margin-left:8px;'>[{tarea.get('Prioridad', 'Media')}]</span>
+                                    </div>
+                                    """, unsafe_allow_html=True)
+                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
+                                
+                                with c_top_r:
                                     if tarea['Estado'] == 'En progreso':
-                                        if usuario_actual == "Narratia":
-                                            bcols = st.columns([1, 1, 1, 1])
-                                        else:
-                                            bcols = st.columns([1, 1, 1])
-                                            
-                                        # Botones de Acción
-                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
+                                        bcols = st.columns([1, 1, 1, 1] if usuario_actual == "Narratia" else [1, 1, 1])
+                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}", help="Rechazar"): 
                                             df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            st.rerun()
-                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
-                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            st.rerun()
-                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
-                                            st.session_state['editando_tarea'] = tarea['ID_Tarea']
-                                            st.rerun()
-                                        if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
-                                            df_t_local = df_t_local.drop(idx_tarea_bd)
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            st.rerun()
-                                    
-                                    else:
-                                        # Estado Final (Aprobada/Rechazada)
-                                        bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
-                                        st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
-                                        if usuario_actual == "Narratia" and st.button("🗑️ Eliminar permanentemente", key=f"del_fin_{tarea['ID_Tarea']}"):
-                                            df_t_local = df_t_local.drop(idx_tarea_bd)
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            st.rerun()
-                                    else:
-                                        # Si ya está aprobada o rechazada, igual puedes borrarla
-                                        bcols = st.columns([2, 1])
-                                        bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
-                                        bcols[0].markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
-                                        if bcols[1].button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar permanentemente"):
-                                            df_t_local = df_t_local.drop(idx_tarea_bd)
                                             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
                                             try:
                                                 dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                dn = dn[dn['ID_Tarea'] != tarea['ID_Tarea']]
+                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Estado'] = 'Rechazada'
                                                 conn.update(worksheet="base_tareas", data=dn)
                                             except: pass
                                             st.rerun()
+                                            
+                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}", help="Aprobar"): 
+                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'
+                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                                            try:
+                                                dn = conn.read(worksheet="base_tareas", ttl=0)
+                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Estado'] = 'Aprobada'
+                                                conn.update(worksheet="base_tareas", data=dn)
+                                            except: pass
+                                            st.rerun()
+                                            
+                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}", help="Modificar Plazo"):
+                                            st.session_state['editando_tarea'] = tarea['ID_Tarea']
+                                            st.rerun()
+                                            
+                                        if usuario_actual == "Narratia":
+                                            if bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar"):
+                                                df_t_local = df_t_local.drop(idx_tarea_bd)
+                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                                                try:
+                                                    dn = conn.read(worksheet="base_tareas", ttl=0)
+                                                    dn = dn[dn['ID_Tarea'] != tarea['ID_Tarea']]
+                                                    conn.update(worksheet="base_tareas", data=dn)
+                                                except: pass
+                                                st.rerun()
+                                    else:
+                                        bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
+                                        if usuario_actual == "Narratia":
+                                            bcols = st.columns([2, 1])
+                                            bcols[0].markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
+                                            if bcols[1].button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar permanentemente"):
+                                                df_t_local = df_t_local.drop(idx_tarea_bd)
+                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                                                try:
+                                                    dn = conn.read(worksheet="base_tareas", ttl=0)
+                                                    dn = dn[dn['ID_Tarea'] != tarea['ID_Tarea']]
+                                                    conn.update(worksheet="base_tareas", data=dn)
+                                                except: pass
+                                                st.rerun()
+                                        else:
+                                            st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
 
                                 st.markdown(f"<h3 style='font-size: 18px; color: #172b4d; margin-top: 15px; margin-bottom: 5px;'>{tarea['Titulo']}</h3><p style='font-size: 15px; color: #172b4d; margin-bottom: 15px;'>{tarea['Descripcion']}</p>", unsafe_allow_html=True)
                                 
-                                # Comentarios
+                                # Comentarios de la Tarea
                                 comentarios_js = json.loads(tarea['Comentarios'])
                                 html_coms = "".join([f"<div style='margin-bottom:15px;'><strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong> <span style='color:#6b778c; font-size:13px;'>• {c['fecha']}</span><br><span style='color:#42526e; font-size:14px;'>{c['texto']}</span></div>" for c in comentarios_js]) if comentarios_js else "<span style='color:#6b778c; font-size:14px;'>No hay comentarios.</span>"
                                 
@@ -1827,15 +1803,14 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
                                             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
                                             
-                                            # Update nube con el nuevo comentario
                                             try:
                                                 dn = conn.read(worksheet="base_tareas", ttl=0)
                                                 dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
                                                 conn.update(worksheet="base_tareas", data=dn)
                                             except: pass
-                                            
                                             st.rerun()
 
+            # --- PESTAÑA: DOCS CLIENTE ---
             with tab_docs_solicitados:
                 st.subheader("📋 Gestión de Requisitos del Cliente")
                 token_para_link = str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_")
