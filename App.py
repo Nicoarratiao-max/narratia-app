@@ -335,6 +335,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def guardar_en_nube(df):
     conn.update(worksheet="base_usuarios", data=df)
     df.to_csv(ARCHIVO_USUARIOS, index=False)
+    st.cache_data.clear()
 
 try:
     df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5], ttl=0)
