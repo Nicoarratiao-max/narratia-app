@@ -338,7 +338,7 @@ def guardar_en_nube(df):
     st.cache_data.clear()
 
 try:
-    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5], ttl=0)
+    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5], ttl=10)
     df_usuarios = df_usuarios.dropna(how="all")
     # 💡 EL BLINDAJE: Obligamos a que la columna sea leída como texto siempre
     df_usuarios['Debe_Cambiar_Clave'] = df_usuarios['Debe_Cambiar_Clave'].astype(str)
