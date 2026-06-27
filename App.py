@@ -1735,40 +1735,37 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_html=True)
                                 
                                 with c_top_r:
+                                    # --- LÓGICA DE BOTONES Y ESTADOS ---
                                     if tarea['Estado'] == 'En progreso':
-                                        bcols = st.columns([1, 1, 1, 1])
-                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}", help="Rechazar"): 
+                                        if usuario_actual == "Narratia":
+                                            bcols = st.columns([1, 1, 1, 1])
+                                        else:
+                                            bcols = st.columns([1, 1, 1])
+                                            
+                                        # Botones de Acción
+                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
                                             df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'
                                             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            try:
-                                                dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Estado'] = 'Rechazada'
-                                                conn.update(worksheet="base_tareas", data=dn)
-                                            except: pass
                                             st.rerun()
-                                            
-                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}", help="Aprobar"): 
+                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
                                             df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'
                                             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            try:
-                                                dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Estado'] = 'Aprobada'
-                                                conn.update(worksheet="base_tareas", data=dn)
-                                            except: pass
                                             st.rerun()
-                                            
-                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}", help="Editar"):
+                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
                                             st.session_state['editando_tarea'] = tarea['ID_Tarea']
                                             st.rerun()
-                                            
-                                        if bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar"):
+                                        if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
                                             df_t_local = df_t_local.drop(idx_tarea_bd)
                                             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            try:
-                                                dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                dn = dn[dn['ID_Tarea'] != tarea['ID_Tarea']]
-                                                conn.update(worksheet="base_tareas", data=dn)
-                                            except: pass
+                                            st.rerun()
+                                    
+                                    else:
+                                        # Estado Final (Aprobada/Rechazada)
+                                        bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
+                                        st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
+                                        if usuario_actual == "Narratia" and st.button("🗑️ Eliminar permanentemente", key=f"del_fin_{tarea['ID_Tarea']}"):
+                                            df_t_local = df_t_local.drop(idx_tarea_bd)
+                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
                                             st.rerun()
                                     else:
                                         # Si ya está aprobada o rechazada, igual puedes borrarla
