@@ -6,13 +6,17 @@ import uuid
 import base64
 import io
 import requests
+import glob
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from datetime import datetime
+from datetime import datetime, timedelta
+from bs4 import BeautifulSoup
+from streamlit_calendar import calendar
+from streamlit_gsheets import GSheetsConnection
+import extra_streamlit_components as stx
 
 # --- FUNCIÓN DE GOOGLE CALENDAR DINÁMICA ---
 def agendar_plazo_calendar(titulo, descripcion, fecha_str, correo_destino):
-    # Si el usuario no está logueado o el correo no es válido, no hace nada
     if not correo_destino or "@" not in str(correo_destino):
         return False
 
@@ -44,10 +48,6 @@ def agendar_plazo_calendar(titulo, descripcion, fecha_str, correo_destino):
     except Exception as e:
         print(f"Error interno Calendar: {e}")
         return False
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-from streamlit_calendar import calendar
-from streamlit_gsheets import GSheetsConnection
 
 # --- VERIFICACIÓN DE LIBRERÍA WORD ---
 try:
@@ -64,6 +64,7 @@ st.set_page_config(
     layout="wide", 
     initial_sidebar_state="expanded"
 )
+
 # --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE AGRESIVO) ---
 st.markdown("""
 <iframe src="javascript:void(0);" style="display:none;" onload="
@@ -145,7 +146,7 @@ def procesar_ojv_completo(archivo):
         df_consolidado['Tipo_Negocio'] = "Externo"
         
         cols_extra = [
-            'Servicio', 'Teléfono', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 
+            'Cliente', 'RUT', 'Teléfono', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 
             'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas'
         ]
         for col in cols_extra:
@@ -232,14 +233,14 @@ def crear_contrato_word(datos):
     p1 = doc.add_paragraph()
     p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p1.add_run("\nCLÁUSULA PRIMERA: OBJETO DEL CONTRATO. ").bold = True
-    p1.add_run(f"Por medio de este instrumento, el Cliente encomienda la representación y patrocinio legal a El Abogado para la tramitación judicial y defensa respectiva de un procedimiento de {datos['tipo_servicio'].upper()}.\n")
+    p1.add_run(f"Por medio de este instrumento, el Cliente encomienda la representation y patrocinio legal a El Abogado para la tramitación judicial y defensa respectiva de un procedimiento de {datos['tipo_servicio'].upper()}.\n")
     p1.add_run("Los servicios profesionales comprometidos por el profesional contemplan de forma específica lo siguiente:\n")
     p1.add_run(datos['detalle_servicio'])
     
     p2 = doc.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p2.add_run("\nCLÁUSULA SEGUNDA: HONORARIOS PROFESIONALES. ").bold = True
-    p2.add_run(f"Los honorarios totales convenidos por la prestación de los servicios profesionales ascienden a la suma correlativa de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
+    p2.add_run(f"Los honorarios totales convenidos por la prestacion de los servicios profesionales ascienden a la suma correlativa de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
     p2.add_run("Esta suma se considera alzada y fija por la tramitación completa descrita en la cláusula anterior.")
     
     p3 = doc.add_paragraph()
@@ -283,7 +284,7 @@ def crear_contrato_word(datos):
 
     p5 = doc.add_paragraph()
     p5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p5.add_run("\nCLÁUSULA QUINTA: OBLIGACIONES RECÍPROCAS DE LAS PARTES.\n").bold = True
+    p5.add_run("\nCLÁUSULA QUINTA: OBLIGACIONES RECÍPOCAS DE LAS PARTES.\n").bold = True
     p5.add_run("Obligación del Profesional: ").bold = True
     p5.add_run("El Abogado asume una obligación de medios diligentes, debiendo desplegar todo su conocimiento técnico, técnico-jurídico y ético para la tramitación de la causa.\n")
     p5.add_run("Obligación del Contratante: ").bold = True
@@ -291,6 +292,7 @@ def crear_contrato_word(datos):
 
     num_clausula = 6
     if datos['tipo_servicio'] == "Liquidación voluntaria":
+        doc.add_paragraph()
         p6 = doc.add_paragraph()
         p6.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p6.add_run("\nCLÁUSULA SEXTA: ENTREGA DE DECLARACIONES JURADAS OBLIGATORIAS. ").bold = True
@@ -367,8 +369,6 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
 # =====================================================================
 # --- SISTEMA DE CONTROL DE ACCESO (AHORA EN GOOGLE SHEETS Y COOKIES) ---
 # =====================================================================
-import extra_streamlit_components as stx
-
 ARCHIVO_USUARIOS = "base_usuarios.csv"
 conn = st.connection("gsheets", type=GSheetsConnection)
 
@@ -436,7 +436,6 @@ if 'logged_in' not in st.session_state:
 if 'username' not in st.session_state: 
     st.session_state['username'] = ""
 
-# Si el navegador ya tiene la galleta guardada, lo dejamos pasar automático
 cookie_usuario = cookie_manager.get(cookie="jurisync_user")
 if cookie_usuario and cookie_usuario in USUARIOS_DICT:
     st.session_state['logged_in'] = True
@@ -553,12 +552,9 @@ if not st.session_state['logged_in']:
                             st.session_state['usr_registro'] = user_clean
                             st.rerun()
                         else:
-                            # 1. Guardamos la galleta en el navegador
                             cookie_manager.set("jurisync_user", user_clean, key="cookie_login")
-                            # 2. Le decimos a Streamlit que estás logueado
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = user_clean
-                            # 3. TRUCO DE MAGIA: Esperamos 1 segundo para que el navegador alcance a guardar la galleta
                             import time
                             time.sleep(1)
                             st.rerun()
@@ -634,7 +630,7 @@ ARCHIVO_MENSAJES = "base_mensajes_global.csv"
 
 # Verificación de archivos individuales para evitar pérdida de datos
 if not os.path.exists(ARCHIVO_TAREAS):
-    df_vacio_t = pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad'])
+    df_vacio_t = pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
     df_vacio_t.to_csv(ARCHIVO_TAREAS, index=False)
 else:
     df_t_check = pd.read_csv(ARCHIVO_TAREAS)
@@ -643,7 +639,7 @@ else:
         df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
 
 if not os.path.exists(ARCHIVO_BD):
-    df_vacio_c = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas'])
+    df_vacio_c = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Usuario_Propietario'])
     df_vacio_c.to_csv(ARCHIVO_BD, index=False)
 else:
     df_c_check = pd.read_csv(ARCHIVO_BD)
@@ -662,11 +658,11 @@ else:
         df_c_check.to_csv(ARCHIVO_BD, index=False)
 
 if not os.path.exists(ARCHIVO_CONTRATOS):
-    df_vacio_co = pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios'])
+    df_vacio_co = pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario'])
     df_vacio_co.to_csv(ARCHIVO_CONTRATOS, index=False)
 
 if not os.path.exists(ARCHIVO_TRAMITES):
-    df_vacio_tr = pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por'])
+    df_vacio_tr = pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario'])
     df_vacio_tr.to_csv(ARCHIVO_TRAMITES, index=False)
 
 if not os.path.exists(ARCHIVO_ESTADO_DIARIO):
@@ -758,33 +754,20 @@ def limpiar_causa():
 # --- CSS CLARO PROFESIONAL (ESTILO JIRA/TRELLO) ---
 st.markdown("""
 <style>
-    /* Fondo principal y estructura */
     [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
     [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
     [data-testid="stHeader"] { background-color: transparent !important; }
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
-    
-    /* Tarjetas tipo Dashboard */
     .dash-card { background: #ffffff !important; border-radius: 12px; padding: 18px; border: 1px solid #e0e4e8 !important; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
     .dash-header { border-bottom: 2px solid #0052cc; padding-bottom: 5px; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #0052cc; letter-spacing: 0.5px; text-transform: uppercase; }
-    
-    /* Insignias */
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-    
-    /* Inputs y Textareas - Claros y legibles */
     .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; }
     .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0052cc !important; box-shadow: 0 0 0 1px #0052cc !important; }
     ::placeholder { color: #6b778c !important; opacity: 1; }
-    
-    /* Botones uniformes */
     [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s ease !important; }
     [data-testid="stButton"] button:hover { border-color: #0052cc !important; color: #0052cc !important; background-color: #deebff !important; }
-    
-    /* Contenedores de formularios */
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; }
-    
-    /* Chat WhatsApp Style (Modo Claro) */
     .chat-bg { background-color: #efeae2; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
     .burbuja-mia { background-color: #dcf8c6; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-left: auto; margin-bottom: 12px; border: 1px solid #c9eab1;}
     .burbuja-otro { background-color: #ffffff; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-right: auto; margin-bottom: 12px; border: 1px solid #e0e4e8;}
@@ -807,20 +790,17 @@ with st.sidebar:
     # --- SISTEMA DE PLANES Y PERMISOS ---
     df_usuarios_plan = pd.read_csv(ARCHIVO_USUARIOS)
     
-    # Si la columna 'Plan' no existe aún, la creamos automáticamente
     if 'Plan' not in df_usuarios_plan.columns:
         df_usuarios_plan['Plan'] = 'Full' 
         df_usuarios_plan.to_csv(ARCHIVO_USUARIOS, index=False)
         
-    # Rescatar el plan del usuario que inició sesión
     usuario_actual = st.session_state.get('username', 'Desconocido')
     
     try:
         plan_actual = df_usuarios_plan.loc[df_usuarios_plan['Usuario'] == usuario_actual, 'Plan'].values[0]
     except:
-        plan_actual = "Básico" # Nivel de seguridad por defecto
+        plan_actual = "Básico"
 
-    # --- RENDERIZAR MENÚ SEGÚN EL PLAN ---
     opciones_basicas = [
         "🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "💼 Causas", "👥 Clientes"
     ]
@@ -831,13 +811,12 @@ with st.sidebar:
         opciones_flujo = opciones_basicas + [
             "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario"
         ]
-    else: # Nivel "Full"
+    else: 
         opciones_flujo = opciones_basicas + [
             "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
             "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📝 Redactor IA"
         ]
         
-    # El botón secreto de Admin: Solo aparece si el que entró eres tú (Narratia)
     if usuario_actual == "Narratia":
         opciones_flujo.append("👑 Panel Admin")
 
@@ -849,7 +828,6 @@ with st.sidebar:
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # --- MENÚ DE PERFIL Y SEGURIDAD ---
     with st.expander(f"👤 {nombre_real_usuario} (Mi Perfil)"):
         st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
         with st.form("form_perfil"):
@@ -885,7 +863,7 @@ with st.sidebar:
         for k in list(st.session_state.keys()): del st.session_state[k]
         st.rerun()
 
-# --- CONTROLADOR DE PESTAÑAS (VISTAS INDIVIDUALES EXPLICITAS) ---
+# --- CONTROLADOR DE PESTAÑAS ---
 
 # 1. HOME / INICIO
 if st.session_state['menu_radio'] == "🏠 Inicio":
@@ -1053,7 +1031,6 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                     df_tramites = pd.concat([df_tramites, pd.DataFrame([nuevo_tramite])], ignore_index=True)
                     df_tramites.to_csv(ARCHIVO_TRAMITES, index=False)
                     
-                    # ☁️ RESPALDO EN LA NUBE
                     try:
                         df_nube_tr = conn.read(worksheet="base_tramites", ttl=0)
                         df_nube_tr_upd = pd.concat([df_nube_tr, pd.DataFrame([nuevo_tramite])], ignore_index=True)
@@ -1155,7 +1132,6 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                 with c2:
                     if pd.notna(doc_ed['Doc_B64']) and doc_ed['Doc_B64'] != "": 
                         st.download_button("📥 Descargar PDF", data=base64.b64decode(doc_ed['Doc_B64']), file_name=doc_ed['Doc_Nombre'], key=f"bj_{doc_ed['ID_ED']}")
-
 
 # 5. INFORMES (IA PARA CLIENTES)
 elif st.session_state['menu_radio'] == "📊 Informes":
@@ -1280,7 +1256,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.error("⚠️ El motor `python-docx` no está instalado en el servidor.")
         else:
             st.markdown("### Módulo 1: Naturaleza Jurídica del Juicio")
-            st.markdown("<span style='color:#6b778c; font-size:14px;'>Selecciona primero la especialidad y la acción para activar el contrato:</span>", unsafe_allow_html=True)
             
             diccionario_servicios = {
                 "Derecho Civil y Patrimonial": ["Juicio Ejecutivo (Cobro de Pagaré / Facturas)", "Tercería de Posesión / Dominio", "Liquidación Voluntaria (Ley de Quiebras)", "Renegociación de Deudas", "Juicio de Arrendamiento", "Juicio Ordinario", "Juicio de Precario", "Posesión Efectiva y Partición", "Estudio de Títulos"],
@@ -1364,7 +1339,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        # ☁️ RESPALDO EN LA NUBE
                         try:
                             df_nube_co = conn.read(worksheet="base_contratos", ttl=0)
                             df_nube_co_upd = pd.concat([df_nube_co, pd.DataFrame([nuevo_con])], ignore_index=True)
@@ -1399,10 +1373,16 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             st.write("*(Sin archivo)*")
                             
                     with c3:
-                        if st.button("🗑️ Eliminar", key=f"del_con_{row.get('ID', idx)}"):
-                            df_contratos_reg = df_contratos_reg.drop(idx)
-                            df_contratos_reg.to_csv(ARCHIVO_CONTRATOS, index=False)
-                            st.rerun()
+                        if usuario_actual == "Narratia":
+                            if st.button("🗑️ Eliminar", key=f"del_con_{row.get('ID', idx)}"):
+                                df_contratos_reg = df_contratos_reg.drop(idx)
+                                df_contratos_reg.to_csv(ARCHIVO_CONTRATOS, index=False)
+                                try:
+                                    dn_c = conn.read(worksheet="base_contratos", ttl=0)
+                                    dn_c = dn_c[dn_c['ID'] != row.get('ID')]
+                                    conn.update(worksheet="base_contratos", data=dn_c)
+                                except: pass
+                                st.rerun()
 
     with tab_importar:
         st.markdown("Sube un contrato ya firmado en PDF o Word para extraer sus datos y guardarlos.")
@@ -1425,7 +1405,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             for p in doc.paragraphs: texto_contrato += p.text + "\n"
                                 
                         import google.generativeai as genai
-                        import json
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         
                         modelo_elegido = "gemini-1.0-pro"
@@ -1454,32 +1433,31 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             'RUT': datos_extraidos.get('cliente_rut', '--'), 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--', 'Correo': '--',
                             'Direccion': '--', 'SAC': '--', 'Sucursal': '--', 'Estado_Honorarios': 'Pendientes' if int(datos_extraidos.get('honorarios_total', 0)) > 0 else 'Sin fijar',
                             'Total_Honorarios': int(datos_extraidos.get('honorarios_total', 0)), 'Cuotas_Totales': int(datos_extraidos.get('cuotas_totales', 1)), 
-                            'Cuotas_Pagadas': 0, 'Fecha_Inicio': datos_extraidos.get('fecha_inicio_pago', datetime.now().strftime("%Y-%m-%d"))
+                            'Cuotas_Pagadas': 0, 'Fecha_Inicio': datos_extraidos.get('fecha_inicio_pago', datetime.now().strftime("%Y-%m-%d")),
+                            'Usuario_Propietario': usuario_actual
                         }
                         pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True).to_csv(ARCHIVO_BD, index=False)
                         
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"),
-                            'Cliente': nombre_extraido, 'Servicio': datos_extraidos.get('servicio', 'Servicio Legal'), 'Honorarios': datos_extraidos.get('honorarios_total', 0)
+                            'Cliente': nombre_extraido, 'Servicio': datos_extraidos.get('servicio', 'Servicio Legal'), 'Honorarios': datos_extraidos.get('honorarios_total', 0),
+                            'Archivo_B64': '', 'Usuario_Propietario': usuario_actual
                         }
                         pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True).to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        st.success(f"✅ ¡La IA agregó a **{nombre_extraido}** directo a tu listado de clientes!")
+                        st.success(f"✅ ¡La IA agregó a **{nombre_extraido}** directo a tu listado!")
                     except Exception as e: st.error(f"❌ Error técnico: {e}")
 
 # # 7. CAUSAS / EXPEDIENTES (MEJORADO Y RELACIONAL)
 elif st.session_state['menu_radio'] == "💼 Causas":
     df_causas = pd.read_csv(ARCHIVO_BD)
     
-    # --- 🔗 CARGA DE LA BASE DE CLIENTES MAESTRA ---
     try:
         df_clientes = conn.read(worksheet="base_clientes", ttl=0)
     except:
-        # Si la hoja no existe o está vacía, creamos una estructura base para no romper el código
-        df_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Direccion'])
+        df_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
     
-    # --- DEFINICIÓN DEL POP-UP MODAL DE EDICIÓN DE TAREAS ---
     @st.dialog("Editar tarea")
     def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
         st.write(f"Modificando plazos para: **{tarea_titulo}**")
@@ -1503,16 +1481,12 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 dn = conn.read(worksheet="base_tareas", ttl=0)
                 dn.loc[dn['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
                 conn.update(worksheet="base_tareas", data=dn)
-            except: 
-                pass
+            except: pass
                 
             st.session_state['editando_tarea'] = None
             st.success("✅ Tarea actualizada correctamente.")
-            import time
-            time.sleep(1)
-            st.rerun()
+            import time; time.sleep(1); st.rerun()
 
-    # --- VISTA 1: LISTADO GENERAL DE CAUSAS ---
     if st.session_state['causa_seleccionada'] is None:
         st.session_state['modo_edicion'] = False
         st.title("💼 Gestión e Historial de Causas")
@@ -1541,12 +1515,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         if n_rol.strip() == "" or not cliente_seleccionado:
                             st.error("El ROL y el Cliente son obligatorios.")
                         else:
-                            # 🧩 Desarmamos el string para sacar el RUT y el Nombre limpios
                             rut_extraido = cliente_seleccionado.split(" - ")[0]
                             nombre_extraido = cliente_seleccionado.split(" - ")[1]
                             
                             nueva_c = {
-                                'ROL': n_rol, 'TRIBUNAL': n_trib, 'CARATULADO': n_carat, 'Cliente': nombre_extraido,
+                                'ROL': n_rol.strip().upper(), 'TRIBUNAL': n_trib.strip(), 'CARATULADO': n_carat.strip(), 'Cliente': nombre_extraido,
                                 'RUT': rut_extraido, 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--',
                                 'Correo': '--', 'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
                                 'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0,
@@ -1564,9 +1537,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             
                             st.session_state['creando_causa'] = False
                             st.success("✅ Causa creada y vinculada al cliente exitosamente.")
-                            import time
-                            time.sleep(1)
-                            st.rerun()
+                            import time; time.sleep(1); st.rerun()
 
         st.write("---")
         col_f1, col_f2 = st.columns(2)
@@ -1606,23 +1577,47 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     c5.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
                     st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
         
-    # --- VISTA 2: DENTRO DEL EXPEDIENTE SELECCIONADO ---
     else:
         rol_actual = st.session_state['causa_seleccionada']
-        idx = df_causas[df_causas['ROL'] == rol_actual].index[0]
+        filtro_causa = df_causas[df_causas['ROL'] == rol_actual]
+        
+        if filtro_causa.empty:
+            st.error(f"Error: No se encontró el expediente para el ROL {rol_actual}.")
+            if st.button("Volver al inicio"):
+                st.session_state['causa_seleccionada'] = None
+                st.rerun()
+            st.stop()
+            
+        idx = filtro_causa.index[0]
         c_data = df_causas.loc[idx]
         
-        if st.button("⬅ Volver al listado general de causas"):
-            st.session_state['causa_seleccionada'] = None
-            st.rerun()
-            
-        st.markdown(f"<h2>Expediente Causa: {c_data.get('CARATULADO','')}</h2>", unsafe_allow_html=True)
+        c_head1, c_head2 = st.columns([4, 1])
+        with c_head1:
+            st.markdown(f"<h2>Expediente Causa: {c_data.get('CARATULADO','')}</h2>", unsafe_allow_html=True)
+        with c_head2:
+            if st.button("⬅ Volver al listado"):
+                st.session_state['causa_seleccionada'] = None
+                st.rerun()
+                
         col_izq, col_der = st.columns([2.5, 1.2])
         
         with col_der:
-            if st.button("❌ Cancelar Edición" if st.session_state['modo_edicion'] else "✏️ Editar Ficha"):
+            c_btn_ed, c_btn_del = st.columns([3, 1])
+            if c_btn_ed.button("❌ Cancelar" if st.session_state['modo_edicion'] else "✏️ Editar Ficha", use_container_width=True):
                 st.session_state['modo_edicion'] = not st.session_state['modo_edicion']
                 st.rerun()
+                
+            if usuario_actual == "Narratia":
+                if c_btn_del.button("🗑️", help="Eliminar Causa Permanentemente"):
+                    df_causas = df_causas.drop(idx)
+                    df_causas.to_csv(ARCHIVO_BD, index=False)
+                    try:
+                        dn_c = conn.read(worksheet="base_causas", ttl=0)
+                        dn_c = dn_c[dn_c['ROL'] != rol_actual]
+                        conn.update(worksheet="base_causas", data=dn_c)
+                    except: pass
+                    st.session_state['causa_seleccionada'] = None
+                    st.rerun()
                 
             if st.session_state['modo_edicion']:
                 with st.form("form_edicion_causa"):
@@ -1660,7 +1655,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         st.session_state['modo_edicion'] = False
                         st.rerun()
             else:
-                # --- 🔍 MOTOR DE BÚSQUEDA DE CLIENTE ---
+                # --- 🔍 MOTOR DE BÚSQUEDA RELACIONAL DEL CLIENTE ---
                 rut_asociado = str(c_data.get('RUT', ''))
                 datos_cliente = df_clientes[df_clientes['RUT'].astype(str) == rut_asociado]
                 
@@ -1671,7 +1666,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     dir_real = info_cl.get('Direccion', '--')
                 else:
                     tel_real, correo_real, dir_real = '--', '--', '--'
-                # ---------------------------------------
 
                 clase_div = "badge-active" if c_data.get('Tipo_Negocio') == "Externo" else "badge-propio"
                 st.markdown(f"""
@@ -1708,7 +1702,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         t_f = st.date_input("Fecha de Cumplimiento")
                         
                         st.markdown("---")
-                        st.markdown("<span style='font-size:13px; color:#6b778c;'>Dejar en blanco para asignarla a ti mismo. Para delegar, escribe el nombre del colega.</span>", unsafe_allow_html=True)
                         t_delegado = st.text_input("Asignar Tarea a (Opcional)", placeholder="Ej: Eduardo Riquelme")
                         
                         if st.form_submit_button("Registrar y Asignar Tarea", type="primary"):
@@ -1724,7 +1717,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         break
                                 
                             if not os.path.exists(destinatario_file):
-                                pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(destinatario_file, index=False)
+                                pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(destinatario_file, index=False)
                                 
                             df_t_destino = pd.read_csv(destinatario_file)
                             nueva_t = {
@@ -1746,21 +1739,18 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             except:
                                 conn.update(worksheet="base_tareas", data=df_t_destino)
                                 
-                            # --- 🚀 DISPARO A GOOGLE CALENDAR ---
+                            # --- DISPARO DE GOOGLE CALENDAR DINÁMICO ---
                             if t_p == "Alta":
-                                correo_sesion_activa = st.session_state.get('usuario_correo', '')
-                                try:
-                                    exito = agendar_plazo_calendar(t_t, f"Causa ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_sesion_activa)
-                                    if exito:
-                                        st.toast("📅 Plazo fatal sincronizado en Google Calendar con alarmas.", icon="🚨")
-                                except: pass
-                            # ------------------------------------
+                                df_usr_db = pd.read_csv(ARCHIVO_USUARIOS)
+                                f_user = df_usr_db[df_usr_db['Usuario'] == destinatario_usr]
+                                if not f_user.empty and "@" in str(f_user.iloc[0]['Correo']):
+                                    correo_cal = f_user.iloc[0]['Correo']
+                                    agendar_plazo_calendar(t_t, f"ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_cal)
+                                    st.toast("🚨 Plazo fatal sincronizado en Google Calendar.", icon="🚨")
                                 
                             st.session_state['creando_tarea'] = False
-                            st.success("✅ Tarea registrada y respaldada exitosamente.")
-                            import time
-                            time.sleep(1)
-                            st.rerun()
+                            st.success("✅ Tarea registrada exitosamente.")
+                            import time; time.sleep(1); st.rerun()
                             
                 df_t_local = pd.read_csv(ARCHIVO_TAREAS)
                 tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual]
@@ -1895,6 +1885,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             df_docs_db = df_docs_db.drop(idx_d)
                                             df_docs_db.to_csv(ARCHIVO_DOCS, index=False)
                                             st.rerun()
+
 # 8. AGENDA DIARIA
 elif st.session_state['menu_radio'] == "📋 Agenda":
     st.title("📋 Agenda Diaria de Plazos")
@@ -1928,7 +1919,7 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
                     with c3:
                         st.button("Ir al expediente ➔", key=f"ag_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
 
-# 9. MENSAJERÍA INTERNA (MODO WHATSAPP CLARO)
+# 9. MENSAJERÍA INTERNA
 elif st.session_state['menu_radio'] == "✈️ Mensajería":
     st.title("✈️ Mensajería Interna del Equipo")
     st.markdown("Plataforma de comunicación rápida para la oficina.")
@@ -1973,38 +1964,93 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 df_msgs.to_csv(ARCHIVO_MENSAJES, index=False)
                 st.rerun()
 
-# 10. CLIENTES DIRECTOS (LISTA ELEGANTE CLARA)
+# 10. CLIENTES DIRECTOS (FICHA COMPLETA Y RELACIONAL)
 elif st.session_state['menu_radio'] == "👥 Clientes":
-    df_causas = pd.read_csv(ARCHIVO_BD)
+    st.title("👥 Directorio de Clientes")
     
+    try:
+        df_clientes = conn.read(worksheet="base_clientes", ttl=0)
+    except:
+        df_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
+
     if st.session_state['cliente_seleccionado'] is None:
-        st.title("👥 Directorio de Clientes")
         if st.button("➕ Crear Nuevo Cliente", type="primary"):
             st.session_state['creando_cliente'] = not st.session_state.get('creando_cliente', False)
             
         if st.session_state.get('creando_cliente'):
             with st.container(border=True):
                 with st.form("form_crear_cliente"):
-                    n_cli_nom = st.text_input("Nombre Completo")
-                    n_cli_rut = st.text_input("RUT del Cliente")
-                    if st.form_submit_button("Guardar"):
-                        nueva_ficha = {'Cliente': n_cli_nom, 'RUT': n_cli_rut, 'Tipo_Negocio': 'Propio', 'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 1, 'Cuotas_Pagadas': 0}
-                        df_causas = pd.concat([df_causas, pd.DataFrame([nueva_ficha])], ignore_index=True)
-                        df_causas.to_csv(ARCHIVO_BD, index=False); st.rerun()
+                    st.subheader("Ficha Completa del Nuevo Cliente")
+                    c1, c2 = st.columns(2)
+                    n_cli_nom = c1.text_input("Nombre Completo *")
+                    n_cli_rut = c2.text_input("RUT del Cliente *")
+                    n_cli_tel = c1.text_input("Teléfono")
+                    n_cli_cor = c2.text_input("Correo Electrónico")
+                    n_cli_cla = c1.text_input("Clave Única")
+                    n_cli_dom = c2.text_input("Domicilio")
+
+                    if st.form_submit_button("💾 Guardar Cliente en la Nube", type="primary"):
+                        if not n_cli_nom or not n_cli_rut:
+                            st.error("El Nombre y el RUT son obligatorios.")
+                        else:
+                            nuevo_cliente = {
+                                'RUT': n_cli_rut.strip().upper(),
+                                'Nombre': n_cli_nom.strip(),
+                                'Telefono': n_cli_tel.strip(),
+                                'Correo': n_cli_cor.strip(),
+                                'Clave_unica': n_cli_cla.strip(),
+                                'Direccion': n_cli_dom.strip()
+                            }
+                            df_clientes = pd.concat([df_clientes, pd.DataFrame([nuevo_cliente])], ignore_index=True)
+                            
+                            try:
+                                conn.update(worksheet="base_clientes", data=df_clientes)
+                                st.success("✅ Cliente creado y sincronizado en Google Sheets.")
+                                st.session_state['creando_cliente'] = False
+                                import time; time.sleep(1); st.rerun()
+                            except Exception as e:
+                                st.error(f"Error al subir a la nube: {e}")
 
         st.markdown("### Listado de Clientes")
-        for cli_nom in df_causas['Cliente'].dropna().unique():
-            if cli_nom != "--" and st.button(f"👤 {cli_nom}"):
-                st.session_state['cliente_seleccionado'] = cli_nom; st.rerun()
-    
+        if df_clientes.empty:
+            st.info("No hay clientes registrados en la base de datos.")
+        else:
+            for idx, cli in df_clientes.iterrows():
+                with st.container(border=True):
+                    c_info, c_btn = st.columns([4, 1])
+                    with c_info:
+                        st.markdown(f"**👤 {cli['Nombre']}** | RUT: {cli['RUT']}")
+                    with c_btn:
+                        if st.button("Ver Ficha", key=f"ver_cli_{idx}", use_container_width=True):
+                            st.session_state['cliente_seleccionado'] = cli['RUT']
+                            st.rerun()
     else:
-        cli_actual = st.session_state['cliente_seleccionado']
-        datos = df_causas[df_causas['Cliente'] == cli_actual].iloc[0]
+        rut_actual = st.session_state['cliente_seleccionado']
+        filtro_cli = df_clientes[df_clientes['RUT'] == rut_actual]
         
-        if st.button("⬅ Volver al Directorio"): 
-            st.session_state['cliente_seleccionado'] = None; st.rerun()
+        if filtro_cli.empty:
+            st.error("No se encontró la información del cliente.")
+            if st.button("Volver"):
+                st.session_state['cliente_seleccionado'] = None
+                st.rerun()
+            st.stop()
             
-        st.title(f"Ficha: {cli_actual}")
+        datos_cli = filtro_cli.iloc[0]
+        df_causas = pd.read_csv(ARCHIVO_BD)
+        
+        c_back, c_del = st.columns([4, 1])
+        if c_back.button("⬅ Volver al Directorio"): 
+            st.session_state['cliente_seleccionado'] = None
+            st.rerun()
+            
+        if st.session_state['username'] == "Narratia":
+            if c_del.button("🗑️ Eliminar Cliente", use_container_width=True):
+                df_clientes = df_clientes[df_clientes['RUT'] != rut_actual]
+                conn.update(worksheet="base_clientes", data=df_clientes)
+                st.session_state['cliente_seleccionado'] = None
+                st.rerun()
+            
+        st.title(f"Ficha: {datos_cli['Nombre']}")
         tab1, tab2, tab3 = st.tabs(["👤 Información", "💰 Contabilidad", "📄 Contratos"])
         
         with tab1:
@@ -2013,40 +2059,33 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                 with st.container(border=True):
                     if st.session_state.get('editando_cli'):
                         with st.form("edit_cli"):
-                            n_nom = st.text_input("Nombre", datos.get('Cliente', ''))
-                            n_rut = st.text_input("RUT", datos.get('RUT', ''))
-                            n_tel = st.text_input("Teléfono", datos.get('Teléfono', ''))
-                            n_cor = st.text_input("Correo", datos.get('Correo', ''))
-                            n_cla = st.text_input("Clave Única", datos.get('Clave_unica', ''))
-                            n_dom = st.text_input("Domicilio", datos.get('Direccion', ''))
+                            n_nom = st.text_input("Nombre", datos_cli.get('Nombre', ''))
+                            n_rut = st.text_input("RUT", datos_cli.get('RUT', ''))
+                            n_tel = st.text_input("Teléfono", datos_cli.get('Telefono', ''))
+                            n_cor = st.text_input("Correo", datos_cli.get('Correo', ''))
+                            n_cla = st.text_input("Clave Única", datos_cli.get('Clave_unica', ''))
+                            n_dom = st.text_input("Domicilio", datos_cli.get('Direccion', ''))
                             if st.form_submit_button("💾 Guardar"):
-                                df_causas.loc[df_causas['Cliente'] == cli_actual, ['Cliente', 'RUT', 'Teléfono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
-                                df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['editando_cli'] = False; st.rerun()
+                                df_clientes.loc[df_clientes['RUT'] == rut_actual, ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                conn.update(worksheet="base_clientes", data=df_clientes)
+                                st.session_state['editando_cli'] = False
+                                st.rerun()
                     else:
-                        st.write(f"**Nombre:** {datos.get('Cliente', '--')}")
-                        st.write(f"**RUT:** {datos.get('RUT', '--')}")
-                        st.write(f"**Teléfono:** {datos.get('Teléfono', '--')}")
-                        st.write(f"**Correo:** {datos.get('Correo', '--')}")
-                        st.write(f"**Clave Única:** {datos.get('Clave_unica', '--')}")
-                        st.write(f"**Domicilio:** {datos.get('Direccion', '--')}")
+                        st.write(f"**Nombre:** {datos_cli.get('Nombre', '--')}")
+                        st.write(f"**RUT:** {datos_cli.get('RUT', '--')}")
+                        st.write(f"**Teléfono:** {datos_cli.get('Telefono', '--')}")
+                        st.write(f"**Correo:** {datos_cli.get('Correo', '--')}")
+                        st.write(f"**Clave Única:** {datos_cli.get('Clave_unica', '--')}")
+                        st.write(f"**Domicilio:** {datos_cli.get('Direccion', '--')}")
                         if st.button("✏️ Editar Datos"): st.session_state['editando_cli'] = True; st.rerun()
             
             with col_d:
-                if st.button("➕ Crear Nueva Causa"):
-                    st.session_state['creando_causa'] = True
-                
-                if st.session_state.get('creando_causa'):
-                    with st.form("nueva_causa_form"):
-                        n_rol = st.text_input("Nuevo ROL")
-                        if st.form_submit_button("Guardar Causa"):
-                            nueva_c = {'ROL': n_rol, 'Cliente': cli_actual, 'Tipo_Negocio': 'Propio'}
-                            df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
-                            df_causas.to_csv(ARCHIVO_BD, index=False); st.session_state['creando_causa'] = False; st.rerun()
-
                 st.subheader("Causas Asociadas")
-                causas_cli = df_causas[df_causas['Cliente'] == cli_actual]
-                for _, c in causas_cli.iterrows():
-                    if pd.notna(c.get('ROL')) and c.get('ROL') != "Sin Causa Aún":
+                causas_cli = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
+                if causas_cli.empty:
+                    st.write("Este cliente no tiene causas vinculadas.")
+                else:
+                    for _, c in causas_cli.iterrows():
                         with st.container(border=True):
                             c1, c2 = st.columns([3, 1])
                             c1.markdown(f"**Rol:** {c['ROL']} | **Caratulado:** {c.get('CARATULADO', '--')}")
@@ -2054,31 +2093,20 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 ir_a_expediente(c['ROL']); st.rerun()
 
         with tab2:
-            st.subheader("Estado Financiero")
-            try:
-                t_hon = float(datos.get('Total_Honorarios', 0))
-                if pd.isna(t_hon): t_hon = 0.0
-            except:
-                t_hon = 0.0
-                
-            try:
-                c_tot = float(datos.get('Cuotas_Totales', 1))
-                if pd.isna(c_tot) or c_tot == 0: c_tot = 1.0
-            except:
-                c_tot = 1.0
-                
-            try:
-                c_pag = float(datos.get('Cuotas_Pagadas', 0))
-                if pd.isna(c_pag): c_pag = 0.0
-            except:
-                c_pag = 0.0
-                
-            saldo_calculado = t_hon - ((t_hon / c_tot) * c_pag)
-            st.write(f"Saldo Pendiente: **${saldo_calculado:,.0f}**")
+            st.subheader("Estado Financiero Global")
+            causas_economicas = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
+            if causas_economicas.empty:
+                st.write("Sin registros financieros.")
+            else:
+                for _, ce in causas_economicas.iterrows():
+                    st.write(f"🔹 **Causa Rol {ce['ROL']}:** {ce.get('Estado_Honorarios', 'Sin fijar')}")
+                    st.write(f"Pactado: ${ce.get('Total_Honorarios',0):,.0f} | Cuotas Pagadas: {ce.get('Cuotas_Pagadas',0)}")
+                    st.write("---")
+                    
         with tab3:
             st.subheader("Contratos Vinculados")
             df_con = pd.read_csv(ARCHIVO_CONTRATOS)
-            st.dataframe(df_con[df_con['Cliente'] == cli_actual])
+            st.dataframe(df_con[df_con['Cliente'] == datos_cli['Nombre']])
 
 # 11. GESTOR GLOBAL DE TAREAS
 elif st.session_state['menu_radio'] == "☑️ Tareas":
@@ -2094,7 +2122,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                 c1, c2, c3 = st.columns([4, 2, 1])
                 with c1:
-                    st.markdown(f"<div style='display: flex; align-items: center; margin-bottom: 5px;'><img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror=\"this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';\"><strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong><span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='display: flex; align-items: center; margin-bottom: 5px;'><img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;'><strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong><span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span></div>", unsafe_allow_html=True)
                     st.markdown(f"<span style='color:#6b778c;'>{str(row['Descripcion'])[:60]}...</span>", unsafe_allow_html=True)
                 with c2:
                     color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
@@ -2127,8 +2155,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
                 text_color = "white" if bg_color != "#ffc400" else "#172b4d"
                 eventos_calendario.append({"title": f"📌 {r['Titulo']}", "start": d_str, "backgroundColor": bg_color, "textColor": text_color, "borderColor": bg_color})
-            except: 
-                pass
+            except: pass
                 
     opciones_calendario = {
         "initialView": "dayGridMonth", "locale": "es", "firstDay": 1, 
@@ -2182,12 +2209,11 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
     st.title("👑 Panel de Control - SaaS JuriSync")
     st.markdown("Crea cuentas nuevas, asigna planes o modifica el nivel de acceso de tus clientes actuales.")
     
-    tab_crear, tab_editar, tab_vision = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes", "👁️ Visión Global (God Mode)"])
+    tab_crear, tab_editar, tab_vision, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes", "👁️ Visión Global (God Mode)", "☢️ Zona de Peligro"])
     
     with tab_crear:
         with st.container(border=True):
             st.subheader("Vender Plan / Crear Usuario")
-            
             col1, col2 = st.columns(2)
             with col1:
                 nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)", placeholder="Ej: EstudioPerez")
@@ -2201,28 +2227,21 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                     st.error("⚠️ Faltan datos obligatorios (Usuario, Nombre o Clave).")
                 else:
                     df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
-                    
                     if nuevo_user in df_usuarios_admin['Usuario'].values:
-                        st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema. Inventa otro nombre de acceso.")
+                        st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema.")
                     else:
                         nuevo_registro = {
-                            "Usuario": nuevo_user.strip(),
-                            "Password": nueva_clave.strip(),
-                            "Nombre_Real": nuevo_nombre.strip(),
-                            "Correo": "pendiente",  
-                            "Debe_Cambiar_Clave": 'True', 
-                            "Plan": nuevo_plan
+                            "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
+                            "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
                         }
-                        
                         df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
                         df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
                         guardar_en_nube(df_usuarios_admin)
                         
                         archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
                         if not os.path.exists(archivo_tareas_nuevo):
-                            pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(archivo_tareas_nuevo, index=False)
-                        
-                        st.success(f"✅ ¡Cuenta lista! Usuario **{nuevo_user}** creado con Plan {nuevo_plan}. Envíale el Usuario y la Clave por WhatsApp para que entre.")
+                            pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(archivo_tareas_nuevo, index=False)
+                        st.success(f"✅ Cuenta lista! Usuario **{nuevo_user}** creado.")
                         st.rerun()
 
     with tab_editar:
@@ -2238,9 +2257,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                 try:
                     plan_actual_usr = df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'].values[0]
                     idx_plan = ["Básico", "Medio", "Full"].index(plan_actual_usr)
-                except:
-                    idx_plan = 0
-                    
+                except: idx_plan = 0
                 nuevo_plan_edit = st.selectbox("Seleccionar Nuevo Plan", ["Básico", "Medio", "Full"], index=idx_plan)
             with c_ed3:
                 st.write("") 
@@ -2249,17 +2266,12 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                     df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
                     df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
                     guardar_en_nube(df_usuarios_admin)
-                    st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados a Plan {nuevo_plan_edit}.")
+                    st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados.")
                     st.rerun()
-        
-        st.subheader("👥 Clientes y Planes Actuales")
-        df_vista = pd.read_csv(ARCHIVO_USUARIOS)
-        st.dataframe(df_vista[['Usuario', 'Nombre_Real', 'Plan', 'Correo', 'Debe_Cambiar_Clave']], use_container_width=True)
+        st.dataframe(df_usuarios_admin[['Usuario', 'Nombre_Real', 'Plan', 'Correo']], use_container_width=True)
 
     with tab_vision:
         st.subheader("Monitoreo Absoluto de la Oficina")
-        st.markdown("Visualización en tiempo real de toda la información ingresada por los usuarios del sistema. **Solo tú tienes este nivel de acceso.**")
-        
         df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
         todas_causas = []
         todas_tareas = []
@@ -2267,13 +2279,11 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
         for u in df_usuarios_admin['Usuario']:
             arch_c = f"base_causas_{u}.csv"
             arch_t = f"base_tareas_{u}.csv"
-            
             if os.path.exists(arch_c):
                 temp_c = pd.read_csv(arch_c)
                 if not temp_c.empty:
                     temp_c['Usuario_Propietario'] = u 
                     todas_causas.append(temp_c)
-                    
             if os.path.exists(arch_t):
                 temp_t = pd.read_csv(arch_t)
                 if not temp_t.empty:
@@ -2281,15 +2291,13 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                     todas_tareas.append(temp_t)
         
         col_v1, col_v2 = st.columns(2)
-        
         with col_v1:
             st.markdown("<div class='dash-card'><h4>Causas Globales</h4>", unsafe_allow_html=True)
             if todas_causas:
                 df_full_causas = pd.concat(todas_causas, ignore_index=True)
                 st.metric("Total de Causas en JuriSync", len(df_full_causas))
-                st.dataframe(df_full_causas[['Usuario_Propietario', 'ROL', 'Cliente', 'TRIBUNAL', 'Total_Honorarios']], use_container_width=True)
-            else:
-                st.info("No hay causas registradas en el sistema aún.")
+                st.dataframe(df_full_causas[['Usuario_Propietario', 'ROL', 'Cliente', 'TRIBUNAL']], use_container_width=True)
+            else: st.info("No hay causas registradas.")
             st.markdown("</div>", unsafe_allow_html=True)
             
         with col_v2:
@@ -2298,11 +2306,36 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                 df_full_tareas = pd.concat(todas_tareas, ignore_index=True)
                 st.metric("Total de Gestiones Pendientes", len(df_full_tareas[df_full_tareas['Estado'] == 'En progreso']))
                 st.dataframe(df_full_tareas[['Usuario_Propietario', 'Titulo', 'Estado', 'Fecha_Vencimiento']], use_container_width=True)
-            else:
-                st.info("No hay tareas creadas.")
+            else: st.info("No hay tareas creadas.")
             st.markdown("</div>", unsafe_allow_html=True)
 
-# NUEVO MÓDULO: REDACTOR AUTOMÁTICO IA
+    with tab_peligro:
+        st.subheader("Borrón y Cuenta Nueva (Limpieza Estricta)")
+        st.error("⚠️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas y tareas de Google Sheets y del servidor local.")
+        
+        if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True):
+            with st.spinner("Formateando tablas de la nube y discos locales..."):
+                df_vacio_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
+                df_vacio_causas = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas'])
+                df_vacio_tareas = pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
+                
+                try:
+                    conn.update(worksheet="base_clientes", data=df_vacio_clientes)
+                    conn.update(worksheet="base_causas", data=df_vacio_causas)
+                    conn.update(worksheet="base_tareas", data=df_vacio_tareas)
+                except Exception as e:
+                    st.error(f"Error limpiando Google Sheets: {e}")
+                
+                for archivo_local in glob.glob("base_*.csv"):
+                    if "usuarios" not in archivo_local:
+                        try: os.remove(archivo_local)
+                        except: pass
+                
+                st.cache_data.clear()
+            st.success("✅ Sistema completamente restablecido a cero.")
+            import time; time.sleep(2); st.rerun()
+
+# 15. REDACTOR AUTOMÁTICO IA
 elif st.session_state['menu_radio'] == "📝 Redactor IA":
     st.title("📝 Redactor Automático de Escritos")
     st.markdown("La IA redactará el borrador del escrito judicial con el formato y lenguaje formal de los tribunales chilenos, listo para revisar y presentar.")
@@ -2366,7 +2399,6 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         """
                         
                         respuesta_escrito = modelo.generate_content(prompt_redactor)
-                        
                         st.success("✅ Borrador redactado. Cópialo, revísalo y pásalo a Word.")
                         st.text_area("Escrito Generado:", value=respuesta_escrito.text, height=500)
                         
