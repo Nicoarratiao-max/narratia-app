@@ -6,6 +6,44 @@ import uuid
 import base64
 import io
 import requests
+from google.oauth2.service_account import Credentials
+from googleapiclient.discovery import build
+from datetime import datetime
+
+# --- FUNCIÓN DE GOOGLE CALENDAR DINÁMICA ---
+def agendar_plazo_calendar(titulo, descripcion, fecha_str, correo_destino):
+    # Si el usuario no está logueado o el correo no es válido, no hace nada
+    if not correo_destino or "@" not in str(correo_destino):
+        return False
+
+    try:
+        SCOPES = ['https://www.googleapis.com/auth/calendar.events']
+        creds = Credentials.from_service_account_file('credenciales_calendar.json', scopes=SCOPES)
+        servicio = build('calendar', 'v3', credentials=creds)
+
+        f_obj = datetime.strptime(fecha_str, "%d/%m/%Y")
+        fecha_iso = f_obj.strftime("%Y-%m-%dT09:00:00-04:00")
+        fecha_fin = f_obj.strftime("%Y-%m-%dT10:00:00-04:00")
+
+        evento = {
+            'summary': f"🔴 PLAZO FATAL: {titulo}",
+            'description': descripcion,
+            'start': {'dateTime': fecha_iso, 'timeZone': 'America/Santiago'},
+            'end': {'dateTime': fecha_fin, 'timeZone': 'America/Santiago'},
+            'reminders': {
+                'useDefault': False,
+                'overrides': [
+                    {'method': 'popup', 'minutes': 10080}, # 1 semana antes
+                    {'method': 'popup', 'minutes': 2880},  # 2 días antes
+                    {'method': 'popup', 'minutes': 180},   # 3 horas antes
+                ],
+            },
+        }
+        servicio.events().insert(calendarId=correo_destino, body=evento).execute()
+        return True
+    except Exception as e:
+        print(f"Error interno Calendar: {e}")
+        return False
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from streamlit_calendar import calendar
@@ -1690,6 +1728,17 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 conn.update(worksheet="base_tareas", data=df_nube_t_upd)
                             except:
                                 conn.update(worksheet="base_tareas", data=df_t_destino)
+                                
+                            # --- 🚀 DISPARO A GOOGLE CALENDAR DINÁMICO ---
+                            if t_p == "Alta":
+                                # Aquí el sistema rescata el correo ingresado por el usuario en el login
+                                # Ajusta 'usuario_correo' por el nombre exacto de tu variable de sesión si es necesario
+                                correo_sesion_activa = st.session_state.get('usuario_correo', '')
+                                
+                                exito = agendar_plazo_calendar(t_t, f"Causa ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_sesion_activa)
+                                if exito:
+                                    st.toast("📅 Plazo fatal sincronizado en Google Calendar con alarmas.", icon="🚨")
+                            # ------------------------------------
                                 
                             st.session_state['creando_tarea'] = False
                             st.success("✅ Tarea registrada y respaldada en la nube exitosamente.")
