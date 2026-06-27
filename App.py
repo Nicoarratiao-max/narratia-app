@@ -393,8 +393,6 @@ NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 # --- MOTOR DE COOKIES (PARA QUE NO SE CIERRE LA SESIÓN CON F5) ---
 cookie_manager = stx.CookieManager(key="motor_cookies")
 
-cookie_manager = get_manager()
-
 if 'logged_in' not in st.session_state: 
     st.session_state['logged_in'] = False
 if 'username' not in st.session_state: 
