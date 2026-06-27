@@ -1720,11 +1720,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         st.rerun()
                             
                             # --- MODO VISUALIZACIÓN NORMAL ---
-                            else:
-                                c_top_l, c_top_r = st.columns([2.5, 2.3])
+                    else:
+                        c_top_l, c_top_r = st.columns([2.5, 2.3])
                                     
                                     # Lado Izquierdo: Autor y Fechas
-                                with c_top_l:
+                        with c_top_l:
                                         autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
                                         st.markdown(f"""
                                         <div style='display: flex; align-items: center; margin-bottom: 5px;'>
@@ -1736,7 +1736,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_html=True)
                                     
                                     # Lado Derecho: Botones (Estructura plana sin else anidado complejo)
-                                with c_top_r:
+                        with c_top_r:
                                         if tarea['Estado'] == 'En progreso':
                                             botones = st.columns([1, 1, 1, 1] if usuario_actual == "Narratia" else [1, 1, 1])
                                             if botones[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
@@ -1754,11 +1754,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_html=True)
                                             if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}"):
                                                 df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-
-                                    # Aquí abajo continúa tu código original (Título, Descripción, Comentarios)
-                                    st.markdown(f"<h3 style='font-size: 18px; color: #172b4d; margin-top: 15px; margin-bottom: 5px;'>{tarea['Titulo']}</h3>...", unsafe_html=True)
                                 
-                                with c_top_r:
+                        with c_top_r:
                                     # --- LÓGICA DE BOTONES Y ESTADOS ---
                                     if tarea['Estado'] == 'En progreso':
                                         if usuario_actual == "Narratia":
