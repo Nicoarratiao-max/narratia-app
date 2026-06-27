@@ -1676,42 +1676,42 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             b_prio_color = "#ff5630" if tarea.get('Prioridad') == "Alta" else ("#ffc400" if tarea.get('Prioridad') == "Media" else "#57a15a")
                             st.markdown(f"<div style='height: 5px; background-color: {b_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                             
-                            # --- MODO EDICIÓN DE TAREA (SOLO FECHA) ---
-                            if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
-                                st.markdown("#### ✏️ Modificar Plazo de Tarea")
-                                with st.form(key=f"form_ed_t_{tarea['ID_Tarea']}"):
-                                    # Mostramos los datos fijos, no editables
-                                    st.markdown(f"**Título:** {tarea['Titulo']}")
-                                    st.markdown(f"**Descripción:** {tarea['Descripcion']}")
-                                    st.markdown(f"**Prioridad:** {tarea.get('Prioridad', 'Media')}")
-                                    st.markdown("---")
-                                    
-                                    try:
-                                        f_obj = datetime.strptime(tarea['Fecha_Vencimiento'], "%d/%m/%Y")
-                                    except:
-                                        f_obj = datetime.now()
-                                        
-                                    # El único campo editable:
-                                    e_fec = st.date_input("Nueva Fecha de Vencimiento", f_obj)
-                                    
-                                    col_eb1, col_eb2 = st.columns(2)
-                                    if col_eb1.form_submit_button("💾 Guardar Nueva Fecha", type="primary", use_container_width=True):
-                                        # Guardar en local (SOLO LA FECHA)
-                                        df_t_local.at[idx_tarea_bd, 'Fecha_Vencimiento'] = e_fec.strftime("%d/%m/%Y")
-                                        df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                        
-                                        # Guardar en la Nube
-                                        try:
-                                            df_nube_t = conn.read(worksheet="base_tareas", ttl=0)
-                                            df_nube_t.loc[df_nube_t['ID_Tarea'] == tarea['ID_Tarea'], 'Fecha_Vencimiento'] = e_fec.strftime("%d/%m/%Y")
-                                            conn.update(worksheet="base_tareas", data=df_nube_t)
-                                        except: pass
-                                        
-                                        st.session_state['editando_tarea'] = None
-                                        st.success("✅ Fecha actualizada correctamente.")
-                                        import time
-                                        time.sleep(1)
-                                        st.rerun()
+                           # --- MODAL DE EDICIÓN ---
+@st.dialog("Editar tarea")
+def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
+    st.write(f"Editando: **{tarea_titulo}**")
+    
+    # Campo Usuario (Solo lectura, para dar contexto)
+    st.text_input("Usuario", value=nombre_real_usuario, disabled=True)
+    
+    # Campo Fecha (Editable)
+    fecha_dt = datetime.strptime(tarea_fecha, "%d/%m/%Y")
+    nueva_fecha = st.date_input("Fecha de vencimiento *", value=fecha_dt)
+    
+    # Campo Estado (Editable)
+    nuevo_estado = st.selectbox("Estado", ["En progreso", "Aprobada", "Rechazada"], index=["En progreso", "Aprobada", "Rechazada"].index(tarea_estado))
+    
+    if st.button("Guardar", type="primary"):
+        # Actualizar local y nube
+        df_t_local.loc[df_t_local['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
+        df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+        
+        try:
+            dn = conn.read(worksheet="base_tareas", ttl=0)
+            dn.loc[dn['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
+            conn.update(worksheet="base_tareas", data=dn)
+        except: pass
+        
+        st.session_state['editando_tarea'] = None
+        st.rerun()
+
+# --- LÓGICA EN LA VISTA ---
+if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
+    modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'])
+
+# --- MODO VISUALIZACIÓN NORMAL ---
+else:
+    # ... (el código de visualización que ya tienes) ...
                                         
                                     if col_eb2.form_submit_button("❌ Cancelar", use_container_width=True):
                                         st.session_state['editando_tarea'] = None
