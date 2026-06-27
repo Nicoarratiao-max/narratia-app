@@ -1963,12 +1963,14 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 
     opciones_calendario = {
         "initialView": "dayGridMonth", "locale": "es", "firstDay": 1, 
+        "height": 700,
+        "contentHeight": "auto",
         "buttonText": {"today": "Hoy", "month": "Mes", "week": "Semana", "day": "Día", "list": "Agenda"},
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek,listMonth"}
     }
     
     css_calendario_moderno = """
-        .fc { background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border: 1px solid #e0e4e8;}
+        .fc { width: 100% !important; min-height: 600px; background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border: 1px solid #e0e4e8;}
         .fc-theme-standard td, .fc-theme-standard th { border-color: #e0e4e8; }
         .fc-col-header-cell { background-color: #f8f9fa; padding: 12px 0 !important; color: #6b778c; text-transform: capitalize; font-size: 14px; }
         .fc-button-primary { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; text-transform: capitalize !important; font-weight: 600 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
