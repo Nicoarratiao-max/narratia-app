@@ -1468,36 +1468,37 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         st.success(f"✅ ¡La IA agregó a **{nombre_extraido}** directo a tu listado de clientes!")
                     except Exception as e: st.error(f"❌ Error técnico: {e}")
 
-# # 7. CAUSAS / EXPEDIENTES (MEJORADO VISUALMENTE EN MODO CLARO)
+# # 7. CAUSAS / EXPEDIENTES (MEJORADO Y RELACIONAL)
 elif st.session_state['menu_radio'] == "💼 Causas":
     df_causas = pd.read_csv(ARCHIVO_BD)
+    
+    # --- 🔗 CARGA DE LA BASE DE CLIENTES MAESTRA ---
+    try:
+        df_clientes = conn.read(worksheet="base_clientes", ttl=0)
+    except:
+        # Si la hoja no existe o está vacía, creamos una estructura base para no romper el código
+        df_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Direccion'])
     
     # --- DEFINICIÓN DEL POP-UP MODAL DE EDICIÓN DE TAREAS ---
     @st.dialog("Editar tarea")
     def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
         st.write(f"Modificando plazos para: **{tarea_titulo}**")
-        
-        # Campo Usuario (Solo lectura, estilio Jira/Trello)
         st.text_input("Usuario", value=nombre_real_usuario, disabled=True)
         
-        # Campo Fecha (Editable para mover el vencimiento)
         try:
             f_obj = datetime.strptime(tarea_fecha, "%d/%m/%Y")
         except:
             f_obj = datetime.now()
         nueva_fecha = st.date_input("Fecha de vencimiento *", value=f_obj)
         
-        # Campo Estado (Editable para cambiar el flujo interno)
         opciones_estado = ["En progreso", "Aprobada", "Rechazada"]
         nuevo_estado = st.selectbox("Estado", opciones_estado, index=opciones_estado.index(tarea_estado) if tarea_estado in opciones_estado else 0)
         
         if st.button("Guardar", type="primary", use_container_width=True):
-            # 1. Actualizar base de datos local
             df_t_local = pd.read_csv(ARCHIVO_TAREAS)
             df_t_local.loc[df_t_local['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
             
-            # 2. Respaldar actualización en la nube
             try:
                 dn = conn.read(worksheet="base_tareas", ttl=0)
                 dn.loc[dn['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
@@ -1527,15 +1528,26 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     n_rol = c_nuevo1.text_input("ROL / RIT", placeholder="Ej: C-123-2024")
                     n_trib = c_nuevo2.text_input("Tribunal", placeholder="Ej: 1° Juzgado Civil de Santiago")
                     n_carat = st.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
-                    n_cli = st.text_input("Nombre del Cliente Titular")
+                    
+                    st.markdown("#### Asociar a un Cliente Existente")
+                    if not df_clientes.empty:
+                        opciones_clientes = df_clientes['RUT'].astype(str) + " - " + df_clientes['Nombre'].astype(str)
+                        cliente_seleccionado = st.selectbox("Seleccionar Cliente Titular", opciones_clientes.tolist())
+                    else:
+                        st.warning("⚠️ No hay clientes creados. Ve a la pestaña de Clientes primero.")
+                        cliente_seleccionado = None
                     
                     if st.form_submit_button("Guardar Causa en Base de Datos"):
-                        if n_rol.strip() == "":
-                            st.error("El ROL es obligatorio.")
+                        if n_rol.strip() == "" or not cliente_seleccionado:
+                            st.error("El ROL y el Cliente son obligatorios.")
                         else:
+                            # 🧩 Desarmamos el string para sacar el RUT y el Nombre limpios
+                            rut_extraido = cliente_seleccionado.split(" - ")[0]
+                            nombre_extraido = cliente_seleccionado.split(" - ")[1]
+                            
                             nueva_c = {
-                                'ROL': n_rol, 'TRIBUNAL': n_trib, 'CARATULADO': n_carat, 'Cliente': n_cli,
-                                'RUT': '--', 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--',
+                                'ROL': n_rol, 'TRIBUNAL': n_trib, 'CARATULADO': n_carat, 'Cliente': nombre_extraido,
+                                'RUT': rut_extraido, 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--',
                                 'Correo': '--', 'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
                                 'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0,
                                 'Usuario_Propietario': usuario_actual
@@ -1551,7 +1563,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 conn.update(worksheet="base_causas", data=df_causas)
                             
                             st.session_state['creando_causa'] = False
-                            st.success("✅ Causa creada y respaldada en la nube exitosamente.")
+                            st.success("✅ Causa creada y vinculada al cliente exitosamente.")
                             import time
                             time.sleep(1)
                             st.rerun()
@@ -1620,11 +1632,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     n_negocio = st.selectbox("Origen de Cartera", ["Externo", "Propio"], index=0 if c_data.get('Tipo_Negocio') == "Externo" else 1)
                     
                     st.markdown("#### Datos de Ficha de Cliente")
-                    n_cliente = st.text_input("Nombre Completo Titular", str(c_data.get('Cliente','')))
-                    n_rut = st.text_input("RUT del Cliente", str(c_data.get('RUT','')))
-                    n_tel = st.text_input("Teléfono", str(c_data.get('Teléfono','')))
-                    n_correo = st.text_input("Correo", str(c_data.get('Correo','')))
-                    n_dir = st.text_input("Domicilio", str(c_data.get('Direccion','')))
                     n_clave = st.text_input("Clave Única", str(c_data.get('Clave_unica','')))
                     n_sac = st.text_input("SAC Asignado", str(c_data.get('SAC','')))
                     n_suc = st.text_input("Sucursal Oficina", str(c_data.get('Sucursal','')))
@@ -1645,19 +1652,27 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         n_tot_hon, n_cuo_tot, n_cuo_pag = 0, 0, 0
                         
                     if st.form_submit_button("💾 Guardar Cambios", type="primary"):
-                        if not n_cliente or n_cliente == "--":
-                            st.error("No se puede actualizar sin un titular asignado.")
-                        else:
-                            df_causas.at[idx, 'TRIBUNAL'] = n_tribunal; df_causas.at[idx, 'Servicio'] = n_serv; df_causas.at[idx, 'Tipo_Negocio'] = n_negocio
-                            df_causas.at[idx, 'Cliente'] = n_cliente; df_causas.at[idx, 'RUT'] = n_rut; df_causas.at[idx, 'Teléfono'] = n_tel
-                            df_causas.at[idx, 'Correo'] = n_correo; df_causas.at[idx, 'Direccion'] = n_dir; df_causas.at[idx, 'Clave_unica'] = n_clave
-                            df_causas.at[idx, 'SAC'] = n_sac; df_causas.at[idx, 'Sucursal'] = n_suc
-                            df_causas.at[idx, 'Estado_Honorarios'] = n_estado_hon; df_causas.at[idx, 'Total_Honorarios'] = n_tot_hon
-                            df_causas.at[idx, 'Cuotas_Totales'] = n_cuo_tot; df_causas.at[idx, 'Cuotas_Pagadas'] = n_cuo_pag
-                            df_causas.to_csv(ARCHIVO_BD, index=False)
-                            st.session_state['modo_edicion'] = False
-                            st.rerun()
+                        df_causas.at[idx, 'TRIBUNAL'] = n_tribunal; df_causas.at[idx, 'Servicio'] = n_serv; df_causas.at[idx, 'Tipo_Negocio'] = n_negocio
+                        df_causas.at[idx, 'Clave_unica'] = n_clave; df_causas.at[idx, 'SAC'] = n_sac; df_causas.at[idx, 'Sucursal'] = n_suc
+                        df_causas.at[idx, 'Estado_Honorarios'] = n_estado_hon; df_causas.at[idx, 'Total_Honorarios'] = n_tot_hon
+                        df_causas.at[idx, 'Cuotas_Totales'] = n_cuo_tot; df_causas.at[idx, 'Cuotas_Pagadas'] = n_cuo_pag
+                        df_causas.to_csv(ARCHIVO_BD, index=False)
+                        st.session_state['modo_edicion'] = False
+                        st.rerun()
             else:
+                # --- 🔍 MOTOR DE BÚSQUEDA DE CLIENTE ---
+                rut_asociado = str(c_data.get('RUT', ''))
+                datos_cliente = df_clientes[df_clientes['RUT'].astype(str) == rut_asociado]
+                
+                if not datos_cliente.empty:
+                    info_cl = datos_cliente.iloc[0]
+                    tel_real = info_cl.get('Telefono', '--')
+                    correo_real = info_cl.get('Correo', '--')
+                    dir_real = info_cl.get('Direccion', '--')
+                else:
+                    tel_real, correo_real, dir_real = '--', '--', '--'
+                # ---------------------------------------
+
                 clase_div = "badge-active" if c_data.get('Tipo_Negocio') == "Externo" else "badge-propio"
                 st.markdown(f"""
                 <div class="dash-card">
@@ -1668,8 +1683,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     Rol: {rol_actual}<br>Tribunal: {c_data.get('TRIBUNAL')}<br>Materia: {c_data.get('Servicio')}<br>
                 </div>
                 <div class="dash-card">
-                    <strong>Ficha Económica Cliente</strong><br>
-                    Nombre: {c_data.get('Cliente')}<br>Rut: {c_data.get('RUT')}<hr>
+                    <strong>Ficha Económica y Contacto</strong><br>
+                    Nombre: {c_data.get('Cliente')}<br>
+                    RUT: {rut_asociado}<br>
+                    📞 {tel_real} | ✉️ {correo_real}<br>
+                    📍 {dir_real}<hr>
                     Estado: {c_data.get('Estado_Honorarios')}<br>Pactado: ${c_data.get('Total_Honorarios',0):,.0f}
                 </div>
                 """, unsafe_allow_html=True)
@@ -1677,7 +1695,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         with col_izq:
             tab_movs, tab_tareas_internas, tab_legacy, tab_docs_solicitados = st.tabs(["Movimientos", "Tareas Operativas", "Movimientos legacy", "📥 Docs Cliente"])
             
-            # --- PESTAÑA: TAREAS OPERATIVAS (CORREGIDA SIN DUPLICADOS) ---
             with tab_tareas_internas:
                 if st.button("+ Asignar Nueva Tarea Operativa", type="primary"):
                     st.session_state['creando_tarea'] = not st.session_state.get('creando_tarea', False)
@@ -1729,19 +1746,18 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             except:
                                 conn.update(worksheet="base_tareas", data=df_t_destino)
                                 
-                            # --- 🚀 DISPARO A GOOGLE CALENDAR DINÁMICO ---
+                            # --- 🚀 DISPARO A GOOGLE CALENDAR ---
                             if t_p == "Alta":
-                                # Aquí el sistema rescata el correo ingresado por el usuario en el login
-                                # Ajusta 'usuario_correo' por el nombre exacto de tu variable de sesión si es necesario
                                 correo_sesion_activa = st.session_state.get('usuario_correo', '')
-                                
-                                exito = agendar_plazo_calendar(t_t, f"Causa ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_sesion_activa)
-                                if exito:
-                                    st.toast("📅 Plazo fatal sincronizado en Google Calendar con alarmas.", icon="🚨")
+                                try:
+                                    exito = agendar_plazo_calendar(t_t, f"Causa ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_sesion_activa)
+                                    if exito:
+                                        st.toast("📅 Plazo fatal sincronizado en Google Calendar con alarmas.", icon="🚨")
+                                except: pass
                             # ------------------------------------
                                 
                             st.session_state['creando_tarea'] = False
-                            st.success("✅ Tarea registrada y respaldada en la nube exitosamente.")
+                            st.success("✅ Tarea registrada y respaldada exitosamente.")
                             import time
                             time.sleep(1)
                             st.rerun()
@@ -1757,10 +1773,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             b_prio_color = "#ff5630" if tarea.get('Prioridad') == "Alta" else ("#ffc400" if tarea.get('Prioridad') == "Media" else "#57a15a")
                             st.markdown(f"<div style='height: 5px; background-color: {b_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                             
-                            # --- CONTROL DE FLUJO: EDICIÓN O MODO NORMAL ---
                             if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
                                 modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'])
-                                
                             else:
                                 c_top_l, c_top_r = st.columns([2.5, 2.3])
                                 with c_top_l:
@@ -1777,60 +1791,22 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 with c_top_r:
                                     if tarea['Estado'] == 'En progreso':
                                         bcols = st.columns([1, 1, 1, 1] if usuario_actual == "Narratia" else [1, 1, 1])
-                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}", help="Rechazar"): 
-                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            try:
-                                                dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Estado'] = 'Rechazada'
-                                                conn.update(worksheet="base_tareas", data=dn)
-                                            except: pass
-                                            st.rerun()
-                                            
-                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}", help="Aprobar"): 
-                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            try:
-                                                dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Estado'] = 'Aprobada'
-                                                conn.update(worksheet="base_tareas", data=dn)
-                                            except: pass
-                                            st.rerun()
-                                            
-                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}", help="Modificar Plazo"):
-                                            st.session_state['editando_tarea'] = tarea['ID_Tarea']
-                                            st.rerun()
-                                            
-                                        if usuario_actual == "Narratia":
-                                            if bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar"):
-                                                df_t_local = df_t_local.drop(idx_tarea_bd)
-                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                                try:
-                                                    dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                    dn = dn[dn['ID_Tarea'] != tarea['ID_Tarea']]
-                                                    conn.update(worksheet="base_tareas", data=dn)
-                                                except: pass
-                                                st.rerun()
+                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
+                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
+                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
+                                            st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
+                                        if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
+                                            df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
                                     else:
                                         bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
-                                        if usuario_actual == "Narratia":
-                                            bcols = st.columns([2, 1])
-                                            bcols[0].markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
-                                            if bcols[1].button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar permanentemente"):
-                                                df_t_local = df_t_local.drop(idx_tarea_bd)
-                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                                try:
-                                                    dn = conn.read(worksheet="base_tareas", ttl=0)
-                                                    dn = dn[dn['ID_Tarea'] != tarea['ID_Tarea']]
-                                                    conn.update(worksheet="base_tareas", data=dn)
-                                                except: pass
-                                                st.rerun()
-                                        else:
-                                            st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
+                                        st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
+                                        if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}"):
+                                            df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
 
                                 st.markdown(f"<h3 style='font-size: 18px; color: #172b4d; margin-top: 15px; margin-bottom: 5px;'>{tarea['Titulo']}</h3><p style='font-size: 15px; color: #172b4d; margin-bottom: 15px;'>{tarea['Descripcion']}</p>", unsafe_allow_html=True)
                                 
-                                # Comentarios de la Tarea
                                 comentarios_js = json.loads(tarea['Comentarios'])
                                 html_coms = "".join([f"<div style='margin-bottom:15px;'><strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong> <span style='color:#6b778c; font-size:13px;'>• {c['fecha']}</span><br><span style='color:#42526e; font-size:14px;'>{c['texto']}</span></div>" for c in comentarios_js]) if comentarios_js else "<span style='color:#6b778c; font-size:14px;'>No hay comentarios.</span>"
                                 
@@ -1859,7 +1835,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             except: pass
                                             st.rerun()
 
-            # --- PESTAÑA: DOCS CLIENTE ---
             with tab_docs_solicitados:
                 st.subheader("📋 Gestión de Requisitos del Cliente")
                 token_para_link = str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_")
