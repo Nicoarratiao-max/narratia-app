@@ -1721,7 +1721,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             
                             # --- MODO VISUALIZACIÓN NORMAL ---
                                 else:
-                                     c_top_l, c_top_r = st.columns([2.5, 2.3])
+                                    c_top_l, c_top_r = st.columns([2.5, 2.3])
+                                    
+                                    # Lado Izquierdo: Autor y Fechas
                                     with c_top_l:
                                         autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
                                         st.markdown(f"""
@@ -1733,29 +1735,23 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         """, unsafe_html=True)
                                         st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_html=True)
                                     
+                                    # Lado Derecho: Botones (Estructura plana sin else anidado complejo)
                                     with c_top_r:
                                         if tarea['Estado'] == 'En progreso':
-                                            if usuario_actual == "Narratia":
-                                                bcols = st.columns([1, 1, 1, 1])
-                                                if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
-                                                    df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                                if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
-                                                    df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                                if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
-                                                    st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
-                                                if bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
-                                                    df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                            else:
-                                                bcols = st.columns([1, 1, 1])
-                                                if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
-                                                    df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                                if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
-                                                    df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                                if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
-                                                    st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
-                                        else:
+                                            botones = st.columns([1, 1, 1, 1] if usuario_actual == "Narratia" else [1, 1, 1])
+                                            if botones[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
+                                                df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                            if botones[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
+                                                df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                            if botones[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
+                                                st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
+                                            if usuario_actual == "Narratia" and botones[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
+                                                df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        
+                                        # Estado Final separado
+                                        if tarea['Estado'] != 'En progreso':
                                             bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
-                                            st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center; margin-top:5px;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
+                                            st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_html=True)
                                             if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}"):
                                                 df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
 
