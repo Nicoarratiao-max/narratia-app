@@ -1722,6 +1722,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             # --- MODO VISUALIZACIÓN NORMAL ---
                                 else:
                                     c_top_l, c_top_r = st.columns([2.5, 2.3])
+                                    
                                     with c_top_l:
                                         autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
                                         st.markdown(f"""
@@ -1730,8 +1731,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{autor_real}</span>
                                             <span style='font-size:12px; color:{b_prio_color}; font-weight:bold; margin-left:8px;'>[{tarea.get('Prioridad', 'Media')}]</span>
                                         </div>
-                                        """, unsafe_allow_html=True)
-                                        st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
+                                        """, unsafe_html=True)
+                                        st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_html=True)
                                 
                                 with c_top_r:
                                     if tarea['Estado'] == 'En progreso':
