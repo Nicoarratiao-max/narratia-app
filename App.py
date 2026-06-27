@@ -2044,11 +2044,47 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
             st.rerun()
             
         if st.session_state['username'] == "Narratia":
+            if st.session_state['username'] == "Narratia":
             if c_del.button("🗑️ Eliminar Cliente", use_container_width=True):
-                df_clientes = df_clientes[df_clientes['RUT'] != rut_actual]
-                conn.update(worksheet="base_clientes", data=df_clientes)
+                with st.spinner("Borrando cliente y buscando sus causas para destruirlas..."):
+                    # 1. Identificar las causas que le pertenecen a este RUT
+                    roles_a_borrar = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]['ROL'].tolist()
+                    nombre_borrar = datos_cli['Nombre']
+                    
+                    # 2. Borrar sus Causas locales y en la nube
+                    df_causas = df_causas[df_causas['RUT'].astype(str) != str(rut_actual)]
+                    df_causas.to_csv(ARCHIVO_BD, index=False)
+                    try: 
+                        conn.update(worksheet="base_causas", data=df_causas)
+                    except: pass
+                    
+                    # 3. Borrar sus Tareas (buscando por los ROLes que pillamos recién)
+                    df_t_local = pd.read_csv(ARCHIVO_TAREAS)
+                    df_t_local = df_t_local[~df_t_local['ROL'].isin(roles_a_borrar)]
+                    df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                    try:
+                        dn_t = conn.read(worksheet="base_tareas", ttl=0)
+                        dn_t = dn_t[~dn_t['ROL'].isin(roles_a_borrar)]
+                        conn.update(worksheet="base_tareas", data=dn_t)
+                    except: pass
+                    
+                    # 4. Borrar sus Contratos
+                    df_con_local = pd.read_csv(ARCHIVO_CONTRATOS)
+                    df_con_local = df_con_local[df_con_local['Cliente'] != nombre_borrar]
+                    df_con_local.to_csv(ARCHIVO_CONTRATOS, index=False)
+                    try:
+                        dn_con = conn.read(worksheet="base_contratos", ttl=0)
+                        dn_con = dn_con[dn_con['Cliente'] != nombre_borrar]
+                        conn.update(worksheet="base_contratos", data=dn_con)
+                    except: pass
+
+                    # 5. Borrar finalmente al Cliente de la base maestra
+                    df_clientes = df_clientes[df_clientes['RUT'] != rut_actual]
+                    conn.update(worksheet="base_clientes", data=df_clientes)
+                    
                 st.session_state['cliente_seleccionado'] = None
-                st.rerun()
+                st.success("✅ Cliente y TODO su historial asociado fue desintegrado.")
+                import time; time.sleep(1.5); st.rerun()
             
         st.title(f"Ficha: {datos_cli['Nombre']}")
         tab1, tab2, tab3 = st.tabs(["👤 Información", "💰 Contabilidad", "📄 Contratos"])
@@ -2311,28 +2347,31 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
 
     with tab_peligro:
         st.subheader("Borrón y Cuenta Nueva (Limpieza Estricta)")
-        st.error("⚠️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas y tareas de Google Sheets y del servidor local.")
+        st.error("⚠️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas, tareas, contratos, trámites y documentos de Google Sheets y del servidor local.")
         
         if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True):
-            with st.spinner("Formateando tablas de la nube y discos locales..."):
-                df_vacio_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
-                df_vacio_causas = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas'])
-                df_vacio_tareas = pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
-                
+            with st.spinner("Formateando absolutamente TODAS las tablas en la nube y discos locales..."):
                 try:
-                    conn.update(worksheet="base_clientes", data=df_vacio_clientes)
-                    conn.update(worksheet="base_causas", data=df_vacio_causas)
-                    conn.update(worksheet="base_tareas", data=df_vacio_tareas)
+                    # Sobrescribimos todas las pestañas de Google Sheets con tablas vacías
+                    conn.update(worksheet="base_clientes", data=pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
+                    conn.update(worksheet="base_causas", data=pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']))
+                    conn.update(worksheet="base_tareas", data=pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
+                    conn.update(worksheet="base_contratos", data=pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
+                    conn.update(worksheet="base_tramites", data=pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
+                    conn.update(worksheet="base_estado_diario", data=pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
+                    conn.update(worksheet="base_documentos_clientes", data=pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
                 except Exception as e:
                     st.error(f"Error limpiando Google Sheets: {e}")
                 
+                # Barrido nuclear de archivos locales (salvando solo a los usuarios)
+                import glob
                 for archivo_local in glob.glob("base_*.csv"):
                     if "usuarios" not in archivo_local:
                         try: os.remove(archivo_local)
                         except: pass
                 
                 st.cache_data.clear()
-            st.success("✅ Sistema completamente restablecido a cero.")
+            st.success("✅ Limpieza extrema completada. Sistema restablecido a cero.")
             import time; time.sleep(2); st.rerun()
 
 # 15. REDACTOR AUTOMÁTICO IA
