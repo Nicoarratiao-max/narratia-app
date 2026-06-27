@@ -9,6 +9,7 @@ import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 from streamlit_calendar import calendar
+from streamlit_gsheets import GSheetsConnection
 
 # --- VERIFICACIÓN DE LIBRERÍA WORD ---
 try:
@@ -37,7 +38,6 @@ st.markdown("""
 
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
-    # Forzamos la hora de Chile restando 4 horas al servidor UTC (Ajustable a -3 en verano)
     hora_chile = (datetime.utcnow() - timedelta(hours=4)).hour
     if 0 <= hora_chile < 12:
         return "Buenos días"
@@ -56,24 +56,18 @@ def get_logo_src():
                 contenido_b64 = base64.b64encode(f.read()).decode()
                 return f"data:image/{ext.lower()};base64,{contenido_b64}"
                 
-    # NUEVO LOGO VECTORIAL: Diosa Themis + Flechas Sync
     svg_logo = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
         <path d="M 30 20 A 35 35 0 0 1 85 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
         <polygon points="85,60 76,46 94,46" fill="#0052cc"/>
         <path d="M 70 80 A 35 35 0 0 1 15 50" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
         <polygon points="15,40 6,54 24,54" fill="#172b4d"/>
-
         <line x1="50" y1="15" x2="50" y2="70" stroke="#0052cc" stroke-width="3.5" stroke-linecap="round"/>
         <line x1="43" y1="28" x2="57" y2="28" stroke="#0052cc" stroke-width="3" stroke-linecap="round"/>
         <circle cx="50" cy="72" r="3" fill="#0052cc"/>
-
         <path d="M 50 35 Q 40 55 33 75 L 67 75 Q 60 55 50 35 Z" fill="#172b4d" stroke-linejoin="round"/>
-
         <circle cx="50" cy="35" r="7" fill="#172b4d"/>
-        
         <path d="M 41 35 Q 50 38 59 35" fill="none" stroke="#0052cc" stroke-width="2.5" stroke-linecap="round"/>
-        
         <path d="M 40 52 L 60 52" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M 40 52 L 36 64 L 44 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
         <path d="M 60 52 L 56 64 L 64 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
@@ -332,51 +326,63 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
     doc.save(bio)
     return bio.getvalue()
 
-# --- SISTEMA DE CONTROL DE ACCESO AVANZADO ---
+# =====================================================================
+# --- SISTEMA DE CONTROL DE ACCESO (AHORA EN GOOGLE SHEETS) ---
+# =====================================================================
 ARCHIVO_USUARIOS = "base_usuarios.csv"
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 1. Crear base maestra de usuarios si no existe o forzar actualización
-if not os.path.exists(ARCHIVO_USUARIOS):
+def guardar_en_nube(df):
+    conn.update(worksheet="base_usuarios", data=df)
+    df.to_csv(ARCHIVO_USUARIOS, index=False)
+
+try:
+    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5])
+    df_usuarios = df_usuarios.dropna(how="all")
+except:
+    df_usuarios = pd.DataFrame()
+
+if df_usuarios.empty:
     datos_iniciales = {
         "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes", "Jtrujillo", "Eriquelme"],
         "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123", "Eriquelme123"],
         "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés", "José Trujillo", "Eduardo Riquelme"],
         "Correo": ["pendiente", "pendiente", "pendiente", "pendiente", "pendiente", "pendiente"],
-        "Debe_Cambiar_Clave": [True, True, True, True, True, True] # TODOS deben registrarse
+        "Debe_Cambiar_Clave": ['True', 'True', 'True', 'True', 'True', 'True'], 
+        "Plan": ["Full", "Full", "Full", "Full", "Full", "Full"]
     }
-    pd.DataFrame(datos_iniciales).to_csv(ARCHIVO_USUARIOS, index=False)
+    df_usuarios = pd.DataFrame(datos_iniciales)
+    guardar_en_nube(df_usuarios)
 else:
-    # TRUCO: Forzar la actualización si la base vieja ya existe y se quedó pegada
-    df_temp = pd.read_csv(ARCHIVO_USUARIOS)
     cambios = False
     
-    # Añadir a Eduardo si no está
-    if "Eriquelme" not in df_temp['Usuario'].values:
-        nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": "Eriquelme123", "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
-        df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
+    if "Eriquelme" not in df_usuarios['Usuario'].values:
+        nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": "Eriquelme123", "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
+        df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
         cambios = True
 
-    # Añadir a José si no está
-    if "Jtrujillo" not in df_temp['Usuario'].values:
-        nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": "Jtrujillo123", "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": True}])
-        df_temp = pd.concat([df_temp, nuevo_u], ignore_index=True)
+    if "Jtrujillo" not in df_usuarios['Usuario'].values:
+        nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": "Jtrujillo123", "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
+        df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
         cambios = True
 
-    # EL MARTILLAZO: Forzar a tu usuario (Narratia) a que pida el correo sí o sí
-    idx_narratia = df_temp[df_temp['Usuario'] == 'Narratia'].index
+    idx_narratia = df_usuarios[df_usuarios['Usuario'] == 'Narratia'].index
     if not idx_narratia.empty:
-        correo_actual = str(df_temp.loc[idx_narratia[0], 'Correo'])
-        # Si tu correo no tiene un "@", te devuelvo al estado de registro inicial
+        correo_actual = str(df_usuarios.loc[idx_narratia[0], 'Correo'])
         if "@" not in correo_actual:
-            df_temp.loc[idx_narratia[0], 'Debe_Cambiar_Clave'] = True
-            df_temp.loc[idx_narratia[0], 'Correo'] = "pendiente"
+            df_usuarios.loc[idx_narratia[0], 'Debe_Cambiar_Clave'] = 'True'
+            df_usuarios.loc[idx_narratia[0], 'Correo'] = "pendiente"
             cambios = True
 
-    if cambios:
-        df_temp.to_csv(ARCHIVO_USUARIOS, index=False)
+    if 'Plan' not in df_usuarios.columns:
+        df_usuarios['Plan'] = 'Full'
+        cambios = True
 
-# Cargar la base final para operar
-df_usuarios = pd.read_csv(ARCHIVO_USUARIOS)
+    if cambios:
+        guardar_en_nube(df_usuarios)
+
+df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
+
 USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
 NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 
@@ -393,7 +399,6 @@ if "cliente_id" in query_params:
     token_cliente = query_params["cliente_id"]
     nombre_cliente_limpio = token_cliente.replace("_", " ")
     
-    # Escondemos el menú lateral y centramos la pantalla para el cliente
     st.markdown("""
     <style>
         [data-testid="stSidebar"] { display: none !important; }
@@ -406,7 +411,6 @@ if "cliente_id" in query_params:
     st.subheader(f"Bienvenido/a, {nombre_cliente_limpio}")
     st.write("Por favor, cargue los documentos solicitados por su abogado en formato PDF o Imagen. El sistema notificará automáticamente al estudio jurídico cuando haya completado la entrega.")
     
-    # Archivo base para controlar los documentos pedidos
     ARCHIVO_DOCS = "base_documentos_clientes.csv"
     if not os.path.exists(ARCHIVO_DOCS):
         pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
@@ -444,19 +448,18 @@ if "cliente_id" in query_params:
                                 st.success("¡Documento guardado!")
                                 st.rerun()
         
-        # Barra de progreso visual
         st.progress(completados / total if total > 0 else 0)
         
         if completados == total and total > 0:
             st.success("🎉 ¡Excelente! Ha entregado la totalidad de la documentación solicitada.")
             st.balloons()
             st.info("📩 Se ha enviado un correo automático a su abogado notificando que su expediente está completo y listo para revisión.")
-            # AQUI CONECTAREMOS EL CORREO DE GMAIL EN EL SIGUIENTE PASO
-    
-    # 🛑 ESTO ES VITAL: Detiene la lectura del código aquí para que el cliente no vea el login.
     st.stop() 
 # =====================================================================
 
+# =====================================================================
+# 🔐 PANTALLA DE LOGIN CON CONFIGURACIÓN EN LA NUBE (CORREGIDA)
+# =====================================================================
 if not st.session_state['logged_in']:
     st.markdown("""
     <style>
@@ -473,6 +476,7 @@ if not st.session_state['logged_in']:
     
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_a, col_b, col_c = st.columns([1, 1.2, 1])
+    
     with col_b:
         st.markdown(f"""
         <div style='text-align: center; margin-bottom: 20px;'>
@@ -486,15 +490,23 @@ if not st.session_state['logged_in']:
         
         with tab_iniciar:
             with st.form("login_form", clear_on_submit=False):
-                input_usuario = st.text_input("Usuario", placeholder="Tu nombre de usuario")
-                input_password = st.text_input("Contraseña", type="password", placeholder="••••••••")
+                user_input = st.text_input("Usuario Corporativo", placeholder="Tu nombre de usuario")
+                pass_input = st.text_input("Contraseña", type="password", placeholder="••••••••")
                 st.write("") 
                 
-                if st.form_submit_button("Ingresar al Sistema", use_container_width=True):
-                    if input_usuario in USUARIOS_DICT and str(USUARIOS_DICT[input_usuario]) == str(input_password):
-                        st.session_state['logged_in'] = True
-                        st.session_state['username'] = input_usuario
-                        st.rerun()
+                if st.form_submit_button("Ingresar al Estudio", use_container_width=True):
+                    user_clean = user_input.strip()
+                    if user_clean in USUARIOS_DICT and str(USUARIOS_DICT[user_clean]) == str(pass_input):
+                        idx_user = df_usuarios[df_usuarios['Usuario'] == user_clean].index[0]
+                        # Verificamos como string para evitar errores booleanos
+                        if str(df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']).lower() == 'true':
+                            st.session_state['requiere_registro_inicial'] = True
+                            st.session_state['usr_registro'] = user_clean
+                            st.rerun()
+                        else:
+                            st.session_state['logged_in'] = True
+                            st.session_state['username'] = user_clean
+                            st.rerun()
                     else:
                         st.error("❌ Usuario o contraseña incorrectos.")
                         
@@ -507,54 +519,51 @@ if not st.session_state['logged_in']:
                 if st.form_submit_button("Recuperar Contraseña", use_container_width=True):
                     if rec_usuario in df_usuarios['Usuario'].values:
                         correo_real = str(df_usuarios[df_usuarios['Usuario'] == rec_usuario]['Correo'].values[0])
-                        
                         if correo_real == "pendiente" or correo_real == "nan":
                             st.warning("⚠️ Esta cuenta aún no tiene un correo configurado. Pídele al administrador que la recupere manualmente.")
                         elif rec_correo.strip().lower() == correo_real.lower():
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = "Temp1234"
-                            df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = True
-                            df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
+                            df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = 'True'
+                            guardar_en_nube(df_usuarios)
                             st.success("✅ Identidad verificada. Tu contraseña temporal es: **Temp1234**. Inicia sesión con ella y te pediremos crear una nueva.")
                         else:
                             st.error("❌ El correo no coincide con nuestros registros de seguridad.")
                     else:
                         st.error("❌ Usuario no encontrado.")
-    st.stop()
-
-# --- VERIFICACIÓN DE REGISTRO INICIAL (CLAVE Y CORREO) ---
-estado_usuario = df_usuarios[df_usuarios['Usuario'] == st.session_state['username']].iloc[0]
-
-# Si debe cambiar clave o no tiene un correo válido (con "@"), lo bloqueamos en esta pantalla
-if str(estado_usuario['Debe_Cambiar_Clave']).lower() == 'true' or "@" not in str(estado_usuario['Correo']):
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    col_x, col_y, col_z = st.columns([1, 1.2, 1])
-    with col_y:
+                        
+    if st.session_state.get('requiere_registro_inicial', False):
         with st.container(border=True):
             st.markdown("<h2 style='text-align:center; color:#172b4d;'>🔒 Configuración de Seguridad</h2>", unsafe_allow_html=True)
-            st.warning(f"Hola {estado_usuario['Nombre_Real']}, antes de acceder a la plataforma debes registrar un correo para recuperar tu cuenta y crear una nueva contraseña.")
+            st.warning("Por seguridad de tu cuenta, debes actualizar tus datos obligatoriamente para continuar.")
             
-            with st.form("form_cambio_clave"):
-                nuevo_correo = st.text_input("Tu Correo Electrónico (obligatorio)", placeholder="ejemplo@correo.cl")
-                nueva_clave = st.text_input("Crea tu nueva contraseña", type="password")
-                confirma_clave = st.text_input("Confirma tu nueva contraseña", type="password")
+            with st.form("form_cambio_clave_nuevo"):
+                nuevo_correo = st.text_input("Tu Correo Electrónico Institucional", placeholder="ejemplo@estudio.cl")
+                nueva_cl = st.text_input("Nueva Contraseña", type="password")
+                conf_cl = st.text_input("Confirmar Nueva Contraseña", type="password")
                 st.write("")
                 
-                if st.form_submit_button("Guardar Datos y Entrar", type="primary", use_container_width=True):
-                    if "@" not in nuevo_correo or "." not in nuevo_correo:
-                        st.error("⚠️ Debes ingresar un correo electrónico válido.")
-                    elif len(nueva_clave) < 6:
-                        st.error("⚠️ La contraseña debe tener al menos 6 caracteres.")
-                    elif nueva_clave != confirma_clave:
-                        st.error("⚠️ Las contraseñas no coinciden. Intenta de nuevo.")
+                if st.form_submit_button("Actualizar Credenciales y Entrar", type="primary", use_container_width=True):
+                    usr_actualizar = st.session_state['usr_registro']
+                    if nueva_cl.strip() == "" or nuevo_correo.strip() == "":
+                        st.error("Todos los campos son obligatorios.")
+                    elif "@" not in nuevo_correo:
+                        st.error("Por favor, ingresa un correo electrónico válido.")
+                    elif nueva_cl != conf_cl:
+                        st.error("Las contraseñas no coinciden.")
                     else:
-                        # Guardamos en la base de datos maestra
-                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Correo'] = nuevo_correo.strip().lower()
-                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Password'] = nueva_clave
-                        df_usuarios.loc[df_usuarios['Usuario'] == st.session_state['username'], 'Debe_Cambiar_Clave'] = False
-                        df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
-                        st.success("✅ Cuenta configurada con éxito. Actualizando sistema...")
+                        idx_mod = df_usuarios[df_usuarios['Usuario'] == usr_actualizar].index[0]
+                        df_usuarios.at[idx_mod, 'Password'] = nueva_cl
+                        df_usuarios.at[idx_mod, 'Correo'] = nuevo_correo
+                        df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = 'False'
+                        
+                        guardar_en_nube(df_usuarios)
+                        
+                        st.session_state['logged_in'] = True
+                        st.session_state['username'] = usr_actualizar
+                        st.session_state['requiere_registro_inicial'] = False
                         st.rerun()
     st.stop()
+
 
 # --- ARQUITECTURA DE ARCHIVOS DE DATOS LOCALES ---
 usuario_actual = st.session_state['username']
@@ -694,85 +703,30 @@ def limpiar_causa():
 st.markdown("""
 <style>
     /* Fondo principal y estructura */
-    [data-testid="stAppViewContainer"], .stApp { 
-        background-color: #f4f5f7 !important; 
-    }
-    
-    [data-testid="stSidebar"] { 
-        background-color: #ffffff !important; 
-        border-right: 1px solid #e0e4e8 !important; 
-    }
-    
-    [data-testid="stHeader"] { 
-        background-color: transparent !important; 
-    }
-    
-    /* Tipografía General */
-    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { 
-        color: #172b4d !important; 
-    }
+    [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
+    [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
+    [data-testid="stHeader"] { background-color: transparent !important; }
+    .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
     
     /* Tarjetas tipo Dashboard */
-    .dash-card { 
-        background: #ffffff !important; 
-        border-radius: 12px; 
-        padding: 18px; 
-        border: 1px solid #e0e4e8 !important; 
-        margin-bottom: 15px; 
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02); 
-    }
-    .dash-header { 
-        border-bottom: 2px solid #0052cc; 
-        padding-bottom: 5px; 
-        margin-bottom: 15px; 
-        font-weight: 800; 
-        font-size: 13px; 
-        color: #0052cc; 
-        letter-spacing: 0.5px; 
-        text-transform: uppercase; 
-    }
+    .dash-card { background: #ffffff !important; border-radius: 12px; padding: 18px; border: 1px solid #e0e4e8 !important; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .dash-header { border-bottom: 2px solid #0052cc; padding-bottom: 5px; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #0052cc; letter-spacing: 0.5px; text-transform: uppercase; }
     
     /* Insignias */
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     
     /* Inputs y Textareas - Claros y legibles */
-    .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { 
-        background-color: #ffffff !important; 
-        color: #172b4d !important; 
-        border: 1px solid #cbd2d9 !important; 
-        border-radius: 6px !important;
-    }
-    .stTextInput input:focus, .stTextArea textarea:focus {
-        border-color: #0052cc !important;
-        box-shadow: 0 0 0 1px #0052cc !important;
-    }
-    ::placeholder { 
-        color: #6b778c !important; 
-        opacity: 1; 
-    }
+    .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; }
+    .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0052cc !important; box-shadow: 0 0 0 1px #0052cc !important; }
+    ::placeholder { color: #6b778c !important; opacity: 1; }
     
     /* Botones uniformes */
-    [data-testid="stButton"] button { 
-        background-color: #ffffff !important; 
-        color: #172b4d !important; 
-        border: 1px solid #cbd2d9 !important; 
-        border-radius: 6px !important;
-        font-weight: 600 !important;
-        transition: all 0.2s ease !important;
-    }
-    [data-testid="stButton"] button:hover { 
-        border-color: #0052cc !important; 
-        color: #0052cc !important;
-        background-color: #deebff !important;
-    }
+    [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s ease !important; }
+    [data-testid="stButton"] button:hover { border-color: #0052cc !important; color: #0052cc !important; background-color: #deebff !important; }
     
     /* Contenedores de formularios */
-    [data-testid="stVerticalBlockBorderWrapper"] { 
-        background-color: #ffffff !important; 
-        border-radius: 12px !important; 
-        border: 1px solid #e0e4e8 !important; 
-    }
+    [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; }
     
     /* Chat WhatsApp Style (Modo Claro) */
     .chat-bg { background-color: #efeae2; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
@@ -864,7 +818,7 @@ with st.sidebar:
                         st.error("La clave debe tener mínimo 6 caracteres")
                 
                 if cambios:
-                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = False
+                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
                     df_usr.to_csv(ARCHIVO_USUARIOS, index=False)
                     st.success("¡Datos actualizados correctamente!")
                     st.rerun()
@@ -948,14 +902,12 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     if df_activos.empty:
         st.info("No hay contratos activos con honorarios pendientes de pago.")
     else:
-        # Contenedor centralizado para mejor armonía
         col_l, col_c, col_r = st.columns([0.2, 8, 0.2])
         
         with col_c:
             cliente_sel = st.selectbox("Selecciona un Cliente para gestionar su ficha:", df_activos['Cliente'].unique())
             datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
             
-            # --- SECCIÓN DE EDICIÓN MANUAL DE FECHA ---
             with st.expander("⚙️ Ajustar Fecha de Inicio de Pagos"):
                 fecha_actual_cli = datetime.strptime(str(datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))), "%Y-%m-%d")
                 nueva_fecha = st.date_input("Fecha de inicio de la primera cuota:", value=fecha_actual_cli)
@@ -964,7 +916,6 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                     df_c.to_csv(ARCHIVO_BD, index=False)
                     st.rerun()
 
-            # Métricas centradas
             c_f1, c_f2, c_f3 = st.columns(3)
             c_f1.metric("Total Pactado", f"${datos_cli['Total_Honorarios']:,.0f}")
             c_f2.metric("Cuotas Pagadas", f"{datos_cli['Cuotas_Pagadas']} de {datos_cli['Cuotas_Totales']}")
@@ -975,13 +926,11 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             st.write("---")
             st.subheader(f"Detalle de Cuotas: {cliente_sel}")
             
-            # Lógica de cálculo
             fecha_inicio = datetime.strptime(str(datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))), "%Y-%m-%d")
             cuotas_data = []
             hoy = datetime.now()
             
             for i in range(1, int(datos_cli['Cuotas_Totales']) + 1):
-                # Calcular vencimiento mensual
                 mes = (fecha_inicio.month + i - 2) % 12 + 1
                 anio = fecha_inicio.year + (fecha_inicio.month + i - 2) // 12
                 try:
@@ -992,10 +941,8 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                 estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else ("⚠️ VENCIDA" if fecha_venc < hoy else "❌ Pendiente")
                 cuotas_data.append({"Cuota": i, "Vencimiento": fecha_venc.strftime("%d/%m/%Y"), "Monto": valor_cuota, "Estado": estado})
             
-            # Tabla con estilo más armónico
             st.table(pd.DataFrame(cuotas_data).style.format({"Monto": "${:,.0f}"}))
             
-            # Botones de acción
             c_b1, c_b2 = st.columns(2)
             if c_b1.button("📥 Registrar Pago", type="primary", use_container_width=True):
                 if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
@@ -1157,7 +1104,6 @@ elif st.session_state['menu_radio'] == "📊 Informes":
                 with st.spinner("🧠 La IA está traduciendo los hitos procesales y estructurando el informe..."):
                     nombre_cliente_ia = df_causas_ia[df_causas_ia['ROL'] == rol_seleccionado_ia]['Cliente'].values[0]
                     
-                    # Simulación del procesamiento de IA enfocado en lenguaje claro para el cliente chileno
                     informe_redactado = (
                         "El procedimiento legal registra movimientos clave durante el último período. "
                         "En primer lugar, se despachó la revisión de antecedentes, constatando que el tribunal "
@@ -1177,7 +1123,6 @@ elif st.session_state['menu_radio'] == "📊 Informes":
                     st.write(informe_redactado)
                     st.markdown("</div>", unsafe_allow_html=True)
                     
-                    # Generar el Word descargable
                     doc_bytes_ia = crear_informe_ia_word(rol_seleccionado_ia, nombre_cliente_ia, informe_redactado)
                     if doc_bytes_ia:
                         st.download_button(
@@ -1216,7 +1161,6 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         
-                        # TRUCO MAESTRO: Buscar modelo activo automáticamente
                         modelo_elegido = "gemini-1.0-pro"
                         for m in genai.list_models():
                             if 'generateContent' in m.supported_generation_methods:
@@ -1320,7 +1264,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"], key="gen_con_tipocta")
                         num_cta = st.text_input("Número de Cuenta", key="gen_con_numcta")
                         
-                # ESTE ES EL BOTÓN QUE FALTABA (Alineado dentro del form)
                 if st.form_submit_button("📄 Estructurar Contrato en Formato Word", type="primary", use_container_width=True):
                     datos_c = {
                         'tipo_servicio': tipo_servicio_final, 'detalle_servicio': detalle_servicio,
@@ -1497,7 +1440,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             if df_filtrado.empty:
                 st.info("No hay causas que coincidan con la búsqueda.")
             else:
-                # --- AQUÍ ESTÁ LA NUEVA GRILLA DE 5 COLUMNAS ---
                 c_h1, c_h2, c_h3, c_h4, c_h5 = st.columns([1.5, 2.5, 3, 2.5, 1.5])
                 c_h1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>ROL DE CAUSA</span>", unsafe_allow_html=True)
                 c_h2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>TRIBUNAL ASIGNADO</span>", unsafe_allow_html=True)
@@ -1710,20 +1652,12 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
                                         df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
 
-            # =====================================================================
-            # 📥 NUEVA PESTAÑA: SOLICITUD Y SEGUIMIENTO DE DOCUMENTOS DEL CLIENTE
-            # =====================================================================
             with tab_docs_solicitados:
                 st.subheader("📋 Gestión de Requisitos del Cliente")
-                
-                # Definimos el token único del cliente para construir su link (Ej: Juan_Perez)
                 token_para_link = str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_")
-                
-                # Botón premium para copiar el link y mandárselo por WhatsApp al tiro
                 link_portal_final = f"https://narratia-app.streamlit.app/?cliente_id={token_para_link}"
                 st.info(f"🔗 **Enlace del Portal para el Cliente:**\n`{link_portal_final}`")
                 
-                # Formulario rápido para que el Abogado agregue un documento a la lista
                 with st.form(key=f"form_agregar_requisito_{rol_actual}", clear_on_submit=True):
                     st.markdown("#### Solicitar Nuevo Documento")
                     nuevo_doc_req = st.text_input("Nombre del documento solicitado", placeholder="Ej: Certificado de Matrimonio actualizado, Últimas 3 liquidaciones...")
@@ -1749,7 +1683,6 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.success(f"¡Solicitud de '{nuevo_doc_req}' agregada al portal del cliente!")
                             st.rerun()
                 
-                # Despliegue de la lista de control para el Abogado
                 st.markdown("### Estado de la Documentación Solicitada")
                 ARCHIVO_DOCS = "base_documentos_clientes.csv"
                 if os.path.exists(ARCHIVO_DOCS):
@@ -1771,12 +1704,10 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     else:
                                         st.markdown("<span style='color:#ff5630; font-weight:bold;'>❌ Pendiente</span>", unsafe_allow_html=True)
                                 with cd3:
-                                    # Si el cliente ya lo subió, el abogado puede descargarlo al tiro
                                     if d_row['Estado'] == '✅ Completado' and pd.notna(d_row.get('Archivo_B64')) and str(d_row['Archivo_B64']).strip() != "":
                                         bytes_descarga = base64.b64decode(d_row['Archivo_B64'])
                                         st.download_button("📥 Descargar", data=bytes_descarga, file_name=f"{d_row['Documento_Nombre'].replace(' ', '_')}_{token_para_link}.pdf", key=f"dl_abog_{d_row['ID_Req']}")
                                     else:
-                                        # Botón por si el abogado quiere borrar el requerimiento de la lista
                                         if st.button("🗑️", key=f"del_req_{d_row['ID_Req']}"):
                                             df_docs_db = df_docs_db.drop(idx_d)
                                             df_docs_db.to_csv(ARCHIVO_DOCS, index=False)
@@ -1858,6 +1789,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 df_msgs = pd.concat([df_msgs, pd.DataFrame([nuevo_msj])], ignore_index=True)
                 df_msgs.to_csv(ARCHIVO_MENSAJES, index=False)
                 st.rerun()
+
 # 10. CLIENTES DIRECTOS (LISTA ELEGANTE CLARA)
 elif st.session_state['menu_radio'] == "👥 Clientes":
     df_causas = pd.read_csv(ARCHIVO_BD)
@@ -1940,8 +1872,6 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
 
         with tab2:
             st.subheader("Estado Financiero")
-            
-            # Blindaje matemático: forzamos a que todo sea número y evitamos división por cero
             try:
                 t_hon = float(datos.get('Total_Honorarios', 0))
                 if pd.isna(t_hon): t_hon = 0.0
@@ -2095,14 +2025,14 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                             "Password": nueva_clave.strip(),
                             "Nombre_Real": nuevo_nombre.strip(),
                             "Correo": "pendiente",  
-                            "Debe_Cambiar_Clave": True, 
+                            "Debe_Cambiar_Clave": 'True', 
                             "Plan": nuevo_plan
                         }
                         
                         df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
                         df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
+                        guardar_en_nube(df_usuarios_admin)
                         
-                        # Le creamos su base de tareas lista para operar y evitar errores futuros
                         archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
                         if not os.path.exists(archivo_tareas_nuevo):
                             pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad']).to_csv(archivo_tareas_nuevo, index=False)
@@ -2120,20 +2050,20 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
             with c_ed1:
                 usuario_editar = st.selectbox("Seleccionar Cliente a Modificar", lista_usuarios)
             with c_ed2:
-                # Buscar qué plan tiene ahora para mostrarlo por defecto
                 try:
                     plan_actual_usr = df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'].values[0]
                     idx_plan = ["Básico", "Medio", "Full"].index(plan_actual_usr)
                 except:
-                    idx_plan = 0 # Básico por defecto si algo falla
+                    idx_plan = 0
                     
                 nuevo_plan_edit = st.selectbox("Seleccionar Nuevo Plan", ["Básico", "Medio", "Full"], index=idx_plan)
             with c_ed3:
-                st.write("") # Espaciador para alinear el botón
+                st.write("") 
                 st.write("")
                 if st.button("🔄 Actualizar Nivel de Acceso", type="primary", use_container_width=True):
                     df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
                     df_usuarios_admin.to_csv(ARCHIVO_USUARIOS, index=False)
+                    guardar_en_nube(df_usuarios_admin)
                     st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados a Plan {nuevo_plan_edit}.")
                     st.rerun()
         
@@ -2149,7 +2079,6 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
         todas_causas = []
         todas_tareas = []
         
-        # El sistema recorre los archivos de todos los usuarios como un fantasma
         for u in df_usuarios_admin['Usuario']:
             arch_c = f"base_causas_{u}.csv"
             arch_t = f"base_tareas_{u}.csv"
@@ -2157,7 +2086,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
             if os.path.exists(arch_c):
                 temp_c = pd.read_csv(arch_c)
                 if not temp_c.empty:
-                    temp_c['Usuario_Propietario'] = u # Etiqueta para saber de quién es
+                    temp_c['Usuario_Propietario'] = u 
                     todas_causas.append(temp_c)
                     
             if os.path.exists(arch_t):
@@ -2219,7 +2148,6 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
                         
-                        # TRUCO MAESTRO: Buscar modelo activo automáticamente
                         modelo_elegido = "gemini-1.0-pro"
                         for m in genai.list_models():
                             if 'generateContent' in m.supported_generation_methods:
