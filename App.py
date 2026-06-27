@@ -515,9 +515,14 @@ if not st.session_state['logged_in']:
                             st.session_state['usr_registro'] = user_clean
                             st.rerun()
                         else:
+                            # 1. Guardamos la galleta en el navegador
+                            cookie_manager.set("jurisync_user", user_clean, key="cookie_login")
+                            # 2. Le decimos a Streamlit que estás logueado
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = user_clean
-                            cookie_manager.set("jurisync_user", user_clean, key="cookie_login")
+                            # 3. TRUCO DE MAGIA: Esperamos 1 segundo para que el navegador alcance a guardar la galleta
+                            import time
+                            time.sleep(1)
                             st.rerun()
                     else:
                         st.error("❌ Usuario o contraseña incorrectos.")
@@ -999,13 +1004,28 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                     if comprobante:
                         nombre_archivo = comprobante.name
                         b64_str = base64.b64encode(comprobante.getvalue()).decode('utf-8')
-                    df_tramites = pd.concat([df_tramites, pd.DataFrame([{
+                    
+                    nuevo_tramite = {
                         'ID_Tramite': str(uuid.uuid4())[:8], 'ROL': rol_sel, 'Fecha_Pago': fecha_pago.strftime("%d/%m/%Y"),
                         'Tipo_Auxiliar': tipo_aux, 'Monto': monto_pagado, 'Comprobante_Nombre': nombre_archivo,
-                        'Comprobante_B64': b64_str, 'Registrado_Por': nombre_real_usuario
-                    }])], ignore_index=True)
+                        'Comprobante_B64': b64_str, 'Registrado_Por': nombre_real_usuario,
+                        'Usuario_Propietario': usuario_actual
+                    }
+                    
+                    df_tramites = pd.concat([df_tramites, pd.DataFrame([nuevo_tramite])], ignore_index=True)
                     df_tramites.to_csv(ARCHIVO_TRAMITES, index=False)
-                    st.success("✅ Trámite guardado en la base local.")
+                    
+                    # ☁️ RESPALDO EN LA NUBE
+                    try:
+                        df_nube_tr = conn.read(worksheet="base_tramites", ttl=0)
+                        df_nube_tr_upd = pd.concat([df_nube_tr, pd.DataFrame([nuevo_tramite])], ignore_index=True)
+                        conn.update(worksheet="base_tramites", data=df_nube_tr_upd)
+                    except:
+                        conn.update(worksheet="base_tramites", data=df_tramites)
+                        
+                    st.success("✅ Registro de trámite respaldado en la nube.")
+                    import time
+                    time.sleep(1)
                     st.rerun()
                     
     with tab_historial_t:
@@ -1300,10 +1320,20 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = pd.read_csv(ARCHIVO_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 
-                            'Cliente': cli_nom, 'Servicio': accion_sel, 'Honorarios': hon_num, 'Archivo_B64': b64_docx
+                            'Cliente': cli_nom, 'Servicio': accion_sel, 'Honorarios': hon_num, 'Archivo_B64': b64_docx,
+                            'Usuario_Propietario': usuario_actual
                         }
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
+                        
+                        # ☁️ RESPALDO EN LA NUBE
+                        try:
+                            df_nube_co = conn.read(worksheet="base_contratos", ttl=0)
+                            df_nube_co_upd = pd.concat([df_nube_co, pd.DataFrame([nuevo_con])], ignore_index=True)
+                            conn.update(worksheet="base_contratos", data=df_nube_co_upd)
+                        except:
+                            conn.update(worksheet="base_contratos", data=df_con)
+                            
                         st.rerun()
                         
         if st.session_state.get('contrato_generado'):
@@ -1429,12 +1459,28 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 'ROL': n_rol, 'TRIBUNAL': n_trib, 'CARATULADO': n_carat, 'Cliente': n_cli,
                                 'RUT': '--', 'Teléfono': '--', 'Tipo_Negocio': 'Propio', 'Clave_unica': '--',
                                 'Correo': '--', 'Direccion': '--', 'SAC': '--', 'Sucursal': '--',
-                                'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0
+                                'Estado_Honorarios': 'Sin fijar', 'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0,
+                                'Usuario_Propietario': usuario_actual # Marca tuya para que no se mezcle
                             }
+                            # 1. Guardar en local
                             df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
                             df_causas.to_csv(ARCHIVO_BD, index=False)
+                            
+                            # 2. SUBIR A GOOGLE SHEETS INMEDIATAMENTE
+                            try:
+                                # Leemos la nube actual para no borrar lo de tus colegas
+                                df_nube = conn.read(worksheet="base_causas", ttl=0)
+                                # Juntamos la nube con tu nueva causa
+                                df_nube_actualizada = pd.concat([df_nube, pd.DataFrame([nueva_c])], ignore_index=True)
+                                conn.update(worksheet="base_causas", data=df_nube_actualizada)
+                            except:
+                                # Si la hoja "base_causas" no existe en tu Google Sheets, la crea sola
+                                conn.update(worksheet="base_causas", data=df_causas)
+                            
                             st.session_state['creando_causa'] = False
-                            st.success("Causa creada exitosamente.")
+                            st.success("✅ Causa creada y respaldada en la nube exitosamente.")
+                            import time
+                            time.sleep(1) # Pausa para que alcances a leer el mensaje verde
                             st.rerun()
 
         st.write("---")
@@ -1593,17 +1639,30 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 'Creador': nombre_real_usuario, 
                                 'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
                                 'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
-                                'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p
+                                'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p,
+                                'Usuario_Propietario': destinatario_usr # <--- NUEVO: Para saber de quién es en la nube
                             }
                             df_t_destino = pd.concat([df_t_destino, pd.DataFrame([nueva_t])], ignore_index=True)
                             df_t_destino.to_csv(destinatario_file, index=False)
                             
+                            # ☁️ NUEVO: RESPALDO AUTOMÁTICO EN LA NUBE
+                            try:
+                                df_nube_t = conn.read(worksheet="base_tareas", ttl=0)
+                                df_nube_t_upd = pd.concat([df_nube_t, pd.DataFrame([nueva_t])], ignore_index=True)
+                                conn.update(worksheet="base_tareas", data=df_nube_t_upd)
+                            except:
+                                conn.update(worksheet="base_tareas", data=df_t_destino)
+                            
                             st.session_state['creando_tarea'] = False
                             
                             if destinatario_usr == usuario_actual:
-                                st.success("Tarea registrada en tu agenda.")
+                                st.success("✅ Tarea registrada en tu agenda y en la nube.")
                             else:
-                                st.success("Tarea enviada y delegada exitosamente de forma confidencial.")
+                                st.success("✅ Tarea enviada, delegada y respaldada exitosamente.")
+                                
+                            # NUEVO: Pausa para que se vea el mensaje verde
+                            import time
+                            time.sleep(1)
                             st.rerun()
                             
                 df_t_local = pd.read_csv(ARCHIVO_TAREAS)
