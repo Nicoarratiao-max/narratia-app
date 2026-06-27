@@ -391,9 +391,7 @@ USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(
 NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 
 # --- MOTOR DE COOKIES (PARA QUE NO SE CIERRE LA SESIÓN CON F5) ---
-@st.cache_resource
-def get_manager():
-    return stx.CookieManager()
+cookie_manager = stx.CookieManager(key="motor_cookies")
 
 cookie_manager = get_manager()
 
