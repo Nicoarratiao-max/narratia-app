@@ -25,14 +25,29 @@ def fetch_sheet_cached(worksheet_name):
     """Descarga de la nube y guarda en memoria RAM por 15 min para máxima velocidad."""
     return conn.read(worksheet=worksheet_name, ttl=900)
 
-def safe_read_sheet(worksheet_name):
+def safe_read_sheet(worksheet_name, default_cols=None):
     """Lee usando caché. Si Google falla o bloquea, intenta evitar caídas."""
     try:
         df = fetch_sheet_cached(worksheet_name)
         if df is not None and not df.empty:
-            return df.dropna(how="all")
+            df_clean = df.dropna(how="all")
+            # Guarda un respaldo local silencioso
+            df_clean.to_csv(f"{worksheet_name}.csv", index=False)
+            return df_clean
     except Exception:
         pass
+    
+    # Si Google falla, intenta leer el archivo local
+    csv_path = f"{worksheet_name}.csv"
+    if os.path.exists(csv_path):
+        try:
+            return pd.read_csv(csv_path)
+        except Exception:
+            pass
+            
+    # Si no hay nada, crea una tabla vacía con las columnas correctas para evitar el TypeError
+    if default_cols is not None:
+        return pd.DataFrame(columns=default_cols)
     return pd.DataFrame()
 
 def safe_update_sheet(worksheet_name, df):
