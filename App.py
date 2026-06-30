@@ -15,6 +15,53 @@ from streamlit_calendar import calendar
 from streamlit_gsheets import GSheetsConnection
 import extra_streamlit_components as stx
 
+# =====================================================================
+# 🛡️ MOTOR DE RESILIENCIA Y CACHÉ (AIRBAGS ANTI-CRASH Y VELOCIDAD)
+# =====================================================================
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+@st.cache_data(ttl=900)
+def fetch_sheet_cached(worksheet_name):
+    """Descarga de la nube y guarda en memoria RAM por 15 min para máxima velocidad."""
+    return conn.read(worksheet=worksheet_name, ttl=900)
+
+def safe_read_sheet(worksheet_name, default_cols=None):
+    """Lee usando caché. Si Google falla o bloquea, usa el respaldo local para no caerse."""
+    try:
+        df = fetch_sheet_cached(worksheet_name)
+        if df is not None and not df.empty:
+            df_clean = df.dropna(how="all")
+            df_clean.to_csv(f"{worksheet_name}.csv", index=False)
+            return df_clean
+    except Exception:
+        pass
+    
+    csv_path = f"{worksheet_name}.csv"
+    if os.path.exists(csv_path):
+        try:
+            return pd.read_csv(csv_path)
+        except Exception:
+            pass
+            
+    if default_cols is not None:
+        return pd.DataFrame(columns=default_cols)
+    return pd.DataFrame()
+
+def safe_update_sheet(worksheet_name, df):
+    """Guarda localmente y luego sube a la nube. Evita pantallas rojas de error."""
+    csv_path = f"{worksheet_name}.csv"
+    try:
+        df.to_csv(csv_path, index=False)
+    except Exception:
+        pass
+        
+    try:
+        conn.update(worksheet=worksheet_name, data=df)
+    except Exception:
+        pass
+    # Limpiamos la memoria para que el próximo clic cargue los datos nuevos
+    fetch_sheet_cached.clear()
+
 # --- FUNCIÓN DE GOOGLE CALENDAR DINÁMICA ---
 def agendar_plazo_calendar(titulo, descripcion, fecha_str, correo_destino):
     if not correo_destino or "@" not in str(correo_destino):
@@ -85,6 +132,7 @@ def obtener_saludo():
     else:
         return "Buenas noches"
 
+@st.cache_data
 def get_logo_src():
     ruta_base = os.path.dirname(os.path.abspath(__file__))
     extensiones = ['png', 'jpg', 'jpeg', 'PNG', 'JPG']
@@ -233,14 +281,14 @@ def crear_contrato_word(datos):
     p1 = doc.add_paragraph()
     p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p1.add_run("\nCLÁUSULA PRIMERA: OBJETO DEL CONTRATO. ").bold = True
-    p1.add_run(f"Por medio de este instrumento, el Cliente encomienda la representación y patrocinio legal a El Abogado para la tramitación judicial y defensa respectiva de un procedimiento de {datos['tipo_servicio'].upper()}.\n")
+    p1.add_run(f"Por medio de este instrumento, el Cliente encomienda la representation y patrocinio legal a El Abogado para la tramitación judicial y defensa respectiva de un procedimiento de {datos['tipo_servicio'].upper()}.\n")
     p1.add_run("Los servicios profesionales comprometidos por el profesional contemplan de forma específica lo siguiente:\n")
     p1.add_run(datos['detalle_servicio'])
     
     p2 = doc.add_paragraph()
     p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p2.add_run("\nCLÁUSULA SEGUNDA: HONORARIOS PROFESIONALES. ").bold = True
-    p2.add_run(f"Los honorarios totales convenidos por la prestación de los servicios profesionales ascienden a la suma correlativa de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
+    p2.add_run(f"Los honorarios totales convenidos por la prestacion de los servicios profesionales ascienden a la suma correlativa de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
     p2.add_run("Esta suma se considera alzada y fija por la tramitación completa descrita en la cláusula anterior.")
     
     p3 = doc.add_paragraph()
@@ -284,7 +332,7 @@ def crear_contrato_word(datos):
 
     p5 = doc.add_paragraph()
     p5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p5.add_run("\nCLÁUSULA QUINTA: OBLIGACIONES RECÍPROCAS DE LAS PARTES.\n").bold = True
+    p5.add_run("\nCLÁUSULA QUINTA: OBLIGACIONES RECÍPOCAS DE LAS PARTES.\n").bold = True
     p5.add_run("Obligación del Profesional: ").bold = True
     p5.add_run("El Abogado asume una obligación de medios diligentes, debiendo desplegar todo su conocimiento técnico, técnico-jurídico y ético para la tramitación de la causa.\n")
     p5.add_run("Obligación del Contratante: ").bold = True
@@ -292,6 +340,7 @@ def crear_contrato_word(datos):
 
     num_clausula = 6
     if datos['tipo_servicio'] == "Liquidación voluntaria":
+        doc.add_paragraph()
         p6 = doc.add_paragraph()
         p6.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         p6.add_run("\nCLÁUSULA SEXTA: ENTREGA DE DECLARACIONES JURADAS OBLIGATORIAS. ").bold = True
@@ -366,28 +415,11 @@ def crear_informe_ia_word(rol, cliente, texto_informe):
     return bio.getvalue()
 
 # =====================================================================
-# --- SISTEMA DE CONTROL DE ACCESO (CON AIRBAG DE NUBE) ---
+# --- SISTEMA DE CONTROL DE ACCESO (AHORA EN GOOGLE SHEETS Y COOKIES) ---
 # =====================================================================
 ARCHIVO_USUARIOS = "base_usuarios.csv"
-conn = st.connection("gsheets", type=GSheetsConnection)
 
-def guardar_en_nube(df):
-    try:
-        conn.update(worksheet="base_usuarios", data=df)
-    except Exception as e:
-        print("Error nube:", e)
-    df.to_csv(ARCHIVO_USUARIOS, index=False)
-    st.cache_data.clear()
-
-try:
-    df_usuarios = conn.read(worksheet="base_usuarios", usecols=[0, 1, 2, 3, 4, 5], ttl="10m")
-    df_usuarios = df_usuarios.dropna(how="all")
-    df_usuarios['Debe_Cambiar_Clave'] = df_usuarios['Debe_Cambiar_Clave'].astype(str)
-except Exception:
-    if os.path.exists(ARCHIVO_USUARIOS):
-        df_usuarios = pd.read_csv(ARCHIVO_USUARIOS)
-    else:
-        df_usuarios = pd.DataFrame()
+df_usuarios = safe_read_sheet("base_usuarios", ["Usuario", "Password", "Nombre_Real", "Correo", "Debe_Cambiar_Clave", "Plan"])
 
 if df_usuarios.empty:
     datos_iniciales = {
@@ -399,9 +431,10 @@ if df_usuarios.empty:
         "Plan": ["Full", "Full", "Full", "Full", "Full", "Full"]
     }
     df_usuarios = pd.DataFrame(datos_iniciales)
-    guardar_en_nube(df_usuarios)
+    safe_update_sheet("base_usuarios", df_usuarios)
 else:
     cambios = False
+    
     if "Eriquelme" not in df_usuarios['Usuario'].values:
         nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": "Eriquelme123", "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
         df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
@@ -425,14 +458,14 @@ else:
         cambios = True
 
     if cambios:
-        guardar_en_nube(df_usuarios)
+        safe_update_sheet("base_usuarios", df_usuarios)
 
 df_usuarios.to_csv(ARCHIVO_USUARIOS, index=False)
 
 USUARIOS_DICT = dict(zip(df_usuarios['Usuario'], df_usuarios['Password'].astype(str)))
 NOMBRES_REALES = dict(zip(df_usuarios['Usuario'], df_usuarios['Nombre_Real']))
 
-# --- MOTOR DE COOKIES ---
+# --- MOTOR DE COOKIES (PARA QUE NO SE CIERRE LA SESIÓN CON F5) ---
 cookie_manager = stx.CookieManager(key="motor_cookies")
 
 if 'logged_in' not in st.session_state: 
@@ -465,11 +498,8 @@ if "cliente_id" in query_params:
     st.subheader(f"Bienvenido/a, {nombre_cliente_limpio}")
     st.write("Por favor, cargue los documentos solicitados por su abogado en formato PDF o Imagen. El sistema notificará automáticamente al estudio jurídico cuando haya completado la entrega.")
     
-    ARCHIVO_DOCS = "base_documentos_clientes.csv"
-    if not os.path.exists(ARCHIVO_DOCS):
-        pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
-        
-    df_docs = pd.read_csv(ARCHIVO_DOCS)
+    df_docs = safe_read_sheet("base_documentos_clientes", ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida'])
+    
     mis_docs = df_docs[df_docs['Cliente_Token'] == token_cliente]
     
     if mis_docs.empty:
@@ -498,7 +528,7 @@ if "cliente_id" in query_params:
                             with st.spinner("Guardando en la nube de JuriSync..."):
                                 b64_file = base64.b64encode(archivo.getvalue()).decode('utf-8')
                                 df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Archivo_B64', 'Fecha_Subida']] = ['✅ Completado', b64_file, datetime.now().strftime("%d/%m/%Y")]
-                                df_docs.to_csv(ARCHIVO_DOCS, index=False)
+                                safe_update_sheet("base_documentos_clientes", df_docs)
                                 st.success("¡Documento guardado!")
                                 st.rerun()
         
@@ -511,7 +541,7 @@ if "cliente_id" in query_params:
     st.stop() 
 
 # =====================================================================
-# 🔐 PANTALLA DE LOGIN
+# 🔐 PANTALLA DE LOGIN CON CONFIGURACIÓN EN LA NUBE
 # =====================================================================
 if not st.session_state['logged_in']:
     st.markdown("""
@@ -579,7 +609,7 @@ if not st.session_state['logged_in']:
                         elif rec_correo.strip().lower() == correo_real.lower():
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = "Temp1234"
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = 'True'
-                            guardar_en_nube(df_usuarios)
+                            safe_update_sheet("base_usuarios", df_usuarios)
                             st.success("✅ Identidad verificada. Tu contraseña temporal es: **Temp1234**. Inicia sesión con ella y te pediremos crear una nueva.")
                         else:
                             st.error("❌ El correo no coincide con nuestros registros de seguridad.")
@@ -611,7 +641,7 @@ if not st.session_state['logged_in']:
                         df_usuarios.at[idx_mod, 'Correo'] = nuevo_correo
                         df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = 'False'
                         
-                        guardar_en_nube(df_usuarios)
+                        safe_update_sheet("base_usuarios", df_usuarios)
                         
                         st.session_state['logged_in'] = True
                         st.session_state['username'] = usr_actualizar
@@ -689,7 +719,7 @@ if st.session_state['logged_in']:
             st.toast(f"🔔 ¡Tienes {mensajes_nuevos} mensaje(s) nuevo(s) en tu buzón!", icon="📩")
             st.session_state['ultimo_mensaje_leido'] = len(mis_mensajes)
 
-# --- FUNCIÓN DE AUTOLIMPIEZA SISTEMA ---
+# --- FUNCIÓN DE AUTOLIMPIEZA SISTEMA (15 DÍAS EXACTOS) ---
 def limpiar_documentos_estado_diario():
     if os.path.exists(ARCHIVO_ESTADO_DIARIO):
         df_ed = pd.read_csv(ARCHIVO_ESTADO_DIARIO)
@@ -882,7 +912,7 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty and 'Cliente' in df_causas_totales.columns else 0
     
     fecha_hoy_str = datetime.now().strftime("%d/%m/%Y")
-    tareas_del_dia = len(df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]) if not df_tareas_totales.empty else 0
+    tareas_del_dia = len(df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'].astype(str) == str(fecha_hoy_str)]) if not df_tareas_totales.empty else 0
     
     documentos_efectivos = 0
     if not df_tareas_totales.empty and 'Comentarios' in df_tareas_totales.columns:
@@ -924,7 +954,7 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
         if tareas_del_dia == 0:
             st.info("Felicidades. No tienes tareas pendientes para el día de hoy.")
         else:
-            t_hoy = df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'] == fecha_hoy_str]
+            t_hoy = df_tareas_totales[df_tareas_totales['Fecha_Vencimiento'].astype(str) == str(fecha_hoy_str)]
             for _, t in t_hoy.iterrows():
                 color_t = "#ff5630" if t.get('Prioridad') == 'Alta' else "#ffc400"
                 st.markdown(f"<div style='border-left:3px solid {color_t}; padding-left:10px; margin-bottom:10px; background:#f4f5f7; padding:8px;'><strong style='color:#172b4d; font-size:14px;'>{t['Titulo']}</strong><br><span style='color:#6b778c; font-size:12px;'>Causa: {t['ROL']}</span></div>", unsafe_allow_html=True)
@@ -1035,16 +1065,11 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                     df_tramites = pd.concat([df_tramites, pd.DataFrame([nuevo_tramite])], ignore_index=True)
                     df_tramites.to_csv(ARCHIVO_TRAMITES, index=False)
                     
-                    try:
-                        df_nube_tr = conn.read(worksheet="base_tramites", ttl=0)
-                        df_nube_tr_upd = pd.concat([df_nube_tr, pd.DataFrame([nuevo_tramite])], ignore_index=True)
-                        conn.update(worksheet="base_tramites", data=df_nube_tr_upd)
-                    except Exception:
-                        try:
-                            conn.update(worksheet="base_tramites", data=df_tramites)
-                        except Exception: pass
+                    df_nube_tr = safe_read_sheet("base_tramites", ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario'])
+                    df_nube_tr_upd = pd.concat([df_nube_tr, pd.DataFrame([nuevo_tramite])], ignore_index=True)
+                    safe_update_sheet("base_tramites", df_nube_tr_upd)
                         
-                    st.success("✅ Registro de trámite guardado exitosamente.")
+                    st.success("✅ Registro de trámite respaldado en la nube.")
                     import time
                     time.sleep(1)
                     st.rerun()
@@ -1346,14 +1371,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        try:
-                            df_nube_co = conn.read(worksheet="base_contratos", ttl=0)
-                            df_nube_co_upd = pd.concat([df_nube_co, pd.DataFrame([nuevo_con])], ignore_index=True)
-                            conn.update(worksheet="base_contratos", data=df_nube_co_upd)
-                        except Exception:
-                            try:
-                                conn.update(worksheet="base_contratos", data=df_con)
-                            except Exception: pass
+                        dn_co = safe_read_sheet("base_contratos", ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario'])
+                        safe_update_sheet("base_contratos", pd.concat([dn_co, pd.DataFrame([nuevo_con])], ignore_index=True))
                             
                         st.rerun()
                         
@@ -1386,11 +1405,10 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             if st.button("🗑️ Eliminar", key=f"del_con_{row.get('ID', idx)}"):
                                 df_contratos_reg = df_contratos_reg.drop(idx)
                                 df_contratos_reg.to_csv(ARCHIVO_CONTRATOS, index=False)
-                                try:
-                                    dn_c = conn.read(worksheet="base_contratos", ttl=0)
-                                    dn_c = dn_c[dn_c['ID'] != row.get('ID')]
-                                    conn.update(worksheet="base_contratos", data=dn_c)
-                                except Exception: pass
+                                
+                                dn_c = safe_read_sheet("base_contratos", [])
+                                if not dn_c.empty:
+                                    safe_update_sheet("base_contratos", dn_c[dn_c['ID'] != row.get('ID')])
                                 st.rerun()
 
     with tab_importar:
@@ -1461,11 +1479,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
 # 7. CAUSAS / EXPEDIENTES (MEJORADO Y RELACIONAL)
 elif st.session_state['menu_radio'] == "💼 Causas":
     df_causas = pd.read_csv(ARCHIVO_BD)
-    
-    try:
-        df_clientes = conn.read(worksheet="base_clientes", ttl=0)
-    except Exception:
-        df_clientes = pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
+    df_clientes = safe_read_sheet("base_clientes", ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
     
     @st.dialog("Editar tarea")
     def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
@@ -1487,9 +1501,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
             
             try:
-                dn = conn.read(worksheet="base_tareas", ttl=0)
+                dn = safe_read_sheet("base_tareas", [])
                 dn.loc[dn['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
-                conn.update(worksheet="base_tareas", data=dn)
+                safe_update_sheet("base_tareas", dn)
             except Exception: pass
                 
             st.session_state['editando_tarea'] = None
@@ -1537,13 +1551,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             df_causas = pd.concat([df_causas, pd.DataFrame([nueva_c])], ignore_index=True)
                             df_causas.to_csv(ARCHIVO_BD, index=False)
                             
-                            try:
-                                df_nube = conn.read(worksheet="base_causas", ttl=0)
-                                df_nube_actualizada = pd.concat([df_nube, pd.DataFrame([nueva_c])], ignore_index=True)
-                                conn.update(worksheet="base_causas", data=df_nube_actualizada)
-                            except Exception:
-                                try: conn.update(worksheet="base_causas", data=df_causas)
-                                except Exception: pass
+                            dn = safe_read_sheet("base_causas", ['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Usuario_Propietario'])
+                            safe_update_sheet("base_causas", pd.concat([dn, pd.DataFrame([nueva_c])], ignore_index=True))
                             
                             st.session_state['creando_causa'] = False
                             st.success("✅ Causa creada y vinculada al cliente exitosamente.")
@@ -1622,10 +1631,10 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     df_causas = df_causas.drop(idx)
                     df_causas.to_csv(ARCHIVO_BD, index=False)
                     try:
-                        dn_c = conn.read(worksheet="base_causas", ttl=0)
+                        dn_c = safe_read_sheet("base_causas", [])
                         dn_c = dn_c[dn_c['ROL'] != rol_actual]
-                        conn.update(worksheet="base_causas", data=dn_c)
-                    except Exception: pass
+                        safe_update_sheet("base_causas", dn_c)
+                    except: pass
                     st.session_state['causa_seleccionada'] = None
                     st.rerun()
                 
@@ -1744,16 +1753,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             df_t_destino.to_csv(destinatario_file, index=False)
                             
                             try:
-                                df_nube_t = conn.read(worksheet="base_tareas", ttl=0)
-                                df_nube_t_upd = pd.concat([df_nube_t, pd.DataFrame([nueva_t])], ignore_index=True)
-                                conn.update(worksheet="base_tareas", data=df_nube_t_upd)
-                            except Exception:
-                                try: conn.update(worksheet="base_tareas", data=df_t_destino)
-                                except Exception: pass
+                                dn_t_upd = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
+                                safe_update_sheet("base_tareas", pd.concat([dn_t_upd, pd.DataFrame([nueva_t])], ignore_index=True))
+                            except: pass
                                 
                             # --- 🚀 DISPARO A GOOGLE CALENDAR DINÁMICO ---
                             if t_p == "Alta":
-                                df_usr_db = pd.read_csv(ARCHIVO_USUARIOS)
+                                df_usr_db = safe_read_sheet("base_usuarios", [])
                                 f_user = df_usr_db[df_usr_db['Usuario'] == destinatario_usr]
                                 if not f_user.empty and "@" in str(f_user.iloc[0]['Correo']):
                                     correo_cal = f_user.iloc[0]['Correo']
@@ -1833,9 +1839,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
                                             
                                             try:
-                                                dn = conn.read(worksheet="base_tareas", ttl=0)
+                                                dn = safe_read_sheet("base_tareas", [])
                                                 dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
-                                                conn.update(worksheet="base_tareas", data=dn)
+                                                safe_update_sheet("base_tareas", dn)
                                             except Exception: pass
                                             st.rerun()
 
@@ -1867,6 +1873,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             }
                             df_docs_db = pd.concat([df_docs_db, pd.DataFrame([nuevo_registro_doc])], ignore_index=True)
                             df_docs_db.to_csv(ARCHIVO_DOCS, index=False)
+                            safe_update_sheet("base_documentos_clientes", df_docs_db)
                             st.success(f"¡Solicitud de '{nuevo_doc_req}' agregada al portal del cliente!")
                             st.rerun()
                 
@@ -1947,7 +1954,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
                 text_color = "white" if bg_color != "#ffc400" else "#172b4d"
                 eventos_calendario.append({"title": f"📌 {r['Titulo']}", "start": d_str, "backgroundColor": bg_color, "textColor": text_color, "borderColor": bg_color})
-            except Exception: pass
+            except: pass
                 
     opciones_calendario = {
         "initialView": "dayGridMonth", "locale": "es", "firstDay": 1, 
@@ -1993,7 +2000,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                             st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong> <span style='font-size:11px; color:{prio_txt_color}; font-weight:bold;'>({td.get('Prioridad', 'Media')})</span><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
                             st.button("Ir al expediente ➔", key=f"cal_ir_{td['ID_Tarea']}", on_click=ir_a_expediente, args=(td['ROL'],))
                             st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-            except Exception: 
+            except: 
                 st.write("Selecciona un día en el calendario.")
 
 # 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
@@ -2027,7 +2034,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                             "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
                         }
                         df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
-                        guardar_en_nube(df_usuarios_admin)
+                        safe_update_sheet("base_usuarios", df_usuarios_admin)
                         
                         archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
                         if not os.path.exists(archivo_tareas_nuevo):
@@ -2055,7 +2062,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                 st.write("")
                 if st.button("🔄 Actualizar Nivel de Acceso", type="primary", use_container_width=True):
                     df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
-                    guardar_en_nube(df_usuarios_admin)
+                    safe_update_sheet("base_usuarios", df_usuarios_admin)
                     st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados.")
                     st.rerun()
         st.dataframe(df_usuarios_admin[['Usuario', 'Nombre_Real', 'Plan', 'Correo']], use_container_width=True)
@@ -2105,23 +2112,90 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
         
         if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True):
             with st.spinner("Formateando absolutamente TODAS las tablas en la nube y discos locales..."):
-                try:
-                    conn.update(worksheet="base_clientes", data=pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
-                    conn.update(worksheet="base_causas", data=pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']))
-                    conn.update(worksheet="base_tareas", data=pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
-                    conn.update(worksheet="base_contratos", data=pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
-                    conn.update(worksheet="base_tramites", data=pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
-                    conn.update(worksheet="base_estado_diario", data=pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
-                    conn.update(worksheet="base_documentos_clientes", data=pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
-                except Exception as e:
-                    st.error(f"Error limpiando Google Sheets: {e}")
+                safe_update_sheet("base_clientes", pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
+                safe_update_sheet("base_causas", pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']))
+                safe_update_sheet("base_tareas", pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
+                safe_update_sheet("base_contratos", pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
+                safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
+                safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
+                safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
                 
-                import glob
+                # Barrido nuclear de archivos locales (salvando solo a los usuarios)
                 for archivo_local in glob.glob("base_*.csv"):
                     if "usuarios" not in archivo_local:
                         try: os.remove(archivo_local)
-                        except Exception: pass
+                        except: pass
                 
                 st.cache_data.clear()
             st.success("✅ Limpieza extrema completada. Sistema restablecido a cero.")
             import time; time.sleep(2); st.rerun()
+
+# 15. REDACTOR AUTOMÁTICO IA
+elif st.session_state['menu_radio'] == "📝 Redactor IA":
+    st.title("📝 Redactor Automático de Escritos")
+    st.markdown("La IA redactará el borrador del escrito judicial con el formato y lenguaje formal de los tribunales chilenos, listo para revisar y presentar.")
+    
+    with st.container(border=True):
+        col_r1, col_r2 = st.columns(2)
+        tipo_escrito = col_r1.selectbox("Tipo de Escrito", [
+            "Oposición de Excepciones (Ejecutivo)", 
+            "Contesta Demanda (General)", 
+            "Incidente de Nulidad", 
+            "Recurso de Reposición", 
+            "Solicitud de Abandono del Procedimiento",
+            "Otro (Especificar en instrucciones)"
+        ])
+        tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)")
+        
+        rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026")
+        caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
+        
+        instrucciones_red = st.text_area("Instrucciones específicas para el escrito:", height=150, placeholder="Ej: Redactar excepción N° 17 de prescripción. La deuda se hizo exigible en marzo de 2024 y notificaron recién ayer. Alega también costas.")
+        
+        if st.button("✍️ Generar Borrador del Escrito", type="primary", use_container_width=True):
+            if not instrucciones_red.strip():
+                st.error("⚠️ Debes darle las instrucciones jurídicas a la IA.")
+            else:
+                with st.spinner("⚖️ Redactando escrito en lenguaje procesal chileno..."):
+                    try:
+                        import google.generativeai as genai
+                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        
+                        modelo_elegido = "gemini-1.0-pro"
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                md_name = m.name.replace("models/", "")
+                                if 'flash' in md_name:
+                                    modelo_elegido = md_name
+                                    break
+                                    
+                        modelo = genai.GenerativeModel(modelo_elegido)
+                        
+                        prompt_redactor = f"""
+                        Actúa como un abogado litigante chileno con impecable ortografía y redacción procesal formal.
+                        Debes redactar un escrito judicial completo con los siguientes datos:
+                        
+                        Tipo de Escrito: {tipo_escrito}
+                        Tribunal: {tribunal_red}
+                        Rol: {rol_red}
+                        Caratulado: {caratula_red}
+                        
+                        INSTRUCCIONES DE FONDO:
+                        {instrucciones_red}
+                        
+                        Estructura requerida:
+                        1. Suma(s) y Tribunal.
+                        2. Individualización de la parte y personería.
+                        3. Cuerpo del escrito (hechos y derecho de forma persuasiva y técnica, citando la ley chilena).
+                        4. Petitorio claro ("POR TANTO: Ruego a S.S...").
+                        5. Peticiones subsidiarias o un "Otrosí" si corresponde según las instrucciones.
+                        
+                        Usa el lenguaje propio del Código de Procedimiento Civil chileno. No agregues notas explicativas para mí, entrégame SOLO el texto del escrito listo para copiar.
+                        """
+                        
+                        respuesta_escrito = modelo.generate_content(prompt_redactor)
+                        st.success("✅ Borrador redactado. Cópialo, revísalo y pásalo a Word.")
+                        st.text_area("Escrito Generado:", value=respuesta_escrito.text, height=500)
+                        
+                    except Exception as e:
+                        st.error(f"❌ Hubo un error de conexión: {e}")
