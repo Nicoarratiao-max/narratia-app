@@ -2003,8 +2003,9 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
 
 # 10. CLIENTES DIRECTOS (FICHA COMPLETA Y RELACIONAL)
 elif st.session_state['menu_radio'] == "👥 Clientes":
-    st.title("👥 Directorio Maat de Clientes")
-    df_clientes = safe_read_sheet("base_clientes", ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
+    st.title("👥 Directorio de Clientes")
+    
+    df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
 
     if st.session_state['cliente_seleccionado'] is None:
         if st.button("➕ Crear Nuevo Cliente", type="primary"):
@@ -2026,23 +2027,19 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                         if not n_cli_nom or not n_cli_rut:
                             st.error("El Nombre y el RUT son obligatorios.")
                         else:
-                            with st.spinner("Sincronizando con Google Sheets..."):
-                                nuevo_cliente = {
-                                    'RUT': n_cli_rut.strip().upper(),
-                                    'Nombre': n_cli_nom.strip(),
-                                    'Telefono': n_cli_tel.strip(),
-                                    'Correo': n_cli_cor.strip(),
-                                    'Clave_unica': n_cli_cla.strip(),
-                                    'Direccion': n_cli_dom.strip()
-                                }
-                                df_temp = pd.concat([df_clientes, pd.DataFrame([nuevo_cliente])], ignore_index=True)
-                                
-                                # Verificamos si realmente se guardó en la nube
-                                exito = safe_update_sheet("base_clientes", df_temp)
-                                if exito:
-                                    st.success("✅ Cliente creado y sincronizado en la nube para todos los equipos.")
-                                    st.session_state['creando_cliente'] = False
-                                    import time; time.sleep(1.5); st.rerun()
+                            nuevo_cliente = {
+                                'RUT': n_cli_rut.strip().upper(),
+                                'Nombre': n_cli_nom.strip(),
+                                'Telefono': n_cli_tel.strip(),
+                                'Correo': n_cli_cor.strip(),
+                                'Clave_unica': n_cli_cla.strip(),
+                                'Direccion': n_cli_dom.strip()
+                            }
+                            df_clientes = pd.concat([df_clientes, pd.DataFrame([nuevo_cliente])], ignore_index=True)
+                            safe_update_sheet("base_clientes", df_clientes)
+                            st.success("✅ Cliente creado y sincronizado en Google Sheets.")
+                            st.session_state['creando_cliente'] = False
+                            st.rerun()
 
         st.markdown("### Listado de Clientes")
         
@@ -2082,31 +2079,34 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         if st.session_state['username'] == "Narratia": 
             if c_del.button("🗑️ Eliminar Cliente", use_container_width=True):
                 with st.spinner("Borrando cliente y limpiando datos en cascada..."):
-                    df_causas = pd.read_csv(ARCHIVO_BD)
-                    roles_a_borrar = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]['ROL'].tolist()
+                    df_causas = pd.read_csv(ARCHIVO_BD) if os.path.exists(ARCHIVO_BD) else pd.DataFrame()
+                    roles_a_borrar = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]['ROL'].tolist() if not df_causas.empty else []
                     nombre_borrar = datos_cli['Nombre']
                     
-                    df_causas = df_causas[df_causas['RUT'].astype(str) != str(rut_actual)]
-                    df_causas.to_csv(ARCHIVO_BD, index=False)
+                    if not df_causas.empty:
+                        df_causas = df_causas[df_causas['RUT'].astype(str) != str(rut_actual)]
+                        df_causas.to_csv(ARCHIVO_BD, index=False)
                     
-                    dn_c = safe_read_sheet("base_causas", [])
-                    if not dn_c.empty: safe_update_sheet("base_causas", dn_c[dn_c['RUT'] != rut_actual])
+                    dn_c = safe_read_sheet("base_causas", COLS_CAUSAS)
+                    if not dn_c.empty: safe_update_sheet("base_causas", dn_c[dn_c['RUT'].astype(str) != str(rut_actual)])
                     
-                    df_t_local = pd.read_csv(ARCHIVO_TAREAS)
-                    df_t_local = df_t_local[~df_t_local['ROL'].isin(roles_a_borrar)]
-                    df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                    df_t_local = pd.read_csv(ARCHIVO_TAREAS) if os.path.exists(ARCHIVO_TAREAS) else pd.DataFrame()
+                    if not df_t_local.empty and roles_a_borrar:
+                        df_t_local = df_t_local[~df_t_local['ROL'].isin(roles_a_borrar)]
+                        df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
                     
-                    dn_t = safe_read_sheet("base_tareas", [])
-                    if not dn_t.empty: safe_update_sheet("base_tareas", dn_t[~dn_t['ROL'].isin(roles_a_borrar)])
+                    dn_t = safe_read_sheet("base_tareas", COLS_TAREAS)
+                    if not dn_t.empty and roles_a_borrar: safe_update_sheet("base_tareas", dn_t[~dn_t['ROL'].isin(roles_a_borrar)])
                     
-                    df_con_local = pd.read_csv(ARCHIVO_CONTRATOS)
-                    df_con_local = df_con_local[df_con_local['Cliente'] != nombre_borrar]
-                    df_con_local.to_csv(ARCHIVO_CONTRATOS, index=False)
+                    df_con_local = pd.read_csv(ARCHIVO_CONTRATOS) if os.path.exists(ARCHIVO_CONTRATOS) else pd.DataFrame()
+                    if not df_con_local.empty:
+                        df_con_local = df_con_local[df_con_local['Cliente'] != nombre_borrar]
+                        df_con_local.to_csv(ARCHIVO_CONTRATOS, index=False)
                     
-                    dn_con = safe_read_sheet("base_contratos", [])
+                    dn_con = safe_read_sheet("base_contratos", COLS_CONTRATOS)
                     if not dn_con.empty: safe_update_sheet("base_contratos", dn_con[dn_con['Cliente'] != nombre_borrar])
 
-                    df_clientes = df_clientes[df_clientes['RUT'] != rut_actual]
+                    df_clientes = df_clientes[df_clientes['RUT'].astype(str) != str(rut_actual)]
                     safe_update_sheet("base_clientes", df_clientes)
                     
                 st.session_state['cliente_seleccionado'] = None
@@ -2114,7 +2114,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                 import time; time.sleep(1.5); st.rerun()
             
         st.title(f"Ficha: {datos_cli['Nombre']}")
-        tab1, tab2, tab3 = st.tabs(["👤 Información", "💰 Contabilidad", "📄 Contratos"])
+        tab1, tab2, tab3 = st.tabs(["👤 Información y Causas", "💰 Contabilidad", "📄 Contratos"])
         
         with tab1:
             col_i, col_d = st.columns([1, 2])
@@ -2143,34 +2143,75 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                         if st.button("✏️ Editar Datos"): st.session_state['editando_cli'] = True; st.rerun()
             
             with col_d:
-                st.subheader("Causas Asociadas")
-                df_causas = pd.read_csv(ARCHIVO_BD)
-                causas_cli = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
-                if causas_cli.empty:
-                    st.write("Este cliente no tiene causas vinculadas.")
+                # --- NUEVA FUNCIÓN: CREAR CAUSA DESDE EL CLIENTE ---
+                with st.expander("➕ Asociar Nueva Causa a este Cliente"):
+                    with st.form("form_asociar_causa"):
+                        c_n1, c_n2 = st.columns(2)
+                        rol_n = c_n1.text_input("Nuevo ROL / RIT", placeholder="Ej: C-123-2026")
+                        trib_n = c_n2.text_input("Tribunal", placeholder="Ej: 1° Juzgado Civil")
+                        carat_n = st.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
+                        neg_n = st.selectbox("Origen de Cartera", ["Propio", "Externo"])
+                        
+                        if st.form_submit_button("Inyectar Causa al Cliente", type="primary"):
+                            if rol_n.strip() == "":
+                                st.error("El ROL es obligatorio.")
+                            else:
+                                df_causas_local = pd.read_csv(ARCHIVO_BD) if os.path.exists(ARCHIVO_BD) else pd.DataFrame(columns=COLS_CAUSAS)
+                                nueva_c = {
+                                    'ROL': rol_n.strip().upper(), 'TRIBUNAL': trib_n.strip(), 'CARATULADO': carat_n.strip(), 
+                                    'Cliente': datos_cli['Nombre'], 'RUT': rut_actual, 'Tipo_Negocio': neg_n,
+                                    'Usuario_Propietario': usuario_actual, 'Estado_Honorarios': 'Sin fijar',
+                                    'Total_Honorarios': 0, 'Cuotas_Totales': 0, 'Cuotas_Pagadas': 0,
+                                    'Clave_unica': datos_cli.get('Clave_unica', '--'), 'SAC': '--', 'Sucursal': '--', 'Servicio': '--',
+                                    'Teléfono': datos_cli.get('Telefono', '--'), 'Correo': datos_cli.get('Correo', '--'), 'Direccion': datos_cli.get('Direccion', '--')
+                                }
+                                df_causas_local = pd.concat([df_causas_local, pd.DataFrame([nueva_c])], ignore_index=True)
+                                df_causas_local.to_csv(ARCHIVO_BD, index=False)
+                                
+                                dn_c = safe_read_sheet("base_causas", COLS_CAUSAS)
+                                dn_c = pd.concat([dn_c, pd.DataFrame([nueva_c])], ignore_index=True)
+                                safe_update_sheet("base_causas", dn_c)
+                                
+                                st.success(f"✅ Causa {rol_n.upper()} asociada exitosamente.")
+                                import time; time.sleep(1.5); st.rerun()
+
+                st.subheader("Causas Asociadas Vigentes")
+                df_causas = pd.read_csv(ARCHIVO_BD) if os.path.exists(ARCHIVO_BD) else pd.DataFrame()
+                if not df_causas.empty:
+                    causas_cli = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
+                    if causas_cli.empty:
+                        st.write("Este cliente no tiene causas vinculadas todavía.")
+                    else:
+                        for _, c in causas_cli.iterrows():
+                            with st.container(border=True):
+                                c1, c2 = st.columns([3, 1])
+                                c1.markdown(f"**Rol:** {c['ROL']} | **Caratulado:** {c.get('CARATULADO', '--')}")
+                                if c2.button("📂 Ir al Expediente", key=f"btn_ir_{c['ROL']}"):
+                                    ir_a_expediente(c['ROL']); st.rerun()
                 else:
-                    for _, c in causas_cli.iterrows():
-                        with st.container(border=True):
-                            c1, c2 = st.columns([3, 1])
-                            c1.markdown(f"**Rol:** {c['ROL']} | **Caratulado:** {c.get('CARATULADO', '--')}")
-                            if c2.button("📂 Ir al Expediente", key=f"btn_ir_{c['ROL']}"):
-                                ir_a_expediente(c['ROL']); st.rerun()
+                    st.write("Base de causas vacía.")
 
         with tab2:
             st.subheader("Estado Financiero Global")
-            causas_economicas = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
-            if causas_economicas.empty:
-                st.write("Sin registros financieros.")
+            if not df_causas.empty:
+                causas_economicas = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
+                if causas_economicas.empty:
+                    st.write("Sin registros financieros.")
+                else:
+                    for _, ce in causas_economicas.iterrows():
+                        st.write(f"🔹 **Causa Rol {ce['ROL']}:** {ce.get('Estado_Honorarios', 'Sin fijar')}")
+                        st.write(f"Pactado: ${ce.get('Total_Honorarios',0):,.0f} | Cuotas Pagadas: {ce.get('Cuotas_Pagadas',0)}")
+                        st.write("---")
             else:
-                for _, ce in causas_economicas.iterrows():
-                    st.write(f"🔹 **Causa Rol {ce['ROL']}:** {ce.get('Estado_Honorarios', 'Sin fijar')}")
-                    st.write(f"Pactado: ${ce.get('Total_Honorarios',0):,.0f} | Cuotas Pagadas: {ce.get('Cuotas_Pagadas',0)}")
-                    st.write("---")
+                st.write("Sin registros financieros.")
                     
         with tab3:
             st.subheader("Contratos Vinculados")
-            df_con = pd.read_csv(ARCHIVO_CONTRATOS)
-            st.dataframe(df_con[df_con['Cliente'] == datos_cli['Nombre']])
+            df_con = pd.read_csv(ARCHIVO_CONTRATOS) if os.path.exists(ARCHIVO_CONTRATOS) else pd.DataFrame()
+            if not df_con.empty:
+                st.dataframe(df_con[df_con['Cliente'] == datos_cli['Nombre']])
+            else:
+                st.write("No hay contratos registrados.")
 
 # 11. GESTOR GLOBAL DE TAREAS
 elif st.session_state['menu_radio'] == "☑️ Tareas":
@@ -2273,15 +2314,14 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
     st.title("👑 Panel de Control Master - SaaS JuriSync")
     st.markdown("Gestión maestra de usuarios y formateo del sistema.")
     
-    # Leemos la base actualizada de usuarios
-    df_usuarios_admin = safe_read_sheet("base_usuarios", ["Usuario", "Password", "Nombre_Real", "Correo", "Debe_Cambiar_Clave", "Plan"])
+    # Aseguramos cargar la base de usuarios actualizada desde la nube
+    df_usuarios_admin = safe_read_sheet("base_usuarios", COLS_USUARIOS)
     
-    # AQUÍ ESTABA EL ERROR: Declaramos las 4 pestañas correctamente
-    tab_crear, tab_editar, tab_vision, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes", "👁️ Visión Global", "☢️ Zona de Peligro"])
+    tab_crear, tab_editar, tab_vision, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Autorizar Planes", "👁️ Visión Global", "☢️ Zona de Peligro"])
     
     with tab_crear:
         with st.container(border=True):
-            st.subheader("Vender Plan / Crear Usuario")
+            st.subheader("Alta de Equipo / Clientes")
             col1, col2 = st.columns(2)
             with col1:
                 nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)")
@@ -2290,48 +2330,56 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                 nueva_clave = st.text_input("Clave Provisoria")
                 nuevo_plan = st.selectbox("Plan Asignado al Crear", ["Básico", "Medio", "Full"])
                 
-            if st.button("🚀 Crear Usuario en el Sistema", type="primary", use_container_width=True):
+            if st.button("🚀 Crear Usuario y Autorizar Plan", type="primary", use_container_width=True):
                 if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
                     st.error("⚠️ Faltan datos obligatorios.")
                 else:
                     if nuevo_user in df_usuarios_admin['Usuario'].values:
                         st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema.")
                     else:
-                        nuevo_registro = {
-                            "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
-                            "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
-                        }
-                        df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
-                        safe_update_sheet("base_usuarios", df_usuarios_admin)
-                        
-                        archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
-                        if not os.path.exists(archivo_tareas_nuevo):
-                            pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(archivo_tareas_nuevo, index=False)
-                        st.success(f"✅ ¡Cuenta lista! Usuario **{nuevo_user}** creado.")
-                        st.rerun()
+                        with st.spinner("Guardando en la nube y generando carpetas..."):
+                            nuevo_registro = {
+                                "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
+                                "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
+                            }
+                            df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                            
+                            # Forzamos la actualización
+                            safe_update_sheet("base_usuarios", df_usuarios_admin)
+                            
+                            # Generar archivo local si es abogado para evitar errores de lectura
+                            archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
+                            if not os.path.exists(archivo_tareas_nuevo):
+                                pd.DataFrame(columns=COLS_TAREAS).to_csv(archivo_tareas_nuevo, index=False)
+                                
+                            st.success(f"✅ ¡Cuenta autorizada! El usuario **{nuevo_user}** ya puede acceder con el plan **{nuevo_plan}**.")
+                            import time; time.sleep(1.5); st.rerun()
 
     with tab_editar:
         with st.container(border=True):
-            st.subheader("Subir o Bajar de Plan a un Cliente")
+            st.subheader("Auditoría de Cuentas y Accesos")
             lista_usuarios = df_usuarios_admin['Usuario'].tolist()
             
             c_ed1, c_ed2, c_ed3 = st.columns(3)
             with c_ed1:
-                usuario_editar = st.selectbox("Seleccionar Cliente a Modificar", lista_usuarios)
+                usuario_editar = st.selectbox("Seleccionar Usuario a Modificar", lista_usuarios)
             with c_ed2:
                 try:
                     plan_actual_usr = df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'].values[0]
                     idx_plan = ["Básico", "Medio", "Full"].index(plan_actual_usr)
                 except Exception: idx_plan = 0
-                nuevo_plan_edit = st.selectbox("Seleccionar Nuevo Plan", ["Básico", "Medio", "Full"], index=idx_plan)
+                nuevo_plan_edit = st.selectbox("Modificar Nivel de Acceso", ["Básico", "Medio", "Full"], index=idx_plan)
             with c_ed3:
                 st.write("") 
                 st.write("")
-                if st.button("🔄 Actualizar Nivel de Acceso", type="primary", use_container_width=True):
-                    df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
-                    safe_update_sheet("base_usuarios", df_usuarios_admin)
-                    st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados.")
-                    st.rerun()
+                if st.button("🔄 Autorizar Cambio de Plan", type="primary", use_container_width=True):
+                    with st.spinner("Sincronizando permisos..."):
+                        df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
+                        safe_update_sheet("base_usuarios", df_usuarios_admin)
+                        st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados en el sistema.")
+                        import time; time.sleep(1.5); st.rerun()
+                        
+        st.markdown("**Resumen de Usuarios Activos**")
         st.dataframe(df_usuarios_admin[['Usuario', 'Nombre_Real', 'Plan', 'Correo']], use_container_width=True)
 
     with tab_vision:
@@ -2379,10 +2427,10 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
         if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True):
             with st.spinner("Formateando absolutamente TODAS las tablas en la nube y discos locales..."):
                 try:
-                    safe_update_sheet("base_clientes", pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
-                    safe_update_sheet("base_causas", pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']))
-                    safe_update_sheet("base_tareas", pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
-                    safe_update_sheet("base_contratos", pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
+                    safe_update_sheet("base_clientes", pd.DataFrame(columns=COLS_CLIENTES))
+                    safe_update_sheet("base_causas", pd.DataFrame(columns=COLS_CAUSAS))
+                    safe_update_sheet("base_tareas", pd.DataFrame(columns=COLS_TAREAS))
+                    safe_update_sheet("base_contratos", pd.DataFrame(columns=COLS_CONTRATOS))
                     safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
                     safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
                     safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
