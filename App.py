@@ -2268,91 +2268,51 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                         st.button("Ir a Causa", key=f"btn_cal_ir_{td.get('ID_Tarea', uuid.uuid4())}", on_click=ir_a_expediente, args=(td['ROL'],))
     except Exception: 
         st.write("Haz clic en un día del calendario para ver sus tareas detalladas.")
-# --- 14. PANEL ADMIN (CON RESET MAESTRO DE HOJAS) ---
+# 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
 elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == "Narratia":
     st.title("👑 Panel de Control Master - SaaS JuriSync")
+    st.markdown("Gestión maestra de usuarios y formateo del sistema.")
     
-    # FORZAMOS AL SISTEMA A LEER LA LISTA FRESCA DE USUARIOS
+    # Leemos la base actualizada de usuarios
     df_usuarios_admin = safe_read_sheet("base_usuarios", ["Usuario", "Password", "Nombre_Real", "Correo", "Debe_Cambiar_Clave", "Plan"])
     
-    t1, t2, t3 = st.tabs(["Cuentas y Planes", "Auditoría", "☢️ Zona de Peligro"])
+    # AQUÍ ESTABA EL ERROR: Declaramos las 4 pestañas correctamente
+    tab_crear, tab_editar, tab_vision, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes", "👁️ Visión Global", "☢️ Zona de Peligro"])
     
-    with t1:
-        st.subheader("Gestión de Usuarios")
-        c_crear, c_editar = st.columns(2)
-        
-        with c_crear:
-            with st.form("crear_u"):
-                st.write("**Crear Nuevo Usuario**")
-                u = st.text_input("Usuario")
-                p = st.text_input("Clave")
-                n = st.text_input("Nombre Real")
-                plan_nuevo = st.selectbox("Plan", ["Básico", "Medio", "Full"])
+    with tab_crear:
+        with st.container(border=True):
+            st.subheader("Vender Plan / Crear Usuario")
+            col1, col2 = st.columns(2)
+            with col1:
+                nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)")
+                nuevo_nombre = st.text_input("Nombre Real del Abogado / Cliente")
+            with col2:
+                nueva_clave = st.text_input("Clave Provisoria")
+                nuevo_plan = st.selectbox("Plan Asignado al Crear", ["Básico", "Medio", "Full"])
                 
-                if st.form_submit_button("Crear Usuario", type="primary"):
-                    if u and p and n:
-                        if u in df_usuarios_admin['Usuario'].values:
-                            st.error("Ese usuario ya existe.")
-                        else:
-                            nuevo_usr = pd.DataFrame([{"Usuario": u, "Password": p, "Nombre_Real": n, "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": plan_nuevo}])
-                            df_usuarios_actualizado = pd.concat([df_usuarios_admin, nuevo_usr], ignore_index=True)
-                            
-                            exito = safe_update_sheet("base_usuarios", df_usuarios_actualizado)
-                            if exito:
-                                st.success("✅ ¡Abogado creado exitosamente en la nube!")
-                                import time; time.sleep(1.5); st.rerun()
+            if st.button("🚀 Crear Usuario en el Sistema", type="primary", use_container_width=True):
+                if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
+                    st.error("⚠️ Faltan datos obligatorios.")
+                else:
+                    if nuevo_user in df_usuarios_admin['Usuario'].values:
+                        st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema.")
                     else:
-                        st.error("Faltan datos obligatorios.")
+                        nuevo_registro = {
+                            "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
+                            "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
+                        }
+                        df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                        safe_update_sheet("base_usuarios", df_usuarios_admin)
                         
-        with c_editar:
-            with st.form("edit_u"):
-                st.write("**Modificar Plan de Usuario**")
-                lista_usrs = df_usuarios_admin['Usuario'].tolist()
-                usr_sel = st.selectbox("Seleccionar Usuario", lista_usrs)
-                
-                # Rescatar plan actual
-                try:
-                    plan_act = df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usr_sel, 'Plan'].values[0]
-                    idx_plan = ["Básico", "Medio", "Full"].index(plan_act)
-                except: idx_plan = 0
-                
-                plan_mod = st.selectbox("Nuevo Plan", ["Básico", "Medio", "Full"], index=idx_plan)
-                
-                if st.form_submit_button("Actualizar Plan", type="primary"):
-                    if usr_sel:
-                        df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usr_sel, 'Plan'] = plan_mod
-                        exito = safe_update_sheet("base_usuarios", df_usuarios_admin)
-                        if exito:
-                            st.success(f"✅ Plan de {usr_sel} actualizado a {plan_mod}.")
-                            import time; time.sleep(1.5); st.rerun()
-
-    with t2: 
-        st.write("Directorio de Cuentas:")
-        st.dataframe(df_usuarios_admin, use_container_width=True)
-        
-    with t3:
-        st.error("☢️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas, tareas, contratos, trámites y documentos de Google Sheets y del servidor local.")
-        if st.button("🚨 FORMATEAR SISTEMA COMPLETO 🚨", type="primary", use_container_width=True):
-            with st.spinner("Formateando tablas..."):
-                safe_update_sheet("base_clientes", pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
-                safe_update_sheet("base_causas", pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']))
-                safe_update_sheet("base_tareas", pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
-                safe_update_sheet("base_contratos", pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
-                safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
-                safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
-                safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
-                
-                for f in glob.glob("base_*.csv"):
-                    if "usuarios" not in f:
-                        try: os.remove(f)
-                        except: pass
-                st.cache_data.clear()
-            st.success("Base de datos limpia."); import time; time.sleep(1); st.rerun()
+                        archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
+                        if not os.path.exists(archivo_tareas_nuevo):
+                            pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(archivo_tareas_nuevo, index=False)
+                        st.success(f"✅ ¡Cuenta lista! Usuario **{nuevo_user}** creado.")
+                        st.rerun()
 
     with tab_editar:
         with st.container(border=True):
             st.subheader("Subir o Bajar de Plan a un Cliente")
-            df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
             lista_usuarios = df_usuarios_admin['Usuario'].tolist()
             
             c_ed1, c_ed2, c_ed3 = st.columns(3)
@@ -2376,7 +2336,6 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
 
     with tab_vision:
         st.subheader("Monitoreo Absoluto de la Oficina")
-        df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
         todas_causas = []
         todas_tareas = []
         
@@ -2419,19 +2378,23 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
         
         if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True):
             with st.spinner("Formateando absolutamente TODAS las tablas en la nube y discos locales..."):
-                safe_update_sheet("base_clientes", pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
-                safe_update_sheet("base_causas", pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']))
-                safe_update_sheet("base_tareas", pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
-                safe_update_sheet("base_contratos", pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
-                safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
-                safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
-                safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
+                try:
+                    safe_update_sheet("base_clientes", pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
+                    safe_update_sheet("base_causas", pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']))
+                    safe_update_sheet("base_tareas", pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
+                    safe_update_sheet("base_contratos", pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
+                    safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
+                    safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
+                    safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
+                except Exception as e:
+                    st.error(f"Error limpiando Google Sheets: {e}")
                 
                 # Barrido nuclear de archivos locales (salvando solo a los usuarios)
+                import glob
                 for archivo_local in glob.glob("base_*.csv"):
                     if "usuarios" not in archivo_local:
                         try: os.remove(archivo_local)
-                        except: pass
+                        except Exception: pass
                 
                 st.cache_data.clear()
             st.success("✅ Limpieza extrema completada. Sistema restablecido a cero.")
