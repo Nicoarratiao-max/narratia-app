@@ -5,6 +5,10 @@ import json
 import uuid
 import base64
 import io
+import re
+import hmac
+import hashlib
+import difflib
 import requests
 import glob
 from google.oauth2.service_account import Credentials
@@ -14,6 +18,119 @@ from bs4 import BeautifulSoup
 from streamlit_calendar import calendar
 from streamlit_gsheets import GSheetsConnection
 import extra_streamlit_components as stx
+
+try:
+    import bcrypt
+    BCRYPT_READY = True
+except ImportError:
+    # Si el paquete no está instalado, la app sigue funcionando pero avisa.
+    # Agrega "bcrypt" a requirements.txt para habilitar el hash de contraseñas.
+    BCRYPT_READY = False
+
+# =====================================================================
+# 🔒 UTILIDADES DE SEGURIDAD (HASH DE CONTRASEÑAS Y COOKIES FIRMADAS)
+# =====================================================================
+
+def hash_password(plano: str) -> str:
+    """Convierte una contraseña en texto plano a un hash bcrypt seguro."""
+    if not BCRYPT_READY:
+        return str(plano)  # Fallback (no recomendado): evita crashear si falta la librería.
+    return bcrypt.hashpw(str(plano).encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+
+def es_hash_bcrypt(valor: str) -> bool:
+    valor = str(valor)
+    return valor.startswith("$2a$") or valor.startswith("$2b$") or valor.startswith("$2y$")
+
+def verificar_password(plano: str, almacenado: str) -> bool:
+    """
+    Verifica una contraseña contra el valor guardado.
+    Soporta migración transparente: si el valor guardado todavía es texto plano
+    (contraseñas antiguas), compara en texto plano. Los hashes nuevos ya
+    quedan protegidos con bcrypt.
+    """
+    almacenado = str(almacenado)
+    if es_hash_bcrypt(almacenado) and BCRYPT_READY:
+        try:
+            return bcrypt.checkpw(str(plano).encode("utf-8"), almacenado.encode("utf-8"))
+        except Exception:
+            return False
+    # Compatibilidad con contraseñas históricas aún no migradas
+    return str(plano) == almacenado
+
+def _cookie_secret() -> str:
+    # Idealmente definida en st.secrets["COOKIE_SECRET"] (Streamlit Cloud -> Settings -> Secrets).
+    return str(st.secrets.get("COOKIE_SECRET", "jurisync_cambia_este_secreto_en_secrets_toml"))
+
+def generar_token_sesion(usuario: str, dias_validez: int = 7) -> str:
+    """Genera una cookie firmada (usuario|expiración|firma) para evitar suplantación."""
+    expira = int((datetime.utcnow() + timedelta(days=dias_validez)).timestamp())
+    payload = f"{usuario}|{expira}"
+    firma = hmac.new(_cookie_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return f"{payload}|{firma}"
+
+def validar_token_sesion(token: str):
+    """Valida la firma y expiración de la cookie. Devuelve el usuario o None si es inválida."""
+    try:
+        usuario, expira, firma = str(token).split("|")
+        payload = f"{usuario}|{expira}"
+        firma_esperada = hmac.new(_cookie_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(firma, firma_esperada):
+            return None
+        if int(expira) < int(datetime.utcnow().timestamp()):
+            return None
+        return usuario
+    except Exception:
+        return None
+
+# =====================================================================
+# 🔎 UTILIDADES DE CRUCE PARA ESTADO DIARIO (NORMALIZACIÓN + FUZZY MATCH)
+# =====================================================================
+
+def normalizar_rol(valor) -> str:
+    """
+    Normaliza un ROL/RIT judicial a un formato comparable, sin importar
+    si viene como 'C-1234-2026', '1234/2026', 'C 1234 2026', etc.
+    Devuelve algo tipo '1234-2026' (solo dígitos y guión separador de año).
+    """
+    if valor is None:
+        return ""
+    texto = str(valor).upper().strip()
+    texto = texto.replace("/", "-").replace("_", "-")
+    numeros = re.findall(r"\d+", texto)
+    if len(numeros) >= 2:
+        # Se asume [número de rol, año] como los dos últimos grupos numéricos
+        return f"{int(numeros[-2])}-{numeros[-1]}"
+    elif len(numeros) == 1:
+        return numeros[0]
+    return texto
+
+def buscar_coincidencias_probables(df_pj, df_causas, col_rol_pj, umbral=0.85):
+    """
+    Segundo filtro (además del cruce exacto): detecta causas cuyo ROL es
+    'casi' igual (diferencias de formato, un dígito distinto, etc.) para
+    que el usuario las revise manualmente en vez de que pasen inadvertidas.
+    """
+    probables = []
+    rol_pj_normalizados = df_pj["ROL_NORMALIZADO"].unique().tolist()
+    for _, fila_causa in df_causas.iterrows():
+        rol_causa_norm = fila_causa["ROL_NORMALIZADO"]
+        if not rol_causa_norm:
+            continue
+        mejor_score = 0.0
+        mejor_match = None
+        for rol_pj in rol_pj_normalizados:
+            score = difflib.SequenceMatcher(None, rol_causa_norm, rol_pj).ratio()
+            if score > mejor_score:
+                mejor_score = score
+                mejor_match = rol_pj
+        if umbral <= mejor_score < 1.0:
+            probables.append({
+                "ROL_Causa_Local": fila_causa.get("ROL", ""),
+                "ROL_Estado_Diario": mejor_match,
+                "Cliente": fila_causa.get("Cliente", ""),
+                "Similitud": f"{mejor_score:.0%}"
+            })
+    return pd.DataFrame(probables)
 
 # =====================================================================
 # 🛡️ MOTOR DE RESILIENCIA Y CACHÉ (AIRBAGS ANTI-CRASH Y VELOCIDAD)
@@ -445,7 +562,7 @@ else:
 if df_usuarios.empty:
     datos_iniciales = {
         "Usuario": ["Narratia", "Vfarfan", "Gdonoso", "Mcortes", "Jtrujillo", "Eriquelme"],
-        "Password": ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123", "Eriquelme123"],
+        "Password": [hash_password(p) for p in ["20911237", "vpfm2404", "gdonoso123", "Mcortes123", "Jtrujillo123", "Eriquelme123"]],
         "Nombre_Real": ["Nicolás Arratia", "Valentina Farfán", "Gabriel Donoso", "Miryam Cortés", "José Trujillo", "Eduardo Riquelme"],
         "Correo": ["pendiente", "pendiente", "pendiente", "pendiente", "pendiente", "pendiente"],
         "Debe_Cambiar_Clave": ['True', 'True', 'True', 'True', 'True', 'True'], 
@@ -457,14 +574,18 @@ else:
     cambios = False
     
     if "Eriquelme" not in df_usuarios['Usuario'].values:
-        nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": "Eriquelme123", "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
+        nuevo_u = pd.DataFrame([{"Usuario": "Eriquelme", "Password": hash_password("Eriquelme123"), "Nombre_Real": "Eduardo Riquelme", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
         df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
         cambios = True
 
     if "Jtrujillo" not in df_usuarios['Usuario'].values:
-        nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": "Jtrujillo123", "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
+        nuevo_u = pd.DataFrame([{"Usuario": "Jtrujillo", "Password": hash_password("Jtrujillo123"), "Nombre_Real": "José Trujillo", "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": "Full"}])
         df_usuarios = pd.concat([df_usuarios, nuevo_u], ignore_index=True)
         cambios = True
+
+    # Migración automática: si alguna contraseña sigue en texto plano (formato antiguo),
+    # se re-hashea al vuelo la próxima vez que ese usuario inicie sesión exitosamente
+    # (ver más abajo en la pantalla de login). No se fuerza aquí para no invalidar sesiones.
 
     idx_narratia = df_usuarios[df_usuarios['Usuario'] == 'Narratia'].index
     if not idx_narratia.empty:
@@ -494,7 +615,8 @@ if 'logged_in' not in st.session_state:
 if 'username' not in st.session_state: 
     st.session_state['username'] = ""
 
-cookie_usuario = cookie_manager.get(cookie="jurisync_user")
+cookie_token = cookie_manager.get(cookie="jurisync_user")
+cookie_usuario = validar_token_sesion(cookie_token) if cookie_token else None
 if cookie_usuario and cookie_usuario in USUARIOS_DICT:
     st.session_state['logged_in'] = True
     st.session_state['username'] = cookie_usuario
@@ -603,14 +725,18 @@ if not st.session_state['logged_in']:
                 
                 if st.form_submit_button("Ingresar al Estudio", use_container_width=True):
                     user_clean = user_input.strip()
-                    if user_clean in USUARIOS_DICT and str(USUARIOS_DICT[user_clean]) == str(pass_input):
+                    if user_clean in USUARIOS_DICT and verificar_password(pass_input, USUARIOS_DICT[user_clean]):
                         idx_user = df_usuarios[df_usuarios['Usuario'] == user_clean].index[0]
+                        # Migración transparente: si la clave todavía estaba en texto plano, se re-hashea ahora.
+                        if not es_hash_bcrypt(df_usuarios.loc[idx_user, 'Password']):
+                            df_usuarios.at[idx_user, 'Password'] = hash_password(pass_input)
+                            guardar_en_nube(df_usuarios)
                         if str(df_usuarios.loc[idx_user, 'Debe_Cambiar_Clave']).lower() == 'true':
                             st.session_state['requiere_registro_inicial'] = True
                             st.session_state['usr_registro'] = user_clean
                             st.rerun()
                         else:
-                            cookie_manager.set("jurisync_user", user_clean, key="cookie_login")
+                            cookie_manager.set("jurisync_user", generar_token_sesion(user_clean), key="cookie_login")
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = user_clean
                             import time
@@ -631,7 +757,7 @@ if not st.session_state['logged_in']:
                         if correo_real == "pendiente" or correo_real == "nan":
                             st.warning("⚠️ Esta cuenta aún no tiene un correo configurado. Pídele al administrador que la recupere manualmente.")
                         elif rec_correo.strip().lower() == correo_real.lower():
-                            df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = "Temp1234"
+                            df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Password'] = hash_password("Temp1234")
                             df_usuarios.loc[df_usuarios['Usuario'] == rec_usuario, 'Debe_Cambiar_Clave'] = 'True'
                             guardar_en_nube(df_usuarios)
                             st.success("✅ Identidad verificada. Tu contraseña temporal es: **Temp1234**. Inicia sesión con ella y te pediremos crear una nueva.")
@@ -661,16 +787,16 @@ if not st.session_state['logged_in']:
                         st.error("Las contraseñas no coinciden.")
                     else:
                         idx_mod = df_usuarios[df_usuarios['Usuario'] == usr_actualizar].index[0]
-                        df_usuarios.at[idx_mod, 'Password'] = nueva_cl
+                        df_usuarios.at[idx_mod, 'Password'] = hash_password(nueva_cl)
                         df_usuarios.at[idx_mod, 'Correo'] = nuevo_correo
                         df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = 'False'
                         
                         guardar_en_nube(df_usuarios)
+                        cookie_manager.set("jurisync_user", generar_token_sesion(usr_actualizar), key="cookie_registro_inicial")
                         
                         st.session_state['logged_in'] = True
                         st.session_state['username'] = usr_actualizar
                         st.session_state['requiere_registro_inicial'] = False
-                        cookie_manager.set("jurisync_user", usr_actualizar, key="cookie_reg")
                         st.rerun()
     st.stop()
 
@@ -904,7 +1030,7 @@ with st.sidebar:
                     cambios = True
                 if upd_clave.strip() != "":
                     if len(upd_clave) >= 6:
-                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = upd_clave
+                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = hash_password(upd_clave)
                         cambios = True
                     else:
                         st.error("La clave debe tener mínimo 6 caracteres")
@@ -1128,7 +1254,7 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
     df_pj = pd.DataFrame()
     
     with col_auto:
-        st.markdown("<div class='dash-card'><h4>Robot de Scrapeo Automático (PJUD)</h4><p style='font-size:13px; color:#6b778c;'>El sistema intentará conectarse directamente a la Oficina Judicial Virtual de forma gratuita.</p></div>", unsafe_allow_html=True)
+        st.markdown("<div class='dash-card'><h4>Robot de Scrapeo Automático (PJUD)</h4><p style='font-size:13px; color:#6b778c;'>Experimental: la Oficina Judicial Virtual exige ClaveÚnica y/o captcha, por lo que este robot puede fallar la mayoría de las veces. Úsalo solo como intento rápido; si falla, usa la carga manual.</p></div>", unsafe_allow_html=True)
         if st.button("🤖 Conectar y Raspar PJUD", use_container_width=True):
             with st.spinner("Navegando y saltando bloqueos de la plataforma..."):
                 df_scrap = scraper_estado_diario_pjud()
@@ -1149,16 +1275,34 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
         if not col_rol_pj:
             st.error("No se detectó una columna que represente el ROL de las causas en el archivo cargado.")
         else:
+            # Normalización robusta: compara solo los números de rol y año, sin importar
+            # si viene como 'C-1234-2026', '1234/2026', 'C 1234 2026', etc.
             df_pj['ROL_LIMPIO'] = df_pj[col_rol_pj].astype(str).str.strip().str.upper()
             df_causas['ROL_LIMPIO'] = df_causas['ROL'].astype(str).str.strip().str.upper()
-            coincidencias = pd.merge(df_pj, df_causas[['ROL_LIMPIO', 'Cliente', 'TRIBUNAL', 'Tipo_Negocio']], on='ROL_LIMPIO', how='inner')
-            
-            if coincidencias.empty:
+            df_pj['ROL_NORMALIZADO'] = df_pj[col_rol_pj].apply(normalizar_rol)
+            df_causas['ROL_NORMALIZADO'] = df_causas['ROL'].apply(normalizar_rol)
+
+            coincidencias = pd.merge(
+                df_pj, df_causas[['ROL_NORMALIZADO', 'Cliente', 'TRIBUNAL', 'Tipo_Negocio']],
+                on='ROL_NORMALIZADO', how='inner'
+            )
+
+            # Causas locales que no matchearon exacto pero que podrían ser la misma
+            # (diferencias de formato, un dígito de más/menos, etc.) para revisión manual.
+            probables = buscar_coincidencias_probables(df_pj, df_causas, col_rol_pj, umbral=0.85)
+
+            if coincidencias.empty and probables.empty:
                 st.success("Búsqueda finalizada: Ninguna de nuestras causas vigentes presenta notificaciones el día de hoy.")
             else:
-                st.warning(f"⚠️ Se detectaron {len(coincidencias)} causas con movimientos en el Estado Diario.")
-                st.dataframe(coincidencias[['ROL_LIMPIO', 'Cliente', 'TRIBUNAL', 'Tipo_Negocio']], use_container_width=True)
-                
+                if not coincidencias.empty:
+                    st.warning(f"⚠️ Se detectaron {len(coincidencias)} causas con movimientos en el Estado Diario (coincidencia exacta de ROL).")
+                    st.dataframe(coincidencias[['ROL_LIMPIO', 'Cliente', 'TRIBUNAL', 'Tipo_Negocio']], use_container_width=True)
+
+                if not probables.empty:
+                    st.info(f"🔎 {len(probables)} causa(s) tienen un ROL parecido pero no idéntico. Revísalas manualmente por si son la misma con un formato distinto:")
+                    st.dataframe(probables, use_container_width=True)
+
+            if not coincidencias.empty:
                 st.markdown("### 📎 Acompañar Resoluciones al Expediente Local")
                 with st.form("form_resoluciones_cruce"):
                     for i, fila in coincidencias.iterrows():
@@ -2345,7 +2489,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                     else:
                         with st.spinner("Guardando en la nube y generando carpetas..."):
                             nuevo_registro = {
-                                "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
+                                "Usuario": nuevo_user.strip(), "Password": hash_password(nueva_clave.strip()), "Nombre_Real": nuevo_nombre.strip(),
                                 "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
                             }
                             df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
@@ -2430,7 +2574,9 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
         st.subheader("Borrón y Cuenta Nueva (Limpieza Estricta)")
         st.error("⚠️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas, tareas, contratos, trámites y documentos de Google Sheets y del servidor local.")
         
-        if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True):
+        confirmacion_borrado = st.text_input("Escribe **BORRAR** en mayúsculas para habilitar el botón de eliminación:", key="confirmacion_borrado_total")
+        
+        if st.button("🚨 BORRAR TODA LA BASE DE DATOS DEL SISTEMA 🚨", type="primary", use_container_width=True, disabled=(confirmacion_borrado.strip() != "BORRAR")):
             with st.spinner("Formateando absolutamente TODAS las tablas en la nube y discos locales..."):
                 try:
                     safe_update_sheet("base_clientes", pd.DataFrame(columns=COLS_CLIENTES))
