@@ -1105,6 +1105,15 @@ st.markdown("""
     .dash-header { border-bottom: 2px solid #0052cc; padding-bottom: 5px; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #0052cc; letter-spacing: 0.5px; text-transform: uppercase; }
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .info-field { display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid #f4f5f7; }
+    .info-field:last-of-type { border-bottom: none; }
+    .info-label { font-size:12px; color:#6b778c !important; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; }
+    .info-value { font-size:14px; color:#172b4d !important; font-weight:600; text-align:right; }
+    .badge-honorarios { background:#fff0b3 !important; color:#7a5b00 !important; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:600; }
+    .task-status-chip { padding:4px 12px; border-radius:12px; font-size:12px; font-weight:700; display:inline-block; }
+    .task-status-progreso { background:#fff0b3 !important; color:#7a5b00 !important; }
+    .task-status-aprobada { background:#e3fcef !important; color:#1b7a4a !important; }
+    .task-status-rechazada { background:#ffebe6 !important; color:#bf2600 !important; }
     .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; }
     .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0052cc !important; box-shadow: 0 0 0 1px #0052cc !important; }
     ::placeholder { color: #6b778c !important; opacity: 1; }
@@ -2027,19 +2036,29 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 clase_div = "badge-active" if c_data.get('Tipo_Negocio') == "Externo" else "badge-propio"
                 st.markdown(f"""
                 <div class="dash-card">
-                    <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
-                        <strong>Estatus General Causa</strong>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+                        <span style="font-weight:700; font-size:15px; color:#172b4d;">Información de la Causa</span>
                         <span class="{clase_div}">{c_data.get('Tipo_Negocio','')}</span>
                     </div>
-                    Rol: {rol_actual}<br>Tribunal: {c_data.get('TRIBUNAL')}<br>Materia: {c_data.get('Servicio')}<br>
+                    <div class="info-field"><span class="info-label">Rol</span><span class="info-value">{rol_actual}</span></div>
+                    <div class="info-field"><span class="info-label">Tribunal</span><span class="info-value">{c_data.get('TRIBUNAL') or '--'}</span></div>
+                    <div class="info-field"><span class="info-label">Materia / Servicio</span><span class="info-value">{c_data.get('Servicio') or '--'}</span></div>
                 </div>
                 <div class="dash-card">
-                    <strong>Ficha Económica y Contacto</strong><br>
-                    Nombre: {c_data.get('Cliente')}<br>
-                    RUT: {rut_asociado}<br>
-                    📞 {tel_real} | ✉️ {correo_real}<br>
-                    📍 {dir_real}<hr>
-                    Estado: {c_data.get('Estado_Honorarios')}<br>Pactado: ${c_data.get('Total_Honorarios',0):,.0f}
+                    <div style="margin-bottom:14px;">
+                        <span style="font-weight:700; font-size:15px; color:#172b4d;">Ficha Económica y Contacto</span>
+                    </div>
+                    <div class="info-field"><span class="info-label">Cliente</span><span class="info-value">{c_data.get('Cliente') or '--'}</span></div>
+                    <div class="info-field"><span class="info-label">RUT</span><span class="info-value">{rut_asociado or '--'}</span></div>
+                    <div class="info-field"><span class="info-label">Teléfono</span><span class="info-value">📞 {tel_real}</span></div>
+                    <div class="info-field"><span class="info-label">Correo</span><span class="info-value">✉️ {correo_real}</span></div>
+                    <div class="info-field"><span class="info-label">Dirección</span><span class="info-value">📍 {dir_real}</span></div>
+                    <hr style="border:none; border-top:1px solid #e0e4e8; margin:14px 0;">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span class="info-label">Honorarios</span>
+                        <span class="badge-honorarios">{c_data.get('Estado_Honorarios') or 'Sin fijar'}</span>
+                    </div>
+                    <div class="info-field" style="margin-top:8px;"><span class="info-label">Pactado</span><span class="info-value" style="font-weight:700;">${c_data.get('Total_Honorarios',0):,.0f}</span></div>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -2122,63 +2141,70 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
                                 modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'])
                             else:
-                                c_top_l, c_top_r = st.columns([2.5, 2.3])
+                                autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
+                                nro_tarea_corto = str(tarea['ID_Tarea']).upper()
+
+                                # --- Encabezado tipo ficha: título + metadatos + acciones alineadas a la derecha ---
+                                c_top_l, c_top_r = st.columns([2.3, 2.5])
                                 with c_top_l:
-                                    autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
-                                    st.markdown(f"""
-                                    <div style='display: flex; align-items: center; margin-bottom: 5px;'>
-                                        <img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror="this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';">
-                                        <span style='font-weight: 700; font-size: 15px; color: #172b4d;'>{autor_real}</span>
-                                        <span style='font-size:12px; color:{b_prio_color}; font-weight:bold; margin-left:8px;'>[{tarea.get('Prioridad', 'Media')}]</span>
-                                    </div>
-                                    """, unsafe_allow_html=True)
-                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado: {tarea['Fecha_Creacion']} • Vence: {tarea['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
+                                    st.markdown(f"<div style='font-weight:700; font-size:17px; color:#172b4d;'>{tarea['Titulo']}</div>", unsafe_allow_html=True)
+                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado por: {autor_real} • N° tarea {nro_tarea_corto} • [{tarea.get('Prioridad', 'Media')}]</span>", unsafe_allow_html=True)
+                                    st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Fecha creación: {tarea['Fecha_Creacion']} • Fecha vencimiento: {tarea['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
                                 
                                 with c_top_r:
                                     if tarea['Estado'] == 'En progreso':
-                                        bcols = st.columns([1, 1, 1, 1] if usuario_actual == "Narratia" else [1, 1, 1])
-                                        if bcols[0].button("❌", key=f"rech_{tarea['ID_Tarea']}"): 
+                                        bcols = st.columns([1.3, 1.3, 0.9, 0.9] if usuario_actual == "Narratia" else [1.3, 1.3, 0.9])
+                                        if bcols[0].button("❌ Rechazar", key=f"rech_{tarea['ID_Tarea']}", use_container_width=True): 
                                             df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                        if bcols[1].button("✅", key=f"apr_{tarea['ID_Tarea']}"): 
+                                        if bcols[1].button("✅ Aprobar", key=f"apr_{tarea['ID_Tarea']}", use_container_width=True): 
                                             df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
-                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}"):
+                                        if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}", help="Editar tarea", use_container_width=True):
                                             st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
-                                        if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}"):
+                                        if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
                                             df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        st.markdown("<div class='task-status-chip task-status-progreso' style='margin-top:8px; text-align:right; float:right;'>En progreso</div>", unsafe_allow_html=True)
                                     else:
-                                        bg_e = "#57a15a" if tarea['Estado'] == 'Aprobada' else "#ff5630"
-                                        st.markdown(f"<div style='background:{bg_e}; color:white; padding:4px 10px; border-radius:12px; font-size:12px; font-weight:600; text-align:center;'>{tarea['Estado']}</div>", unsafe_allow_html=True)
-                                        if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}"):
-                                            df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                        clase_estado = "task-status-aprobada" if tarea['Estado'] == 'Aprobada' else "task-status-rechazada"
+                                        c_chip, c_del = st.columns([3, 1])
+                                        with c_chip:
+                                            st.markdown(f"<div style='text-align:right;'><span class='task-status-chip {clase_estado}'>{tarea['Estado']}</span></div>", unsafe_allow_html=True)
+                                        with c_del:
+                                            if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
+                                                df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
 
-                                st.markdown(f"<h3 style='font-size: 18px; color: #172b4d; margin-top: 15px; margin-bottom: 5px;'>{tarea['Titulo']}</h3><p style='font-size: 15px; color: #172b4d; margin-bottom: 15px;'>{tarea['Descripcion']}</p>", unsafe_allow_html=True)
+                                st.markdown(f"<p style='font-size: 15px; color: #172b4d; margin-top:12px; margin-bottom: 5px;'>{tarea['Descripcion']}</p>", unsafe_allow_html=True)
                                 
                                 comentarios_js = json.loads(tarea['Comentarios'])
-                                html_coms = "".join([f"<div style='margin-bottom:15px;'><strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong> <span style='color:#6b778c; font-size:13px;'>• {c['fecha']}</span><br><span style='color:#42526e; font-size:14px;'>{c['texto']}</span></div>" for c in comentarios_js]) if comentarios_js else "<span style='color:#6b778c; font-size:14px;'>No hay comentarios.</span>"
                                 
-                                st.markdown(f"""
-                                <div style="background: #f8f9fa; margin: 10px -16px 0 -16px; padding: 12px 20px; border-top: 1px solid #e0e4e8; border-bottom: 1px solid #e0e4e8;">
-                                    <span style="color:#172b4d; font-size:14px;">Comentarios <span style="background:#e1e4e8; padding:2px 8px; border-radius:12px; font-weight:bold; margin-left:5px; font-size:12px;">{len(comentarios_js)}</span></span>
-                                </div>
-                                <div style="padding: 15px 4px 5px 4px;">{html_coms}</div>
-                                """, unsafe_allow_html=True)
-                                
-                                adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}", label_visibility="collapsed")
-                                with st.form(key=f"fc_{tarea['ID_Tarea']}", clear_on_submit=True):
-                                    c_txt, c_btn = st.columns([8, 1])
-                                    texto_com = c_txt.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Escribir comentario...")
-                                    if c_btn.form_submit_button("Enviar"):
-                                        if texto_com.strip() or adj_coment:
-                                            t_final = texto_com.strip() + (f" <br><em>[📎 Archivo adjunto: {adj_coment.name}]</em>" if adj_coment else "")
-                                            comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
-                                            df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
-                                            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                            
-                                            dn = safe_read_sheet("base_tareas", [])
-                                            if not dn.empty:
-                                                dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
-                                                safe_update_sheet("base_tareas", dn)
-                                            st.rerun()
+                                with st.expander(f"💬 Comentarios ({len(comentarios_js)})", expanded=False):
+                                    if not comentarios_js:
+                                        st.caption("No hay comentarios todavía.")
+                                    for c in comentarios_js:
+                                        st.markdown(f"""
+                                        <div style='padding:8px 0; border-bottom:1px solid #f4f5f7;'>
+                                            <strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong>
+                                            <span style='color:#6b778c; font-size:12px;'> • {c['fecha']}</span><br>
+                                            <span style='color:#42526e; font-size:14px;'>{c['texto']}</span>
+                                        </div>
+                                        """, unsafe_allow_html=True)
+                                    
+                                    st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
+                                    adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}", label_visibility="collapsed")
+                                    with st.form(key=f"fc_{tarea['ID_Tarea']}", clear_on_submit=True):
+                                        c_txt, c_btn = st.columns([8, 1])
+                                        texto_com = c_txt.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Escribir comentario...")
+                                        if c_btn.form_submit_button("Enviar"):
+                                            if texto_com.strip() or adj_coment:
+                                                t_final = texto_com.strip() + (f" <br><em>[📎 Archivo adjunto: {adj_coment.name}]</em>" if adj_coment else "")
+                                                comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
+                                                df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
+                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                                                
+                                                dn = safe_read_sheet("base_tareas", [])
+                                                if not dn.empty:
+                                                    dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
+                                                    safe_update_sheet("base_tareas", dn)
+                                                st.rerun()
 
             with tab_docs_solicitados:
                 st.subheader("📋 Gestión de Requisitos del Cliente")
