@@ -13,6 +13,7 @@ import requests
 import glob
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from streamlit_calendar import calendar
@@ -156,17 +157,95 @@ def leer_csv_local(path, default_cols=None):
     st.session_state[cache_key] = (mtime, df)
     return df.copy()
 
-def validar_tamano_para_sheets(archivo_bytes: bytes, nombre_archivo: str, limite_kb: int = 35):
+# =====================================================================
+# ☁️ ALMACENAMIENTO DE ARCHIVOS EN GOOGLE DRIVE (CON RESPALDO A BASE64)
+# =====================================================================
+# Por qué: Google Sheets limita cada celda a ~50.000 caracteres. Guardar PDFs
+# o fotos en base64 dentro de una celda se rompe apenas el archivo pesa un
+# poco. Ahora los adjuntos se suben a una carpeta de Google Drive y en la
+# hoja solo se guarda el ID del archivo (unas pocas decenas de caracteres).
+#
+# CONFIGURACIÓN NECESARIA (una sola vez, de tu parte):
+# 1. En Google Cloud Console, habilita la "Google Drive API" para el mismo
+#    proyecto de tu cuenta de servicio (credenciales_calendar.json).
+# 2. Crea una carpeta en Google Drive para JuriSync y compártela con el
+#    correo de la cuenta de servicio (termina en "...gserviceaccount.com"),
+#    dándole permiso de Editor.
+# 3. Copia el ID de esa carpeta (está en la URL de Drive) y agrégalo en
+#    Streamlit Cloud -> Settings -> Secrets como:
+#       DRIVE_FOLDER_ID = "el_id_de_tu_carpeta"
+#
+# Si no configuras esto todavía, el sistema NO se rompe: cae automáticamente
+# de vuelta al guardado en base64 (comportamiento anterior), respetando el
+# límite de tamaño de Sheets.
+
+def _servicio_drive():
+    SCOPES_DRIVE = ['https://www.googleapis.com/auth/drive']
+    creds = Credentials.from_service_account_file('credenciales_calendar.json', scopes=SCOPES_DRIVE)
+    return build('drive', 'v3', credentials=creds)
+
+def subir_archivo_drive(nombre_archivo: str, contenido_bytes: bytes, mime_type: str = 'application/octet-stream'):
+    """Sube un archivo a la carpeta de Drive configurada. Devuelve el file_id o None si falla."""
+    try:
+        servicio = _servicio_drive()
+        carpeta_id = st.secrets.get("DRIVE_FOLDER_ID", "")
+        metadata = {'name': nombre_archivo}
+        if carpeta_id:
+            metadata['parents'] = [carpeta_id]
+        media = MediaIoBaseUpload(io.BytesIO(contenido_bytes), mimetype=mime_type, resumable=False)
+        archivo = servicio.files().create(body=metadata, media_body=media, fields='id').execute()
+        return archivo.get('id')
+    except Exception as e:
+        print(f"Error subiendo a Drive: {e}")
+        return None
+
+def descargar_archivo_drive(file_id: str):
+    """Descarga un archivo de Drive por su file_id. Devuelve los bytes o None si falla."""
+    try:
+        servicio = _servicio_drive()
+        request = servicio.files().get_media(fileId=file_id)
+        buffer = io.BytesIO()
+        downloader = MediaIoBaseDownload(buffer, request)
+        listo = False
+        while not listo:
+            _, listo = downloader.next_chunk()
+        return buffer.getvalue()
+    except Exception as e:
+        print(f"Error descargando de Drive: {e}")
+        return None
+
+def guardar_archivo_adjunto(nombre_archivo: str, contenido_bytes: bytes, mime_type: str = 'application/octet-stream'):
     """
-    Google Sheets limita cada celda a ~50.000 caracteres. Un archivo se
-    guarda como base64 (crece ~33%), así que un límite de ~35 KB en bytes
-    originales da margen de sobra. Si se supera, avisamos ANTES de guardar
-    en vez de dejar que la celda se trunque en silencio.
+    Punto único de guardado de adjuntos. Intenta Google Drive primero
+    (sin límite de tamaño de celda); si Drive no está configurado o falla,
+    cae automáticamente al guardado en base64 (con aviso de tamaño).
+    Devuelve (drive_id, base64_str) — uno de los dos queda vacío.
     """
-    tamano_kb = len(archivo_bytes) / 1024
-    if tamano_kb > limite_kb:
-        return False, f"⚠️ '{nombre_archivo}' pesa {tamano_kb:.0f} KB. Google Sheets no admite archivos de más de ~{limite_kb} KB en este módulo (se truncaría o fallaría el guardado). Comprime el PDF o súbelo a Google Drive y pega el enlace."
-    return True, ""
+    drive_id = subir_archivo_drive(nombre_archivo, contenido_bytes, mime_type)
+    if drive_id:
+        return drive_id, ""
+    # Respaldo: base64 en la celda, solo si el tamaño lo permite
+    tamano_ok, _ = validar_tamano_para_sheets(contenido_bytes, nombre_archivo)
+    b64 = base64.b64encode(contenido_bytes).decode('utf-8') if tamano_ok else ""
+    return "", b64
+
+def obtener_bytes_adjunto(fila, campo_drive: str, campo_b64: str):
+    """
+    Recupera los bytes de un adjunto sin importar si quedó guardado en Drive
+    (dato nuevo) o en base64 (dato antiguo, de antes de esta migración).
+    """
+    drive_id = fila.get(campo_drive, "")
+    if pd.notna(drive_id) and str(drive_id).strip() not in ("", "nan"):
+        contenido = descargar_archivo_drive(str(drive_id).strip())
+        if contenido is not None:
+            return contenido
+    b64_val = fila.get(campo_b64, "")
+    if pd.notna(b64_val) and str(b64_val).strip() not in ("", "nan"):
+        try:
+            return base64.b64decode(b64_val)
+        except Exception:
+            return None
+    return None
 
 # =====================================================================
 # 🛡️ MOTOR DE RESILIENCIA Y CACHÉ (AIRBAGS ANTI-CRASH Y VELOCIDAD)
@@ -177,8 +256,8 @@ COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_C
 COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']
 COLS_CAUSAS = ['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']
 COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']
-COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']
-COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']
+COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
 def fetch_sheet_cached(worksheet_name):
     """Descarga de la nube y guarda en memoria RAM por 15 min para máxima velocidad.
@@ -688,7 +767,12 @@ if "cliente_id" in query_params:
     
     ARCHIVO_DOCS = "base_documentos_clientes.csv"
     if not os.path.exists(ARCHIVO_DOCS):
-        pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
+        pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
+    else:
+        df_docs_migra = leer_csv_local(ARCHIVO_DOCS)
+        if 'Archivo_Drive_ID' not in df_docs_migra.columns:
+            df_docs_migra['Archivo_Drive_ID'] = ''
+            df_docs_migra.to_csv(ARCHIVO_DOCS, index=False)
         
     df_docs = leer_csv_local(ARCHIVO_DOCS)
     mis_docs = df_docs[df_docs['Cliente_Token'] == token_cliente]
@@ -718,19 +802,19 @@ if "cliente_id" in query_params:
                         if archivo:
                             archivo_bytes = archivo.getvalue()
                             tamano_ok, msg_tamano = validar_tamano_para_sheets(archivo_bytes, archivo.name)
-                            if not tamano_ok:
-                                st.error(msg_tamano)
+                            with st.spinner("Guardando en la nube de JuriSync..."):
+                                drive_id, b64_file = guardar_archivo_adjunto(archivo.name, archivo_bytes, archivo.type or 'application/octet-stream')
+                            if not drive_id and not b64_file:
+                                st.error(msg_tamano if not tamano_ok else "⚠️ No fue posible guardar el archivo. Intenta nuevamente.")
                             else:
-                                with st.spinner("Guardando en la nube de JuriSync..."):
-                                    b64_file = base64.b64encode(archivo_bytes).decode('utf-8')
-                                    df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Archivo_B64', 'Fecha_Subida']] = ['✅ Completado', b64_file, datetime.now().strftime("%d/%m/%Y")]
-                                    df_docs.to_csv(ARCHIVO_DOCS, index=False)
-                                    # BUGFIX: antes esto solo se guardaba en el disco local (efímero en la nube),
-                                    # nunca se sincronizaba a Google Sheets, por lo que el documento del
-                                    # cliente podía perderse si la app se reiniciaba antes de ser revisado.
-                                    safe_update_sheet("base_documentos_clientes", df_docs)
-                                    st.success("¡Documento guardado!")
-                                    st.rerun()
+                                df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']] = ['✅ Completado', b64_file, drive_id, datetime.now().strftime("%d/%m/%Y")]
+                                df_docs.to_csv(ARCHIVO_DOCS, index=False)
+                                # BUGFIX: antes esto solo se guardaba en el disco local (efímero en la nube),
+                                # nunca se sincronizaba a Google Sheets, por lo que el documento del
+                                # cliente podía perderse si la app se reiniciaba antes de ser revisado.
+                                safe_update_sheet("base_documentos_clientes", df_docs)
+                                st.success("¡Documento guardado!")
+                                st.rerun()
         
         st.progress(completados / total if total > 0 else 0)
         
@@ -896,16 +980,31 @@ else:
         df_c_check.to_csv(ARCHIVO_BD, index=False)
 
 if not os.path.exists(ARCHIVO_CONTRATOS):
-    df_vacio_co = pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario'])
+    df_vacio_co = pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario'])
     df_vacio_co.to_csv(ARCHIVO_CONTRATOS, index=False)
+else:
+    df_co_check = leer_csv_local(ARCHIVO_CONTRATOS)
+    if 'Archivo_Drive_ID' not in df_co_check.columns:
+        df_co_check['Archivo_Drive_ID'] = ''
+        df_co_check.to_csv(ARCHIVO_CONTRATOS, index=False)
 
 if not os.path.exists(ARCHIVO_TRAMITES):
-    df_vacio_tr = pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario'])
+    df_vacio_tr = pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario'])
     df_vacio_tr.to_csv(ARCHIVO_TRAMITES, index=False)
+else:
+    df_tr_check = leer_csv_local(ARCHIVO_TRAMITES)
+    if 'Comprobante_Drive_ID' not in df_tr_check.columns:
+        df_tr_check['Comprobante_Drive_ID'] = ''
+        df_tr_check.to_csv(ARCHIVO_TRAMITES, index=False)
 
 if not os.path.exists(ARCHIVO_ESTADO_DIARIO):
-    df_vacio_ed = pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64'])
+    df_vacio_ed = pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64', 'Doc_Drive_ID'])
     df_vacio_ed.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
+else:
+    df_ed_check = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
+    if 'Doc_Drive_ID' not in df_ed_check.columns:
+        df_ed_check['Doc_Drive_ID'] = ''
+        df_ed_check.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
 
 if not os.path.exists(ARCHIVO_MENSAJES):
     pd.DataFrame(columns=['ID', 'Fecha', 'De', 'Para', 'Mensaje']).to_csv(ARCHIVO_MENSAJES, index=False)
@@ -928,11 +1027,17 @@ def limpiar_documentos_estado_diario():
     if os.path.exists(ARCHIVO_ESTADO_DIARIO):
         df_ed = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
         if not df_ed.empty:
+            if 'Doc_Drive_ID' not in df_ed.columns:
+                df_ed['Doc_Drive_ID'] = ''
             df_ed['Fecha_DT'] = pd.to_datetime(df_ed['Fecha_Estado'], format='%d/%m/%Y', errors='coerce')
             limite_fecha = datetime.now() - timedelta(days=15)
             mascara_viejos = df_ed['Fecha_DT'] < limite_fecha
-            df_ed.loc[mascara_viejos, 'Doc_B64'] = ""
-            df_ed.loc[mascara_viejos, 'Doc_Nombre'] = df_ed.loc[mascara_viejos, 'Doc_Nombre'].apply(lambda x: f"(Eliminado por memoria) {x}" if pd.notna(x) and x != "" and not str(x).startswith("(Eliminado") else x)
+            # Solo se purga el base64 local (pesa en el disco efímero). Los archivos que
+            # ya quedaron respaldados en Google Drive (Doc_Drive_ID) se conservan intactos.
+            mascara_sin_drive = df_ed['Doc_Drive_ID'].fillna('').astype(str).str.strip() == ''
+            mascara_a_purgar = mascara_viejos & mascara_sin_drive
+            df_ed.loc[mascara_a_purgar, 'Doc_B64'] = ""
+            df_ed.loc[mascara_a_purgar, 'Doc_Nombre'] = df_ed.loc[mascara_a_purgar, 'Doc_Nombre'].apply(lambda x: f"(Eliminado por memoria) {x}" if pd.notna(x) and x != "" and not str(x).startswith("(Eliminado") else x)
             df_ed.drop(columns=['Fecha_DT']).to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
 
 limpiar_documentos_estado_diario()
@@ -1260,26 +1365,27 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                     st.error("Error: Debe asociar el trámite a un ROL judicial válido.")
                 else:
                     b64_str = ""
+                    drive_id_tr = ""
                     nombre_archivo = ""
                     if comprobante:
-                        tamano_ok, msg_tamano = validar_tamano_para_sheets(comprobante.getvalue(), comprobante.name)
-                        if not tamano_ok:
-                            st.error(msg_tamano)
-                            st.stop()
                         nombre_archivo = comprobante.name
-                        b64_str = base64.b64encode(comprobante.getvalue()).decode('utf-8')
+                        drive_id_tr, b64_str = guardar_archivo_adjunto(comprobante.name, comprobante.getvalue(), comprobante.type or 'application/octet-stream')
+                        if not drive_id_tr and not b64_str:
+                            tamano_ok, msg_tamano = validar_tamano_para_sheets(comprobante.getvalue(), comprobante.name)
+                            st.error(msg_tamano if not tamano_ok else "⚠️ No fue posible guardar el comprobante. Intenta nuevamente.")
+                            st.stop()
                     
                     nuevo_tramite = {
                         'ID_Tramite': str(uuid.uuid4())[:8], 'ROL': rol_sel, 'Fecha_Pago': fecha_pago.strftime("%d/%m/%Y"),
                         'Tipo_Auxiliar': tipo_aux, 'Monto': monto_pagado, 'Comprobante_Nombre': nombre_archivo,
-                        'Comprobante_B64': b64_str, 'Registrado_Por': nombre_real_usuario,
+                        'Comprobante_B64': b64_str, 'Comprobante_Drive_ID': drive_id_tr, 'Registrado_Por': nombre_real_usuario,
                         'Usuario_Propietario': usuario_actual
                     }
                     
                     df_tramites = pd.concat([df_tramites, pd.DataFrame([nuevo_tramite])], ignore_index=True)
                     df_tramites.to_csv(ARCHIVO_TRAMITES, index=False)
                     
-                    df_nube_tr = safe_read_sheet("base_tramites")
+                    df_nube_tr = safe_read_sheet("base_tramites", COLS_TRAMITES)
                     df_nube_tr_upd = pd.concat([df_nube_tr, pd.DataFrame([nuevo_tramite])], ignore_index=True)
                     safe_update_sheet("base_tramites", df_nube_tr_upd)
                         
@@ -1299,8 +1405,9 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                         st.markdown(f"**Causa:** {tram['ROL']} | **Auxiliar:** {tram['Tipo_Auxiliar']}")
                         st.markdown(f"Monto: **${tram['Monto']:,.0f}** | Fecha: {tram['Fecha_Pago']} | Responsable: {tram['Registrado_Por']}")
                     with c_descarga:
-                        if pd.notna(tram['Comprobante_B64']) and tram['Comprobante_B64'] != "":
-                            st.download_button("📥 Descargar Soporte", data=base64.b64decode(tram['Comprobante_B64']), file_name=tram['Comprobante_Nombre'], key=f"dt_{tram['ID_Tramite']}")
+                        bytes_soporte = obtener_bytes_adjunto(tram, 'Comprobante_Drive_ID', 'Comprobante_B64')
+                        if bytes_soporte is not None:
+                            st.download_button("📥 Descargar Soporte", data=bytes_soporte, file_name=tram['Comprobante_Nombre'], key=f"dt_{tram['ID_Tramite']}")
 
 # 4. ESTADO DIARIO Y SCRAPER
 elif st.session_state['menu_radio'] == "📆 Estado diario":
@@ -1372,14 +1479,15 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                         for i, fila in coincidencias.iterrows():
                             archivo_subido = st.session_state.get(f"res_{i}")
                             if archivo_subido:
+                                drive_id_ed, b64_ed = guardar_archivo_adjunto(archivo_subido.name, archivo_subido.getvalue(), archivo_subido.type or 'application/octet-stream')
                                 df_ed_hist = pd.concat([df_ed_hist, pd.DataFrame([{
                                     'ID_ED': str(uuid.uuid4())[:8], 'Fecha_Estado': datetime.now().strftime("%d/%m/%Y"),
                                     'ROL': fila.get('ROL_LIMPIO', "Desconocido"), 'Tribunal': fila.get('TRIBUNAL', 'S/I'),
                                     'Resolucion_Extracto': 'Notificación de Estado Diario', 'Doc_Nombre': archivo_subido.name,
-                                    'Doc_B64': base64.b64encode(archivo_subido.getvalue()).decode('utf-8')
+                                    'Doc_B64': b64_ed, 'Doc_Drive_ID': drive_id_ed
                                 }])], ignore_index=True)
                         df_ed_hist.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
-                        st.success("Resoluciones integradas. Los PDF se autodestruirán en 15 días."); st.rerun()
+                        st.success("Resoluciones integradas y respaldadas en Google Drive."); st.rerun()
 
     st.markdown("### 🗄️ Historial de Resoluciones del Estado Diario")
     df_hist_ed = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
@@ -1393,8 +1501,9 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                     st.markdown(f"**Causa Rol:** {doc_ed['ROL']} | **Fecha Notificación:** {doc_ed['Fecha_Estado']}")
                     st.markdown(f"<span style='color:#6b778c; font-size:14px;'>Archivo indexado: {doc_ed['Doc_Nombre']}</span>", unsafe_allow_html=True)
                 with c2:
-                    if pd.notna(doc_ed['Doc_B64']) and doc_ed['Doc_B64'] != "": 
-                        st.download_button("📥 Descargar PDF", data=base64.b64decode(doc_ed['Doc_B64']), file_name=doc_ed['Doc_Nombre'], key=f"bj_{doc_ed['ID_ED']}")
+                    bytes_ed = obtener_bytes_adjunto(doc_ed, 'Doc_Drive_ID', 'Doc_B64')
+                    if bytes_ed is not None:
+                        st.download_button("📥 Descargar PDF", data=bytes_ed, file_name=doc_ed['Doc_Nombre'], key=f"bj_{doc_ed['ID_ED']}")
 
 # 5. INFORMES (IA PARA CLIENTES)
 elif st.session_state['menu_radio'] == "📊 Informes":
@@ -1591,18 +1700,21 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         st.session_state['contrato_generado'] = bytes_contrato
                         st.session_state['nombre_archivo'] = f"Contrato_{cli_nom.replace(' ', '_')}.docx"
                         
-                        b64_docx = base64.b64encode(bytes_contrato).decode('utf-8')
+                        drive_id_con, b64_docx = guardar_archivo_adjunto(
+                            st.session_state['nombre_archivo'], bytes_contrato,
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        )
                         
                         df_con = leer_csv_local(ARCHIVO_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 
                             'Cliente': cli_nom, 'Servicio': accion_sel, 'Honorarios': hon_num, 'Archivo_B64': b64_docx,
-                            'Usuario_Propietario': usuario_actual
+                            'Archivo_Drive_ID': drive_id_con, 'Usuario_Propietario': usuario_actual
                         }
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
                         df_con.to_csv(ARCHIVO_CONTRATOS, index=False)
                         
-                        dn_co = safe_read_sheet("base_contratos", ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario'])
+                        dn_co = safe_read_sheet("base_contratos", COLS_CONTRATOS)
                         safe_update_sheet("base_contratos", pd.concat([dn_co, pd.DataFrame([nuevo_con])], ignore_index=True))
                         st.rerun()
                         
@@ -1624,8 +1736,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         st.markdown(f"<span style='color:#6b778c; font-size:14px;'>Fecha Emisión: {row.get('Fecha', '--')} | Honorarios Pactados: ${row.get('Honorarios', '0')}</span>", unsafe_allow_html=True)
                     
                     with c2:
-                        if 'Archivo_B64' in row and pd.notna(row['Archivo_B64']) and str(row['Archivo_B64']).strip() != "":
-                            bytes_doc = base64.b64decode(row['Archivo_B64'])
+                        bytes_doc = obtener_bytes_adjunto(row, 'Archivo_Drive_ID', 'Archivo_B64')
+                        if bytes_doc is not None:
                             st.download_button("📥 Descargar", data=bytes_doc, file_name=f"Copia_{str(row.get('Cliente', 'Contrato')).replace(' ', '_')}.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_con_{row.get('ID', str(uuid.uuid4())[:8])}")
                         else:
                             st.write("*(Sin archivo)*")
@@ -2083,7 +2195,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         else:
                             ARCHIVO_DOCS = "base_documentos_clientes.csv"
                             if not os.path.exists(ARCHIVO_DOCS):
-                                pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
+                                pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
                             
                             df_docs_db = leer_csv_local(ARCHIVO_DOCS)
                             nuevo_registro_doc = {
@@ -2121,9 +2233,12 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     else:
                                         st.markdown("<span style='color:#ff5630; font-weight:bold;'>❌ Pendiente</span>", unsafe_allow_html=True)
                                 with cd3:
-                                    if d_row['Estado'] == '✅ Completado' and pd.notna(d_row.get('Archivo_B64')) and str(d_row['Archivo_B64']).strip() != "":
-                                        bytes_descarga = base64.b64decode(d_row['Archivo_B64'])
-                                        st.download_button("📥 Descargar", data=bytes_descarga, file_name=f"{d_row['Documento_Nombre'].replace(' ', '_')}_{token_para_link}.pdf", key=f"dl_abog_{d_row['ID_Req']}")
+                                    if d_row['Estado'] == '✅ Completado':
+                                        bytes_descarga = obtener_bytes_adjunto(d_row, 'Archivo_Drive_ID', 'Archivo_B64')
+                                        if bytes_descarga is not None:
+                                            st.download_button("📥 Descargar", data=bytes_descarga, file_name=f"{d_row['Documento_Nombre'].replace(' ', '_')}_{token_para_link}.pdf", key=f"dl_abog_{d_row['ID_Req']}")
+                                        else:
+                                            st.caption("⚠️ No se pudo recuperar el archivo.")
                                     else:
                                         if st.button("🗑️", key=f"del_req_{d_row['ID_Req']}"):
                                             df_docs_db = df_docs_db.drop(idx_d)
@@ -2641,9 +2756,9 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                     safe_update_sheet("base_causas", pd.DataFrame(columns=COLS_CAUSAS))
                     safe_update_sheet("base_tareas", pd.DataFrame(columns=COLS_TAREAS))
                     safe_update_sheet("base_contratos", pd.DataFrame(columns=COLS_CONTRATOS))
-                    safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
-                    safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
-                    safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
+                    safe_update_sheet("base_tramites", pd.DataFrame(columns=COLS_TRAMITES))
+                    safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64', 'Doc_Drive_ID']))
+                    safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']))
                 except Exception as e:
                     st.error(f"Error limpiando Google Sheets: {e}")
                 
