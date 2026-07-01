@@ -52,12 +52,19 @@ def safe_read_sheet(worksheet_name, default_cols=None):
 
 def safe_update_sheet(worksheet_name, df):
     """Guarda en la nube e informa si Google Sheets rechaza la conexión."""
+    csv_path = f"{worksheet_name}.csv"
+    try:
+        df.to_csv(csv_path, index=False)
+    except Exception: pass
+        
     try:
         conn.update(worksheet=worksheet_name, data=df)
         fetch_sheet_cached.clear() # Limpia la memoria para ver los datos frescos
         return True
     except Exception as e:
+        # ¡ESTO ES CLAVE! Si Google falla, te saldrá un aviso rojo en vez de fallar en silencio.
         st.error(f"⚠️ Google Sheets bloqueó el guardado en la hoja '{worksheet_name}'. Detalle técnico: {e}")
+        fetch_sheet_cached.clear()
         return False
 
 # --- FUNCIÓN DE GOOGLE CALENDAR DINÁMICA ---
@@ -2261,43 +2268,86 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                         st.button("Ir a Causa", key=f"btn_cal_ir_{td.get('ID_Tarea', uuid.uuid4())}", on_click=ir_a_expediente, args=(td['ROL'],))
     except Exception: 
         st.write("Haz clic en un día del calendario para ver sus tareas detalladas.")
-# 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
-elif st.session_state['menu_radio'] == "👑 Panel Admin":
-    st.title("👑 Panel de Control - SaaS JuriSync")
-    st.markdown("Crea cuentas nuevas, asigna planes o modifica el nivel de acceso de tus clientes actuales.")
+# --- 14. PANEL ADMIN (CON RESET MAESTRO DE HOJAS) ---
+elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == "Narratia":
+    st.title("👑 Panel de Control Master - SaaS JuriSync")
     
-    tab_crear, tab_editar, tab_vision, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Modificar Planes", "👁️ Visión Global (God Mode)", "☢️ Zona de Peligro"])
+    # FORZAMOS AL SISTEMA A LEER LA LISTA FRESCA DE USUARIOS
+    df_usuarios_admin = safe_read_sheet("base_usuarios", ["Usuario", "Password", "Nombre_Real", "Correo", "Debe_Cambiar_Clave", "Plan"])
     
-    with tab_crear:
-        with st.container(border=True):
-            st.subheader("Vender Plan / Crear Usuario")
-            col1, col2 = st.columns(2)
-            with col1:
-                nuevo_user = st.text_input("Usuario (Nombre para iniciar sesión)", placeholder="Ej: EstudioPerez")
-                nuevo_nombre = st.text_input("Nombre Real del Abogado / Cliente", placeholder="Ej: Juan Pérez")
-            with col2:
-                nueva_clave = st.text_input("Clave Provisoria", placeholder="Ej: JuriSync123")
-                nuevo_plan = st.selectbox("Plan Asignado al Crear", ["Básico", "Medio", "Full"])
+    t1, t2, t3 = st.tabs(["Cuentas y Planes", "Auditoría", "☢️ Zona de Peligro"])
+    
+    with t1:
+        st.subheader("Gestión de Usuarios")
+        c_crear, c_editar = st.columns(2)
+        
+        with c_crear:
+            with st.form("crear_u"):
+                st.write("**Crear Nuevo Usuario**")
+                u = st.text_input("Usuario")
+                p = st.text_input("Clave")
+                n = st.text_input("Nombre Real")
+                plan_nuevo = st.selectbox("Plan", ["Básico", "Medio", "Full"])
                 
-            if st.button("🚀 Crear Usuario en el Sistema", type="primary", use_container_width=True):
-                if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
-                    st.error("⚠️ Faltan datos obligatorios (Usuario, Nombre o Clave).")
-                else:
-                    df_usuarios_admin = safe_read_sheet("base_usuarios", ["Usuario", "Password", "Nombre_Real", "Correo", "Debe_Cambiar_Clave", "Plan"])
-                    if nuevo_user in df_usuarios_admin['Usuario'].values:
-                        st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema.")
-                    else:
-                        with st.spinner("Creando cuenta en el servidor..."):
-                            nuevo_registro = {
-                                "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
-                                "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
-                            }
-                            df_temp_usr = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                if st.form_submit_button("Crear Usuario", type="primary"):
+                    if u and p and n:
+                        if u in df_usuarios_admin['Usuario'].values:
+                            st.error("Ese usuario ya existe.")
+                        else:
+                            nuevo_usr = pd.DataFrame([{"Usuario": u, "Password": p, "Nombre_Real": n, "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": plan_nuevo}])
+                            df_usuarios_actualizado = pd.concat([df_usuarios_admin, nuevo_usr], ignore_index=True)
                             
-                            exito = safe_update_sheet("base_usuarios", df_temp_usr)
+                            exito = safe_update_sheet("base_usuarios", df_usuarios_actualizado)
                             if exito:
-                                st.success(f"✅ ¡Cuenta en la nube lista! Usuario **{nuevo_user}** ha sido creado exitosamente.")
+                                st.success("✅ ¡Abogado creado exitosamente en la nube!")
                                 import time; time.sleep(1.5); st.rerun()
+                    else:
+                        st.error("Faltan datos obligatorios.")
+                        
+        with c_editar:
+            with st.form("edit_u"):
+                st.write("**Modificar Plan de Usuario**")
+                lista_usrs = df_usuarios_admin['Usuario'].tolist()
+                usr_sel = st.selectbox("Seleccionar Usuario", lista_usrs)
+                
+                # Rescatar plan actual
+                try:
+                    plan_act = df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usr_sel, 'Plan'].values[0]
+                    idx_plan = ["Básico", "Medio", "Full"].index(plan_act)
+                except: idx_plan = 0
+                
+                plan_mod = st.selectbox("Nuevo Plan", ["Básico", "Medio", "Full"], index=idx_plan)
+                
+                if st.form_submit_button("Actualizar Plan", type="primary"):
+                    if usr_sel:
+                        df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usr_sel, 'Plan'] = plan_mod
+                        exito = safe_update_sheet("base_usuarios", df_usuarios_admin)
+                        if exito:
+                            st.success(f"✅ Plan de {usr_sel} actualizado a {plan_mod}.")
+                            import time; time.sleep(1.5); st.rerun()
+
+    with t2: 
+        st.write("Directorio de Cuentas:")
+        st.dataframe(df_usuarios_admin, use_container_width=True)
+        
+    with t3:
+        st.error("☢️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas, tareas, contratos, trámites y documentos de Google Sheets y del servidor local.")
+        if st.button("🚨 FORMATEAR SISTEMA COMPLETO 🚨", type="primary", use_container_width=True):
+            with st.spinner("Formateando tablas..."):
+                safe_update_sheet("base_clientes", pd.DataFrame(columns=['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']))
+                safe_update_sheet("base_causas", pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']))
+                safe_update_sheet("base_tareas", pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']))
+                safe_update_sheet("base_contratos", pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Usuario_Propietario']))
+                safe_update_sheet("base_tramites", pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']))
+                safe_update_sheet("base_estado_diario", pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64']))
+                safe_update_sheet("base_documentos_clientes", pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Fecha_Subida']))
+                
+                for f in glob.glob("base_*.csv"):
+                    if "usuarios" not in f:
+                        try: os.remove(f)
+                        except: pass
+                st.cache_data.clear()
+            st.success("Base de datos limpia."); import time; time.sleep(1); st.rerun()
 
     with tab_editar:
         with st.container(border=True):
