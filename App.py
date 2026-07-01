@@ -1569,7 +1569,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
     st.markdown("Describe los hechos o adjunta el PDF de la demanda/notificación. La IA analizará los antecedentes y te propondrá la mejor salida legal bajo la normativa chilena.")
     
     with st.container(border=True):
-        materia = st.selectbox("Rama del Derecho", ["Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Policía Local"])
+        materia = st.selectbox("Rama del Derecho", ["Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Comercial y Societario", "Tributario", "Administrativo", "Constitucional", "Del Consumidor", "Inmobiliario", "Migratorio y Extranjería", "Ambiental", "Bancario y Ejecutivo Hipotecario", "Policía Local / Tránsito"])
         caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
         
         archivo_legal = st.file_uploader("📎 Adjuntar PDF del caso (Demanda, contrato, resolución)", type=['pdf'])
@@ -1639,13 +1639,86 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.markdown("### Módulo 1: Naturaleza Jurídica del Juicio")
             
             diccionario_servicios = {
-                "Derecho Civil y Patrimonial": ["Juicio Ejecutivo (Cobro de Pagaré / Facturas)", "Tercería de Posesión / Dominio", "Liquidación Voluntaria (Ley de Quiebras)", "Renegociación de Deudas", "Juicio de Arrendamiento", "Juicio Ordinario", "Juicio de Precario", "Posesión Efectiva y Partición", "Estudio de Títulos"],
-                "Derecho de Familia": ["Pensión de Alimentos Mayores", "Pensión de Alimentos Menores", "Aumento / Rebaja / Cese de Alimentos", "Autorización de Salida del País", "Divorcio de Mutuo Acuerdo", "Divorcio Unilateral", "Divorcio Culposo", "Cuidado Personal (Tuición)", "Visitas", "VIF"],
-                "Derecho Laboral": ["Despido Injustificado / Indebido", "Despido Indirecto (Autodespido)", "Tutela Laboral", "Cobro de Prestaciones (Ley Bustos)", "Defensa Corporativa"],
-                "Derecho Penal": ["Querella Criminal", "Defensa Penal (Garantía)", "Defensa Penal (Juicio Oral)", "Salidas Alternativas", "Eliminación de Antecedentes"],
-                "Derecho Constitucional": ["Recurso de Protección", "Recurso de Amparo"],
-                "Derecho del Consumidor": ["Querella Infraccional (JPL)", "Defensa Demanda Colectiva (SERNAC)"],
-                "Derecho Administrativo": ["Reclamo de Ilegalidad Municipal", "Sumario Administrativo", "Nulidad de Derecho Público", "Cobro de Obligaciones Tibutarias"]
+                "Derecho Civil y Patrimonial": [
+                    "Juicio Ejecutivo (Cobro de Pagaré)", "Juicio Ejecutivo (Cobro de Cheque)", "Juicio Ejecutivo (Cobro de Facturas)",
+                    "Gestión Preparatoria de la Vía Ejecutiva", "Tercería de Posesión", "Tercería de Dominio", "Tercería de Prelación", "Tercería de Pago",
+                    "Liquidación Voluntaria (Ley 20.720)", "Liquidación Forzosa", "Renegociación de Deudas (Ley 20.720)",
+                    "Juicio de Arrendamiento (Cobro de Rentas)", "Juicio de Arrendamiento (Término y Restitución)",
+                    "Juicio Ordinario de Mayor Cuantía", "Juicio Ordinario de Menor Cuantía", "Juicio Sumario",
+                    "Juicio de Precario", "Comodato Precario", "Posesión Efectiva Intestada", "Posesión Efectiva Testada",
+                    "Partición de Herencia", "Estudio de Títulos", "Prescripción Adquisitiva de Dominio", "Servidumbres",
+                    "Indemnización de Perjuicios (Contractual)", "Indemnización de Perjuicios (Extracontractual)",
+                    "Nulidad de Contrato", "Resolución de Contrato", "Cumplimiento Forzado de Contrato",
+                    "Interdicción por Demencia / Discapacidad", "Designación de Curador"
+                ],
+                "Derecho de Familia": [
+                    "Pensión de Alimentos Mayores", "Pensión de Alimentos Menores", "Aumento de Pensión de Alimentos",
+                    "Rebaja de Pensión de Alimentos", "Cese de Pensión de Alimentos", "Apremio por No Pago de Alimentos (Arresto)",
+                    "Retención de Devolución de Impuestos (Alimentos)", "Autorización de Salida del País",
+                    "Divorcio de Mutuo Acuerdo", "Divorcio Unilateral (Cese de Convivencia)", "Divorcio Culposo",
+                    "Nulidad de Matrimonio", "Compensación Económica", "Cuidado Personal (Tuición)",
+                    "Relación Directa y Regular (Visitas)", "Violencia Intrafamiliar (VIF)", "Medidas de Protección de Menores",
+                    "Adopción", "Reconocimiento de Paternidad", "Impugnación de Paternidad", "Término de Acuerdo de Unión Civil",
+                    "Interdicción y Curaduría", "Declaración de Bien Familiar"
+                ],
+                "Derecho Laboral": [
+                    "Despido Injustificado / Indebido / Improcedente", "Despido Indirecto (Autodespido)", "Tutela Laboral (Derechos Fundamentales)",
+                    "Cobro de Prestaciones Laborales", "Nulidad del Despido (Ley Bustos)", "Accidente del Trabajo / Enfermedad Profesional",
+                    "Fuero Laboral (Maternal / Sindical)", "Práctica Antisindical o Desleal", "Reclamo por Multa Administrativa (DT)",
+                    "Defensa Corporativa (Empleador)", "Negociación Colectiva", "Acoso Laboral / Sexual"
+                ],
+                "Derecho Penal": [
+                    "Querella Criminal", "Defensa Penal (Etapa de Investigación)", "Defensa Penal (Juicio Oral)",
+                    "Suspensión Condicional del Procedimiento", "Acuerdos Reparatorios", "Procedimiento Abreviado",
+                    "Recurso de Nulidad", "Eliminación de Antecedentes Penales", "Amparo ante el Juez de Garantía",
+                    "Revisión de Medidas Cautelares (Prisión Preventiva)", "Delitos de Violencia Intrafamiliar",
+                    "Responsabilidad Penal de Personas Jurídicas (Ley 20.393)"
+                ],
+                "Derecho Constitucional": [
+                    "Recurso de Protección", "Recurso de Amparo", "Recurso de Amparo Económico",
+                    "Acción de Inaplicabilidad por Inconstitucionalidad", "Reclamación de Nacionalidad"
+                ],
+                "Derecho del Consumidor": [
+                    "Demanda Individual Ley del Consumidor (JPL)", "Querella Infraccional (Juzgado de Policía Local)",
+                    "Defensa ante Demanda Colectiva (SERNAC)", "Mediación Colectiva SERNAC", "Reclamo por Publicidad Engañosa"
+                ],
+                "Derecho Administrativo": [
+                    "Reclamo de Ilegalidad Municipal", "Sumario Administrativo", "Nulidad de Derecho Público",
+                    "Reclamación ante la Contraloría General de la República", "Recurso Jerárquico / Reposición Administrativa",
+                    "Responsabilidad del Estado por Falta de Servicio", "Reclamo de Monto en Expropiación"
+                ],
+                "Derecho Tributario": [
+                    "Reclamo Tributario (Tribunales Tributarios y Aduaneros)", "Recurso de Reposición Administrativa Voluntaria (RAV)",
+                    "Defensa en Fiscalización SII", "Condonación de Intereses y Multas", "Delito Tributario"
+                ],
+                "Derecho Comercial y Societario": [
+                    "Constitución de Sociedades", "Modificación de Sociedades", "Disolución de Sociedades",
+                    "Juicio Arbitral Societario", "Protesto de Letra de Cambio / Pagaré", "Liquidación Forzosa de Empresa Deudora",
+                    "Convenio Judicial Preventivo", "Asesoría en Fusiones y Adquisiciones"
+                ],
+                "Derecho Inmobiliario y Urbanismo": [
+                    "Estudio de Títulos Inmobiliarios", "Reclamo por Permiso de Edificación", "Copropiedad Inmobiliaria (Ley 21.442)",
+                    "Deslinde y Amojonamiento", "Regularización de Loteo Irregular"
+                ],
+                "Propiedad Intelectual e Industrial": [
+                    "Registro de Marca (INAPI)", "Oposición a Registro de Marca", "Nulidad de Marca o Patente",
+                    "Infracción de Derechos de Autor"
+                ],
+                "Derecho Migratorio y Extranjería": [
+                    "Solicitud de Visa / Residencia", "Recurso contra Expulsión", "Recurso contra Rechazo de Visa", "Nacionalización"
+                ],
+                "Derecho de Aguas": [
+                    "Constitución de Derechos de Aprovechamiento", "Oposición ante la Dirección General de Aguas (DGA)", "Juicio de Aguas"
+                ],
+                "Policía Local y Tránsito": [
+                    "Infracción de Tránsito", "Accidente de Tránsito (Cobro de Daños)", "Infracción a Ordenanzas Municipales"
+                ],
+                "Derecho Ambiental": [
+                    "Reclamación ante el Tribunal Ambiental", "Impugnación de Resolución de Calificación Ambiental (RCA)", "Denuncia por Daño Ambiental"
+                ],
+                "Derecho Bancario, Seguros y Ejecutivo Hipotecario": [
+                    "Juicio Ejecutivo Hipotecario", "Reclamo ante la CMF (Bancos/Seguros)", "Repactación de Deuda Bancaria"
+                ]
             }
             
             with st.container(border=True):
