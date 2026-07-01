@@ -2625,20 +2625,26 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
     # y el mismo lenguaje visual (colores, tipografía) del resto de JuriSync.
     css_calendario = """
         .fc { font-family: 'Source Sans Pro', sans-serif; }
+        .fc-view-harness { border-radius: 14px; overflow: hidden; }
         .fc .fc-toolbar-title { font-size: 20px; font-weight: 700; color: #172b4d; text-transform: capitalize; }
-        .fc .fc-button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; box-shadow: none !important; text-transform: capitalize; }
+        .fc .fc-button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 20px !important; font-weight: 600 !important; box-shadow: none !important; text-transform: capitalize; padding: 6px 16px !important; }
         .fc .fc-button:hover { background-color: #deebff !important; border-color: #0052cc !important; color: #0052cc !important; }
         .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #0052cc !important; border-color: #0052cc !important; color: #ffffff !important; }
-        .fc-theme-standard td, .fc-theme-standard th { border-color: #e0e4e8 !important; }
-        .fc-col-header-cell-cushion { color: #6b778c !important; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-decoration: none !important; }
+        .fc-theme-standard td, .fc-theme-standard th { border-color: transparent !important; }
+        .fc-scrollgrid { border: none !important; border-collapse: separate !important; border-spacing: 6px !important; }
+        .fc-col-header-cell-cushion { color: #6b778c !important; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-decoration: none !important; padding: 8px 0 !important; }
+        .fc-daygrid-day { background-color: #fbfbfc !important; border: 1px solid #eaecf0 !important; border-radius: 14px !important; overflow: hidden; transition: all 0.15s ease; }
+        .fc-daygrid-day:hover { border-color: #b3d4ff !important; background-color: #f4f8ff !important; }
         .fc-daygrid-day-number { color: #172b4d !important; font-size: 13px; font-weight: 600; text-decoration: none !important; padding: 8px !important; }
-        .fc-day-today { background-color: #deebff !important; }
+        .fc-day-today { background-color: #eaf2ff !important; border: 1px solid #0052cc !important; }
+        .fc-day-other { background-color: #f7f8fa !important; }
         .fc-day-other .fc-daygrid-day-number { color: #a5adba !important; font-weight: 400; }
-        .fc-daygrid-event { border-radius: 10px !important; font-size: 12px !important; padding: 1px 4px !important; margin-top: 2px !important; }
+        .fc-daygrid-event { border-radius: 10px !important; font-size: 12px !important; padding: 1px 6px !important; margin-top: 2px !important; }
         .fc-daygrid-event-dot { border-width: 4px !important; }
         .fc-event-title { font-weight: 500; }
         .fc-daygrid-more-link { color: #0052cc !important; font-weight: 700; font-size: 12px; }
-        .fc-daygrid-day-frame { padding: 2px; }
+        .fc-daygrid-day-frame { padding: 4px; }
+        .fc-scrollgrid-section-header th { border: none !important; }
     """
     
     opciones_calendario = {
@@ -2653,7 +2659,16 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
         },
         "dayMaxEvents": 3,       # Igual que la referencia: hasta 3 líneas visibles y luego "+N más..."
         "eventDisplay": "list-item",  # Punto de color + texto, en vez de una barra sólida
-        "moreLinkText": "más..."
+        "moreLinkText": "más...",
+        # Se fuerza el texto de botones/etiquetas en español, ya que algunos
+        # no se traducen solo con "locale" cuando se usa un headerToolbar custom.
+        "buttonText": {
+            "today": "Hoy", "month": "Mes", "week": "Semana", "day": "Día", "list": "Lista"
+        },
+        "dayHeaderFormat": {"weekday": "long"},
+        "titleFormat": {"month": "long", "year": "numeric"},
+        "noEventsText": "No hay tareas para mostrar",
+        "allDayText": "Todo el día"
     }
     
     col_cal, col_dia = st.columns([2.4, 1])
