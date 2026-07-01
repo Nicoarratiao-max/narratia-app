@@ -181,8 +181,17 @@ COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
 def fetch_sheet_cached(worksheet_name):
-    """Descarga de la nube y guarda en memoria RAM por 15 min para máxima velocidad."""
-    return conn.read(worksheet=worksheet_name, ttl=900)
+    """Descarga de la nube y guarda en memoria RAM por 15 min para máxima velocidad.
+    IMPORTANTE: ttl=0 en conn.read() es intencional. La librería streamlit-gsheets
+    tiene su PROPIA caché interna independiente de este decorador @st.cache_data.
+    Antes se le pasaba ttl=900 también aquí, lo que creaba dos cachés apiladas:
+    al guardar, fetch_sheet_cached.clear() solo limpiaba la caché exterior (esta),
+    pero la caché interna de conn.read() seguía viva hasta 15 min más, así que
+    los cambios (ej. Plan de un usuario) podían tardar hasta 15 min en reflejarse,
+    o no reflejarse aunque recargaras la página. Con ttl=0 aquí, la única caché
+    real es esta de @st.cache_data, que sí se limpia correctamente al guardar.
+    """
+    return conn.read(worksheet=worksheet_name, ttl=0)
 
 def safe_read_sheet(worksheet_name, default_cols=None):
     """Lee usando caché. Si Google falla o bloquea, intenta evitar caídas."""
