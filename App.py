@@ -2597,6 +2597,7 @@ elif st.session_state['menu_radio'] == "📥 Excel":
 # 13. CALENDARIO
 elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas y Plazos")
+    st.markdown("Revisa visualmente los hitos procesales, plazos fatales y feriados de todo el equipo.")
     
     eventos_calendario = obtener_feriados_chile()
     df_t = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
@@ -2608,17 +2609,38 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 d_obj = datetime.strptime(str(r['Fecha_Vencimiento']).strip(), "%d/%m/%Y")
                 d_str = d_obj.strftime("%Y-%m-%d")
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
-                text_color = "white" if bg_color != "#ffc400" else "#172b4d"
+                text_color = "#172b4d"
                 eventos_calendario.append({
-                    "title": f"📌 {r.get('Titulo', 'Tarea')}", 
+                    "title": f"{r.get('Titulo', 'Tarea')}", 
                     "start": d_str, 
                     "backgroundColor": bg_color, 
-                    "textColor": text_color, 
-                    "borderColor": bg_color
+                    "borderColor": bg_color,
+                    "textColor": text_color
                 })
             except Exception: 
                 pass
-                
+    
+    # Estilos propios para que el calendario se vea como una grilla limpia,
+    # con puntos de color por evento (estilo agenda) en vez de barras sólidas,
+    # y el mismo lenguaje visual (colores, tipografía) del resto de JuriSync.
+    css_calendario = """
+        .fc { font-family: 'Source Sans Pro', sans-serif; }
+        .fc .fc-toolbar-title { font-size: 20px; font-weight: 700; color: #172b4d; text-transform: capitalize; }
+        .fc .fc-button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; box-shadow: none !important; text-transform: capitalize; }
+        .fc .fc-button:hover { background-color: #deebff !important; border-color: #0052cc !important; color: #0052cc !important; }
+        .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #0052cc !important; border-color: #0052cc !important; color: #ffffff !important; }
+        .fc-theme-standard td, .fc-theme-standard th { border-color: #e0e4e8 !important; }
+        .fc-col-header-cell-cushion { color: #6b778c !important; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-decoration: none !important; }
+        .fc-daygrid-day-number { color: #172b4d !important; font-size: 13px; font-weight: 600; text-decoration: none !important; padding: 8px !important; }
+        .fc-day-today { background-color: #deebff !important; }
+        .fc-day-other .fc-daygrid-day-number { color: #a5adba !important; font-weight: 400; }
+        .fc-daygrid-event { border-radius: 10px !important; font-size: 12px !important; padding: 1px 4px !important; margin-top: 2px !important; }
+        .fc-daygrid-event-dot { border-width: 4px !important; }
+        .fc-event-title { font-weight: 500; }
+        .fc-daygrid-more-link { color: #0052cc !important; font-weight: 700; font-size: 12px; }
+        .fc-daygrid-day-frame { padding: 2px; }
+    """
+    
     opciones_calendario = {
         "initialView": "dayGridMonth", 
         "locale": "es", 
@@ -2628,36 +2650,50 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
             "left": "prev,next today", 
             "center": "title", 
             "right": "dayGridMonth,listMonth"
-        }
+        },
+        "dayMaxEvents": 3,       # Igual que la referencia: hasta 3 líneas visibles y luego "+N más..."
+        "eventDisplay": "list-item",  # Punto de color + texto, en vez de una barra sólida
+        "moreLinkText": "más..."
     }
     
-    st.markdown("Revisa visualmente los hitos procesales y fechas críticas de todo el equipo.")
+    col_cal, col_dia = st.columns([2.4, 1])
     
-    # Lo sacamos de las columnas para asegurar que tenga el 100% del ancho de la pantalla externa
-    calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, key="calendario_app_full")
-    
-    st.write("---")
-    st.subheader("Gestión Rápida del Día Seleccionado")
-    
+    with col_cal:
+        calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, custom_css=css_calendario, key="calendario_app_full")
+        
     fecha_mostrar = datetime.now().strftime("%Y-%m-%d")
     if calendario_estado and 'dateClick' in calendario_estado and calendario_estado['dateClick']:
         fecha_mostrar = calendario_estado['dateClick']['date'][:10]
         
-    try:
-        d_fmt = datetime.strptime(fecha_mostrar, "%Y-%m-%d").strftime("%d/%m/%Y")
-        st.markdown(f"**Vencimientos para el: {d_fmt}**")
-        
-        if not df_t.empty:
-            tareas_dia = df_t[df_t['Fecha_Vencimiento'].astype(str).str.strip() == d_fmt]
-            if tareas_dia.empty: 
-                st.info("Sin tareas agendadas para este día.")
+    with col_dia:
+        try:
+            fecha_dt_dia = datetime.strptime(fecha_mostrar, "%Y-%m-%d")
+            d_fmt = fecha_dt_dia.strftime("%d/%m/%Y")
+            dia_semana_es = ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"][fecha_dt_dia.weekday()]
+            
+            st.markdown(f"""
+            <div class="dash-card">
+                <div style="font-weight:700; font-size:17px; color:#172b4d;">Tareas del día</div>
+                <div style="font-size:13px; color:#6b778c; margin-bottom:12px;">{dia_semana_es}, {fecha_dt_dia.day} de {['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'][fecha_dt_dia.month-1]} de {fecha_dt_dia.year}</div>
+            """, unsafe_allow_html=True)
+            
+            tareas_dia = df_t[df_t['Fecha_Vencimiento'].astype(str).str.strip() == d_fmt] if not df_t.empty else pd.DataFrame()
+            if tareas_dia.empty:
+                st.caption("Sin tareas para este día.")
             else:
                 for _, td in tareas_dia.iterrows():
-                    with st.container(border=True):
-                        st.write(f"🔴 **{td.get('Titulo', '--')}** | Causa: {td.get('ROL', '--')}")
-                        st.button("Ir a Causa", key=f"btn_cal_ir_{td.get('ID_Tarea', uuid.uuid4())}", on_click=ir_a_expediente, args=(td['ROL'],))
-    except Exception: 
-        st.write("Haz clic en un día del calendario para ver sus tareas detalladas.")
+                    color_prio = "#ff5630" if td.get('Prioridad') == "Alta" else ("#ffc400" if td.get('Prioridad') == "Media" else "#57a15a")
+                    st.markdown(f"""
+                    <div style="border-left:3px solid {color_prio}; padding:6px 10px; margin-bottom:8px; background:#f8f9fa; border-radius:6px;">
+                        <div style="font-weight:600; font-size:13px; color:#172b4d;">{td.get('Titulo', '--')}</div>
+                        <div style="font-size:12px; color:#6b778c;">Causa: {td.get('ROL', '--')}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    st.button("Ir a Causa", key=f"btn_cal_ir_{td.get('ID_Tarea', uuid.uuid4())}", on_click=ir_a_expediente, args=(td['ROL'],), use_container_width=True)
+            
+            st.markdown("</div>", unsafe_allow_html=True)
+        except Exception: 
+            st.caption("Haz clic en un día del calendario para ver sus tareas detalladas.")
 # 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
 elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == "Narratia":
     st.title("👑 Panel de Control Master - SaaS JuriSync")
