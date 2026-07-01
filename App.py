@@ -51,12 +51,14 @@ def safe_read_sheet(worksheet_name, default_cols=None):
     return pd.DataFrame()
 
 def safe_update_sheet(worksheet_name, df):
-    """Guarda en la nube e instantáneamente formatea la memoria para que el próximo clic lea los datos nuevos."""
+    """Guarda en la nube e informa si Google Sheets rechaza la conexión."""
     try:
         conn.update(worksheet=worksheet_name, data=df)
-        fetch_sheet_cached.clear()
-    except Exception:
-        pass
+        fetch_sheet_cached.clear() # Limpia la memoria para ver los datos frescos
+        return True
+    except Exception as e:
+        st.error(f"⚠️ Google Sheets bloqueó el guardado en la hoja '{worksheet_name}'. Detalle técnico: {e}")
+        return False
 
 # --- FUNCIÓN DE GOOGLE CALENDAR DINÁMICA ---
 def agendar_plazo_calendar(titulo, descripcion, fecha_str, correo_destino):
@@ -1994,8 +1996,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
 
 # 10. CLIENTES DIRECTOS (FICHA COMPLETA Y RELACIONAL)
 elif st.session_state['menu_radio'] == "👥 Clientes":
-    st.title("👥 Directorio de Clientes")
-    
+    st.title("👥 Directorio Maat de Clientes")
     df_clientes = safe_read_sheet("base_clientes", ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
 
     if st.session_state['cliente_seleccionado'] is None:
@@ -2018,19 +2019,23 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                         if not n_cli_nom or not n_cli_rut:
                             st.error("El Nombre y el RUT son obligatorios.")
                         else:
-                            nuevo_cliente = {
-                                'RUT': n_cli_rut.strip().upper(),
-                                'Nombre': n_cli_nom.strip(),
-                                'Telefono': n_cli_tel.strip(),
-                                'Correo': n_cli_cor.strip(),
-                                'Clave_unica': n_cli_cla.strip(),
-                                'Direccion': n_cli_dom.strip()
-                            }
-                            df_clientes = pd.concat([df_clientes, pd.DataFrame([nuevo_cliente])], ignore_index=True)
-                            safe_update_sheet("base_clientes", df_clientes)
-                            st.success("✅ Cliente creado y sincronizado en Google Sheets.")
-                            st.session_state['creando_cliente'] = False
-                            st.rerun()
+                            with st.spinner("Sincronizando con Google Sheets..."):
+                                nuevo_cliente = {
+                                    'RUT': n_cli_rut.strip().upper(),
+                                    'Nombre': n_cli_nom.strip(),
+                                    'Telefono': n_cli_tel.strip(),
+                                    'Correo': n_cli_cor.strip(),
+                                    'Clave_unica': n_cli_cla.strip(),
+                                    'Direccion': n_cli_dom.strip()
+                                }
+                                df_temp = pd.concat([df_clientes, pd.DataFrame([nuevo_cliente])], ignore_index=True)
+                                
+                                # Verificamos si realmente se guardó en la nube
+                                exito = safe_update_sheet("base_clientes", df_temp)
+                                if exito:
+                                    st.success("✅ Cliente creado y sincronizado en la nube para todos los equipos.")
+                                    st.session_state['creando_cliente'] = False
+                                    import time; time.sleep(1.5); st.rerun()
 
         st.markdown("### Listado de Clientes")
         
@@ -2195,67 +2200,67 @@ elif st.session_state['menu_radio'] == "📥 Excel":
 # 13. CALENDARIO
 elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas y Plazos")
-    col_cal, col_side = st.columns([3, 1])
+    
     eventos_calendario = obtener_feriados_chile()
-    df_t = pd.read_csv(ARCHIVO_TAREAS)
+    df_t = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
     
     if not df_t.empty:
         for idx, r in df_t.iterrows():
             try:
-                d_obj = datetime.strptime(str(r['Fecha_Vencimiento']), "%d/%m/%Y")
+                # Validamos que la fecha venga bien armada
+                d_obj = datetime.strptime(str(r['Fecha_Vencimiento']).strip(), "%d/%m/%Y")
                 d_str = d_obj.strftime("%Y-%m-%d")
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
                 text_color = "white" if bg_color != "#ffc400" else "#172b4d"
-                eventos_calendario.append({"title": f"📌 {r['Titulo']}", "start": d_str, "backgroundColor": bg_color, "textColor": text_color, "borderColor": bg_color})
-            except: pass
+                eventos_calendario.append({
+                    "title": f"📌 {r.get('Titulo', 'Tarea')}", 
+                    "start": d_str, 
+                    "backgroundColor": bg_color, 
+                    "textColor": text_color, 
+                    "borderColor": bg_color
+                })
+            except Exception: 
+                pass
                 
     opciones_calendario = {
-        "initialView": "dayGridMonth", "locale": "es", "firstDay": 1, 
-        "height": 700,
-        "contentHeight": "auto",
-        "buttonText": {"today": "Hoy", "month": "Mes", "week": "Semana", "day": "Día", "list": "Agenda"},
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek,listMonth"}
+        "initialView": "dayGridMonth", 
+        "locale": "es", 
+        "firstDay": 1, 
+        "height": "auto",
+        "headerToolbar": {
+            "left": "prev,next today", 
+            "center": "title", 
+            "right": "dayGridMonth,listMonth"
+        }
     }
     
-    css_calendario_moderno = """
-        .fc { width: 100% !important; min-height: 600px; background-color: white; border-radius: 12px; padding: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; border: 1px solid #e0e4e8;}
-        .fc-theme-standard td, .fc-theme-standard th { border-color: #e0e4e8; }
-        .fc-col-header-cell { background-color: #f8f9fa; padding: 12px 0 !important; color: #6b778c; text-transform: capitalize; font-size: 14px; }
-        .fc-button-primary { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; text-transform: capitalize !important; font-weight: 600 !important; box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important; }
-        .fc-button-primary:hover { background-color: #deebff !important; border-color: #0052cc !important; color: #0052cc !important; }
-        .fc-button-active { background-color: #0052cc !important; color: white !important; border-color: #0052cc !important; }
-        .fc-toolbar-title { color: #172b4d !important; font-weight: 800 !important; font-size: 1.8em !important; text-transform: capitalize; }
-        .fc-daygrid-day-number { color: #172b4d !important; font-weight: 700 !important; padding: 8px !important; text-decoration: none !important; }
-        .fc-event { border-radius: 6px !important; border: none !important; font-weight: 600 !important; padding: 4px 6px !important; margin-bottom: 4px !important; box-shadow: 0 1px 2px rgba(0,0,0,0.1); cursor: pointer; }
-        .fc-event-title { font-size: 12px !important; }
-    """
-
-    with col_cal:
-        calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, custom_css=css_calendario_moderno, key="calendario_app")
+    st.markdown("Revisa visualmente los hitos procesales y fechas críticas de todo el equipo.")
+    
+    # Lo sacamos de las columnas para asegurar que tenga el 100% del ancho de la pantalla externa
+    calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, key="calendario_app_full")
+    
+    st.write("---")
+    st.subheader("Gestión Rápida del Día Seleccionado")
+    
+    fecha_mostrar = datetime.now().strftime("%Y-%m-%d")
+    if calendario_estado and 'dateClick' in calendario_estado and calendario_estado['dateClick']:
+        fecha_mostrar = calendario_estado['dateClick']['date'][:10]
         
-    with col_side:
-        with st.container(border=True):
-            st.markdown("<h3 style='margin-top:0;'>Tareas del día</h3>", unsafe_allow_html=True)
-            fecha_mostrar = datetime.now().strftime("%Y-%m-%d")
-            if calendario_estado and 'dateClick' in calendario_estado and calendario_estado['dateClick']:
-                fecha_mostrar = calendario_estado['dateClick']['date'][:10]
-            try:
-                d_fmt = datetime.strptime(fecha_mostrar, "%Y-%m-%d").strftime("%d/%m/%Y")
-                st.markdown(f"<p style='color:#6b778c;'>{d_fmt}</p>", unsafe_allow_html=True)
-                if not df_t.empty:
-                    tareas_dia = df_t[df_t['Fecha_Vencimiento'] == d_fmt]
-                    if tareas_dia.empty: 
-                        st.write("Sin tareas para este día.")
-                    else:
-                        for _, td in tareas_dia.iterrows():
-                            color_dot = "#ffc400" if td['Estado'] == 'En progreso' else ("#57a15a" if td['Estado'] == 'Aprobada' else "#ff5630")
-                            prio_txt_color = "#ff5630" if td.get('Prioridad') == 'Alta' else ("#ffc400" if td.get('Prioridad') == 'Media' else "#57a15a")
-                            st.markdown(f"<div style='margin-bottom:5px; border-left:3px solid {color_dot}; padding-left:10px;'><strong style='color:#172b4d;'>{td['Titulo']}</strong> <span style='font-size:11px; color:{prio_txt_color}; font-weight:bold;'>({td.get('Prioridad', 'Media')})</span><br><span style='font-size:13px; color:#6b778c;'>{td['ROL']}</span></div>", unsafe_allow_html=True)
-                            st.button("Ir al expediente ➔", key=f"cal_ir_{td['ID_Tarea']}", on_click=ir_a_expediente, args=(td['ROL'],))
-                            st.markdown("<hr style='margin:10px 0;'>", unsafe_allow_html=True)
-            except: 
-                st.write("Selecciona un día en el calendario.")
-
+    try:
+        d_fmt = datetime.strptime(fecha_mostrar, "%Y-%m-%d").strftime("%d/%m/%Y")
+        st.markdown(f"**Vencimientos para el: {d_fmt}**")
+        
+        if not df_t.empty:
+            tareas_dia = df_t[df_t['Fecha_Vencimiento'].astype(str).str.strip() == d_fmt]
+            if tareas_dia.empty: 
+                st.info("Sin tareas agendadas para este día.")
+            else:
+                for _, td in tareas_dia.iterrows():
+                    with st.container(border=True):
+                        st.write(f"🔴 **{td.get('Titulo', '--')}** | Causa: {td.get('ROL', '--')}")
+                        st.button("Ir a Causa", key=f"btn_cal_ir_{td.get('ID_Tarea', uuid.uuid4())}", on_click=ir_a_expediente, args=(td['ROL'],))
+    except Exception: 
+        st.write("Haz clic en un día del calendario para ver sus tareas detalladas.")
 # 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
 elif st.session_state['menu_radio'] == "👑 Panel Admin":
     st.title("👑 Panel de Control - SaaS JuriSync")
@@ -2278,22 +2283,21 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin":
                 if not nuevo_user.strip() or not nueva_clave.strip() or not nuevo_nombre.strip():
                     st.error("⚠️ Faltan datos obligatorios (Usuario, Nombre o Clave).")
                 else:
-                    df_usuarios_admin = pd.read_csv(ARCHIVO_USUARIOS)
+                    df_usuarios_admin = safe_read_sheet("base_usuarios", ["Usuario", "Password", "Nombre_Real", "Correo", "Debe_Cambiar_Clave", "Plan"])
                     if nuevo_user in df_usuarios_admin['Usuario'].values:
                         st.error(f"⚠️ El usuario '{nuevo_user}' ya existe en el sistema.")
                     else:
-                        nuevo_registro = {
-                            "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
-                            "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
-                        }
-                        df_usuarios_admin = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
-                        safe_update_sheet("base_usuarios", df_usuarios_admin)
-                        
-                        archivo_tareas_nuevo = f"base_tareas_{nuevo_user}.csv"
-                        if not os.path.exists(archivo_tareas_nuevo):
-                            pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(archivo_tareas_nuevo, index=False)
-                        st.success(f"✅ Cuenta lista! Usuario **{nuevo_user}** creado.")
-                        st.rerun()
+                        with st.spinner("Creando cuenta en el servidor..."):
+                            nuevo_registro = {
+                                "Usuario": nuevo_user.strip(), "Password": nueva_clave.strip(), "Nombre_Real": nuevo_nombre.strip(),
+                                "Correo": "pendiente", "Debe_Cambiar_Clave": 'True', "Plan": nuevo_plan
+                            }
+                            df_temp_usr = pd.concat([df_usuarios_admin, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                            
+                            exito = safe_update_sheet("base_usuarios", df_temp_usr)
+                            if exito:
+                                st.success(f"✅ ¡Cuenta en la nube lista! Usuario **{nuevo_user}** ha sido creado exitosamente.")
+                                import time; time.sleep(1.5); st.rerun()
 
     with tab_editar:
         with st.container(border=True):
