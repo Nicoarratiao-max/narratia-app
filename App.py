@@ -1144,6 +1144,35 @@ def limpiar_causa():
 # --- CSS CLARO PROFESIONAL (ESTILO JIRA/TRELLO) ---
 st.markdown("""
 <style>
+    /* ========================================================================
+       FIJAR ESQUEMA DE COLOR CLARO SIEMPRE
+       Evita que el cambio automático de apariencia de macOS (claro/oscuro según
+       la hora) o que alguien active "Dark" desde el menú ⋮ > Settings de
+       Streamlit rompa el contraste: el navegador deja de intentar adaptar
+       controles nativos (selects, checkboxes, scrollbars) a modo oscuro, y
+       re-forzamos la paleta clara de JuriSync sobre los contenedores base de
+       Streamlit incluso si su tema interno cambia a oscuro.
+       ======================================================================== */
+    html, body { color-scheme: light !important; }
+    [data-testid="stAppViewContainer"], [data-testid="stSidebar"], [data-testid="stHeader"],
+    [data-testid="stMain"], .stApp, .main {
+        color-scheme: light !important;
+        background-color: #f4f5f7 !important;
+    }
+    @media (prefers-color-scheme: dark) {
+        [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
+        [data-testid="stSidebar"] { background-color: #ffffff !important; }
+        .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6, div { color: #172b4d !important; }
+        .stTextInput input, .stTextArea textarea, .stNumberInput input,
+        [data-baseweb="select"] > div, [data-baseweb="input"] {
+            background-color: #ffffff !important; color: #172b4d !important; border-color: #cbd2d9 !important;
+        }
+        .dash-card, [data-testid="stExpander"], [data-testid="stForm"] {
+            background-color: #ffffff !important; border-color: #e0e4e8 !important;
+        }
+    }
+</style>
+<style>
     [data-testid="stAppViewContainer"], .stApp { background-color: #f4f5f7 !important; }
     [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
     [data-testid="stHeader"] { background-color: transparent !important; }
