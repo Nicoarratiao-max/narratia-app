@@ -156,6 +156,22 @@ def boton_descargar_excel(df, nombre_archivo, key, label="⬇️ Descargar excel
     except Exception:
         st.caption("⚠️ Instala 'openpyxl' en requirements.txt para habilitar la descarga en Excel.")
 
+def fecha_segura(valor, formato="%Y-%m-%d"):
+    """
+    Convierte un valor a datetime sin romper la app si viene vacío, NaN,
+    None o con un formato inesperado (columna faltante, dato antiguo, etc.).
+    Si no se puede interpretar, devuelve la fecha de hoy como respaldo.
+    """
+    if valor is None or (isinstance(valor, float) and pd.isna(valor)):
+        return datetime.now()
+    texto = str(valor).strip()
+    if texto == "" or texto.lower() == "nan" or texto == "--":
+        return datetime.now()
+    try:
+        return datetime.strptime(texto, formato)
+    except (ValueError, TypeError):
+        return datetime.now()
+
 def leer_csv_local(path, default_cols=None):
     """
     Lee un CSV local cacheándolo en st.session_state mientras el archivo no
@@ -1326,7 +1342,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
             
             with st.expander("⚙️ Ajustar Fecha de Inicio de Pagos"):
-                fecha_actual_cli = datetime.strptime(str(datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))), "%Y-%m-%d")
+                fecha_actual_cli = fecha_segura(datos_cli.get('Fecha_Inicio'))
                 nueva_fecha = st.date_input("Fecha de inicio de la primera cuota:", value=fecha_actual_cli)
                 if st.button("Guardar nueva fecha de inicio"):
                     df_c.loc[df_c['Cliente'] == cliente_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
@@ -1343,7 +1359,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             st.write("---")
             st.subheader(f"Detalle de Cuotas: {cliente_sel}")
             
-            fecha_inicio = datetime.strptime(str(datos_cli.get('Fecha_Inicio', datetime.now().strftime("%Y-%m-%d"))), "%Y-%m-%d")
+            fecha_inicio = fecha_segura(datos_cli.get('Fecha_Inicio'))
             cuotas_data = []
             hoy = datetime.now()
             
