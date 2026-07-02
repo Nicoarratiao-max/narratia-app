@@ -1005,7 +1005,7 @@ if not os.path.exists(ARCHIVO_BD):
 else:
     df_c_check = leer_csv_local(ARCHIVO_BD)
     ejecutar_guardado_check = False
-    columnas_requeridas_bd = ['Cliente', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']
+    columnas_requeridas_bd = ['Cliente', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Fecha_Inicio']
     for col in columnas_requeridas_bd:
         if col not in df_c_check.columns:
             if col in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']: 
@@ -1013,8 +1013,15 @@ else:
             elif col == 'Estado_Honorarios': 
                 df_c_check[col] = "Sin fijar"
             else: 
-                df_c_check[col] = pd.Series(dtype='str')
+                df_c_check[col] = ""
             ejecutar_guardado_check = True
+        elif col == 'Fecha_Inicio':
+            # Si ya existía pero quedó tipada como número (todo NaN en archivos
+            # antiguos), la forzamos a texto para que nunca vuelva a fallar
+            # al intentar guardar una fecha en formato string.
+            if df_c_check[col].dtype != object:
+                df_c_check[col] = df_c_check[col].astype(object).fillna("")
+                ejecutar_guardado_check = True
     if ejecutar_guardado_check:
         df_c_check.to_csv(ARCHIVO_BD, index=False)
 
@@ -1345,6 +1352,12 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                 fecha_actual_cli = fecha_segura(datos_cli.get('Fecha_Inicio'))
                 nueva_fecha = st.date_input("Fecha de inicio de la primera cuota:", value=fecha_actual_cli)
                 if st.button("Guardar nueva fecha de inicio"):
+                    # Si la columna no existía o quedó tipada como número (todo NaN),
+                    # pandas moderno rechaza escribir un string ahí (TypeError de dtype).
+                    # La forzamos a texto antes de escribir la fecha.
+                    if 'Fecha_Inicio' not in df_c.columns:
+                        df_c['Fecha_Inicio'] = ""
+                    df_c['Fecha_Inicio'] = df_c['Fecha_Inicio'].astype(object)
                     df_c.loc[df_c['Cliente'] == cliente_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
                     df_c.to_csv(ARCHIVO_BD, index=False)
                     st.rerun()
