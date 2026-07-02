@@ -133,6 +133,29 @@ def buscar_coincidencias_probables(df_pj, df_causas, col_rol_pj, umbral=0.85):
             })
     return pd.DataFrame(probables)
 
+def validar_tamano_para_sheets(archivo_bytes: bytes, nombre_archivo: str, limite_kb: int = 35):
+    """
+    Google Sheets limita cada celda a ~50.000 caracteres. Un archivo se
+    guarda como base64 (crece ~33%), así que un límite de ~35 KB en bytes
+    originales da margen de sobra. Si se supera, avisamos ANTES de guardar
+    en vez de dejar que la celda se trunque en silencio.
+    """
+    tamano_kb = len(archivo_bytes) / 1024
+    if tamano_kb > limite_kb:
+        return False, f"⚠️ '{nombre_archivo}' pesa {tamano_kb:.0f} KB. Google Sheets no admite archivos de más de ~{limite_kb} KB en este módulo (se truncaría o fallaría el guardado). Comprime el PDF o súbelo a Google Drive y pega el enlace."
+    return True, ""
+
+def boton_descargar_excel(df, nombre_archivo, key, label="⬇️ Descargar excel"):
+    """Genera un botón de descarga en Excel para cualquier listado (Causas, Tareas, Clientes)."""
+    try:
+        buffer_excel = io.BytesIO()
+        with pd.ExcelWriter(buffer_excel, engine='openpyxl') as writer:
+            df.to_excel(writer, index=False, sheet_name='Datos')
+        st.download_button(label, data=buffer_excel.getvalue(), file_name=nombre_archivo,
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", key=key)
+    except Exception:
+        st.caption("⚠️ Instala 'openpyxl' en requirements.txt para habilitar la descarga en Excel.")
+
 def leer_csv_local(path, default_cols=None):
     """
     Lee un CSV local cacheándolo en st.session_state mientras el archivo no
@@ -1087,9 +1110,10 @@ def nav_clientes():
     st.session_state.menu_radio = "👥 Clientes"
     resetear_vistas()
 
-def ir_a_expediente(rol_causa): 
+def ir_a_expediente(rol_causa, propietario=None): 
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = rol_causa
+    st.session_state.causa_propietario_vista = propietario
 
 def limpiar_causa():
     st.session_state.causa_seleccionada = None
@@ -2051,6 +2075,18 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
 
 # 7. CAUSAS / EXPEDIENTES (MEJORADO Y RELACIONAL)
 elif st.session_state['menu_radio'] == "💼 Causas":
+    ES_ADMIN_NARRATIA = usuario_actual == "Narratia"
+    
+    # Si Narratia (administrador del estudio) abre una causa que pertenece a otro
+    # abogado, trabajamos sobre los archivos REALES de ese abogado (no los del
+    # admin), para que ver/editar tareas, honorarios y comentarios impacte el
+    # expediente verdadero. Para el resto de los usuarios esto nunca cambia:
+    # siempre ven y editan solo sus propios archivos.
+    _propietario_vista = st.session_state.get('causa_propietario_vista')
+    if ES_ADMIN_NARRATIA and _propietario_vista and _propietario_vista != usuario_actual:
+        ARCHIVO_BD = f"base_causas_{_propietario_vista}.csv"
+        ARCHIVO_TAREAS = f"base_tareas_{_propietario_vista}.csv"
+    
     df_causas = leer_csv_local(ARCHIVO_BD)
     df_clientes = safe_read_sheet("base_clientes", ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
     
@@ -2084,7 +2120,28 @@ elif st.session_state['menu_radio'] == "💼 Causas":
 
     if st.session_state['causa_seleccionada'] is None:
         st.session_state['modo_edicion'] = False
-        st.title("💼 Gestión e Historial de Causas")
+        st.title("Causas")
+        st.markdown("<span style='color:#6b778c;'>Gestiona todos los casos judiciales</span>", unsafe_allow_html=True)
+        
+        c_stat1, c_stat2 = st.columns(2)
+        with c_stat1:
+            st.markdown(f"""
+            <div class="dash-card">
+                <span style="color:#6b778c; font-size:14px;">Causas registradas</span><br>
+                <span style="font-size:32px; font-weight:700; color:#172b4d;">{len(df_causas)}</span><br>
+                <span style="color:#6b778c; font-size:13px;">💼 En tu cartera</span>
+            </div>
+            """, unsafe_allow_html=True)
+        with c_stat2:
+            n_pendientes_hon = len(df_causas[df_causas.get('Estado_Honorarios', '') == 'Pendientes']) if not df_causas.empty else 0
+            st.markdown(f"""
+            <div class="dash-card">
+                <span style="color:#6b778c; font-size:14px;">Con honorarios pendientes</span><br>
+                <span style="font-size:32px; font-weight:700; color:#172b4d;">{n_pendientes_hon}</span><br>
+                <span style="color:#6b778c; font-size:13px;">💰 Requieren seguimiento</span>
+            </div>
+            """, unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
         
         if st.button("➕ Crear Nueva Causa", type="primary"):
             st.session_state['creando_causa'] = not st.session_state.get('creando_causa', False)
@@ -2131,17 +2188,46 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             import time; time.sleep(1); st.rerun()
 
         st.write("---")
-        col_f1, col_f2 = st.columns(2)
-        filtro_trib = col_f1.multiselect("Filtrar por Tribunal de la República", df_causas['TRIBUNAL'].dropna().unique().tolist(), placeholder="Selecciona el juzgado...")
-        filtro_neg = col_f2.multiselect("Filtrar por Cartera de Negocio", df_causas['Tipo_Negocio'].dropna().unique().tolist(), placeholder="Selecciona origen...")
         
-        df_filtrado = df_causas.copy()
+        df_para_listado = df_causas.copy()
+        df_para_listado['Propietario_Vista'] = usuario_actual
+        
+        if ES_ADMIN_NARRATIA:
+            archivos_causas_equipo = glob.glob("base_causas_*.csv")
+            piezas_equipo = []
+            for arch in archivos_causas_equipo:
+                propietario_arch = arch.replace("base_causas_", "").replace(".csv", "")
+                temp_causa_eq = leer_csv_local(arch)
+                if not temp_causa_eq.empty:
+                    temp_causa_eq = temp_causa_eq.copy()
+                    temp_causa_eq['Propietario_Vista'] = propietario_arch
+                    piezas_equipo.append(temp_causa_eq)
+            if piezas_equipo:
+                df_para_listado = pd.concat(piezas_equipo, ignore_index=True)
+        
+        col_f1, col_f2 = st.columns(2)
+        filtro_trib = col_f1.multiselect("Filtrar por Tribunal de la República", df_para_listado['TRIBUNAL'].dropna().unique().tolist(), placeholder="Selecciona el juzgado...")
+        filtro_neg = col_f2.multiselect("Filtrar por Cartera de Negocio", df_para_listado['Tipo_Negocio'].dropna().unique().tolist(), placeholder="Selecciona origen...")
+        
+        busqueda_causa = st.text_input("🔎 Buscar", placeholder="Rol: C-1234-2025, Causa, Cliente...", label_visibility="collapsed")
+        
+        df_filtrado = df_para_listado.copy()
         if filtro_trib: 
             df_filtrado = df_filtrado[df_filtrado['TRIBUNAL'].isin(filtro_trib)]
         if filtro_neg: 
             df_filtrado = df_filtrado[df_filtrado['Tipo_Negocio'].isin(filtro_neg)]
+        if busqueda_causa.strip():
+            q = busqueda_causa.strip().lower()
+            df_filtrado = df_filtrado[
+                df_filtrado['ROL'].astype(str).str.lower().str.contains(q, na=False) |
+                df_filtrado['CARATULADO'].astype(str).str.lower().str.contains(q, na=False) |
+                df_filtrado['Cliente'].astype(str).str.lower().str.contains(q, na=False)
+            ]
             
-        st.markdown("### Expedientes Activos")
+        c_tit, c_dl = st.columns([4, 1])
+        c_tit.markdown("### Expedientes Activos")
+        with c_dl:
+            boton_descargar_excel(df_filtrado, "causas_jurisync.xlsx", key="dl_excel_causas")
         
         with st.container(height=600):
             if df_filtrado.empty:
@@ -2156,8 +2242,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 st.markdown("<hr style='margin: 5px 0px 10px 0px; border-top: 2px solid #e0e4e8;'>", unsafe_allow_html=True)
                 
                 for idx, row in df_filtrado.iterrows():
+                    fila_es_propia = row.get('Propietario_Vista', usuario_actual) == usuario_actual
                     c1, c2, c3, c4, c5 = st.columns([1.5, 2.5, 3, 2.5, 1.5])
-                    c1.markdown(f"<span style='color:#0052cc; font-weight:bold; font-size:15px;'>{row['ROL']}</span>", unsafe_allow_html=True)
+                    color_rol = "#0052cc" if fila_es_propia else "#ff8b00"
+                    c1.markdown(f"<span style='color:{color_rol}; font-weight:bold; font-size:15px;'>{row['ROL']}</span>", unsafe_allow_html=True)
+                    if not fila_es_propia:
+                        nombre_dueno = NOMBRES_REALES.get(row.get('Propietario_Vista'), row.get('Propietario_Vista'))
+                        c1.markdown(f"<span style='background:#fff0e0; color:#ff8b00; font-size:10px; font-weight:700; padding:2px 6px; border-radius:8px;'>👤 {nombre_dueno}</span>", unsafe_allow_html=True)
                     c2.markdown(f"<span style='color:#172b4d; font-size:14px;'>{row['TRIBUNAL']}</span>", unsafe_allow_html=True)
                     c3.markdown(f"<span style='color:#172b4d; font-weight:600; font-size:14px;'>{row['CARATULADO']}</span>", unsafe_allow_html=True)
                     
@@ -2165,7 +2256,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     val_rut = str(row.get('RUT', '--'))
                     c4.markdown(f"<span style='color:#172b4d; font-size:14px;'>👤 {val_cliente}</span><br><span style='color:#6b778c; font-size:12px;'>RUT: {val_rut}</span>", unsafe_allow_html=True)
                     
-                    c5.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'],))
+                    c5.button("📂 Abrir", key=f"abrir_c_{idx}", use_container_width=True, on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
                     st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
         
     else:
@@ -2185,9 +2276,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         c_head1, c_head2 = st.columns([4, 1])
         with c_head1:
             st.markdown(f"<h2>Expediente Causa: {c_data.get('CARATULADO','')}</h2>", unsafe_allow_html=True)
+            if ES_ADMIN_NARRATIA and _propietario_vista and _propietario_vista != usuario_actual:
+                nombre_dueno_exp = NOMBRES_REALES.get(_propietario_vista, _propietario_vista)
+                st.markdown(f"<span style='background:#fff0e0; color:#ff8b00; font-size:12px; font-weight:700; padding:3px 10px; border-radius:10px;'>👤 Causa de {nombre_dueno_exp} — estás viendo/editando el expediente real de su cartera</span>", unsafe_allow_html=True)
         with c_head2:
             if st.button("⬅ Volver al listado"):
                 st.session_state['causa_seleccionada'] = None
+                st.session_state['causa_propietario_vista'] = None
                 st.rerun()
                 
         col_izq, col_der = st.columns([2.5, 1.2])
@@ -2227,7 +2322,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     
                     if n_estado_hon == "Pendientes":
                         n_tot_hon = st.number_input("Honorario Total Pactado ($)", value=int(c_data.get('Total_Honorarios', 0)))
-                        n_cuo_tot = st.number_input("Mensualidades Totales", value=int(c_data.get('Cuotas_Totales', 0)), min_value=1)
+                        n_cuo_tot = st.number_input("Mensualidades Totales", value=max(1, int(c_data.get('Cuotas_Totales', 0) or 0)), min_value=1)
                         n_cuo_pag = st.number_input("Mensualidades Enteradas", value=int(c_data.get('Cuotas_Pagadas', 0)), min_value=0)
                     elif n_estado_hon == "Pagados":
                         n_tot_hon = st.number_input("Monto Total Enterado ($)", value=int(c_data.get('Total_Honorarios', 0)))
@@ -2575,7 +2670,8 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
 
 # 10. CLIENTES DIRECTOS (FICHA COMPLETA Y RELACIONAL)
 elif st.session_state['menu_radio'] == "👥 Clientes":
-    st.title("👥 Directorio de Clientes")
+    st.title("Clientes")
+    st.markdown("<span style='color:#6b778c;'>Gestione y organice la información de sus clientes de manera eficiente.</span>", unsafe_allow_html=True)
     
     df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
 
@@ -2613,31 +2709,73 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                             st.session_state['creando_cliente'] = False
                             st.rerun()
 
-        st.markdown("### Listado de Clientes")
+        st.write("---")
         
-        # CRUZAMOS DATOS PARA NO PERDER CLIENTES HISTÓRICOS
-        df_causas_local = leer_csv_local(ARCHIVO_BD)
-        clientes_indexados = set()
+        # CRUZAMOS DATOS PARA NO PERDER CLIENTES HISTÓRICOS (y, para el admin, de todo el equipo)
+        ES_ADMIN_CLIENTES = usuario_actual == "Narratia"
+        if ES_ADMIN_CLIENTES:
+            df_causas_local = pd.DataFrame()
+            piezas_causas_cli = []
+            for arch_cli in glob.glob("base_causas_*.csv"):
+                t = leer_csv_local(arch_cli)
+                if not t.empty:
+                    piezas_causas_cli.append(t)
+            if piezas_causas_cli:
+                df_causas_local = pd.concat(piezas_causas_cli, ignore_index=True)
+        else:
+            df_causas_local = leer_csv_local(ARCHIVO_BD)
+        
+        filas_clientes = {}
         if not df_clientes.empty:
             for _, r in df_clientes.iterrows():
-                if pd.notna(r['Nombre']): clientes_indexados.add((r['Nombre'], r['RUT']))
+                if pd.notna(r['Nombre']):
+                    filas_clientes[(r['Nombre'], r['RUT'])] = {'Telefono': r.get('Telefono', '--'), 'Correo': r.get('Correo', '--')}
         if not df_causas_local.empty and 'Cliente' in df_causas_local.columns:
             for _, r in df_causas_local.iterrows():
                 if pd.notna(r['Cliente']) and r['Cliente'] != '--':
-                    clientes_indexados.add((r['Cliente'], r.get('RUT', '--')))
+                    clave = (r['Cliente'], r.get('RUT', '--'))
+                    if clave not in filas_clientes:
+                        filas_clientes[clave] = {'Telefono': r.get('Teléfono', '--'), 'Correo': r.get('Correo', '--')}
         
-        if not clientes_indexados:
+        if not filas_clientes:
             st.info("No hay clientes registrados en la base de datos.")
         else:
-            for nombre_cl, rut_cl in list(clientes_indexados):
-                with st.container(border=True):
-                    c_info, c_btn = st.columns([4, 1])
-                    with c_info:
-                        st.markdown(f"**👤 {nombre_cl}** | RUT: {rut_cl}")
-                    with c_btn:
-                        if st.button("Ver Ficha", key=f"ver_cli_{rut_cl}_{nombre_cl}", use_container_width=True):
-                            st.session_state['cliente_seleccionado'] = rut_cl
-                            st.rerun()
+            df_directorio = pd.DataFrame([
+                {'Cliente': nom, 'RUT': rut, 'Teléfono': datos['Telefono'], 'Correo': datos['Correo']}
+                for (nom, rut), datos in filas_clientes.items()
+            ])
+            
+            c_busq_cli, c_dl_cli = st.columns([4, 1])
+            busqueda_cli = c_busq_cli.text_input("Buscar", placeholder="Busca por nombre o RUT...", label_visibility="collapsed")
+            with c_dl_cli:
+                boton_descargar_excel(df_directorio, "clientes_jurisync.xlsx", key="dl_excel_clientes")
+            
+            if busqueda_cli.strip():
+                q = busqueda_cli.strip().lower()
+                df_directorio = df_directorio[
+                    df_directorio['Cliente'].astype(str).str.lower().str.contains(q, na=False) |
+                    df_directorio['RUT'].astype(str).str.lower().str.contains(q, na=False)
+                ]
+            
+            with st.container(border=True):
+                ch1, ch2, ch3, ch4, ch5 = st.columns([2.5, 1.5, 2.5, 2.5, 1])
+                ch1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CLIENTE</span>", unsafe_allow_html=True)
+                ch2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>TELÉFONO</span>", unsafe_allow_html=True)
+                ch3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CORREO</span>", unsafe_allow_html=True)
+                ch4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>RUT</span>", unsafe_allow_html=True)
+                ch5.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>ACCIONES</span>", unsafe_allow_html=True)
+                st.markdown("<hr style='margin: 5px 0px 10px 0px; border-top: 2px solid #e0e4e8;'>", unsafe_allow_html=True)
+                
+                for _, fila_cli in df_directorio.iterrows():
+                    r1, r2, r3, r4, r5 = st.columns([2.5, 1.5, 2.5, 2.5, 1])
+                    r1.markdown(f"<span style='color:#172b4d; font-weight:600; font-size:14px;'>👤 {fila_cli['Cliente']}</span>", unsafe_allow_html=True)
+                    r2.markdown(f"<span style='color:#172b4d; font-size:14px;'>{fila_cli['Teléfono']}</span>", unsafe_allow_html=True)
+                    r3.markdown(f"<span style='color:#172b4d; font-size:14px;'>{fila_cli['Correo']}</span>", unsafe_allow_html=True)
+                    r4.markdown(f"<span style='color:#6b778c; font-size:13px;'>{fila_cli['RUT']}</span>", unsafe_allow_html=True)
+                    if r5.button("👁️", key=f"ver_cli_{fila_cli['RUT']}_{fila_cli['Cliente']}", use_container_width=True):
+                        st.session_state['cliente_seleccionado'] = fila_cli['RUT']
+                        st.rerun()
+                    st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
     else:
         rut_actual = st.session_state['cliente_seleccionado']
         filtro_cli = df_clientes[df_clientes['RUT'] == rut_actual]
@@ -2787,26 +2925,83 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
 
 # 11. GESTOR GLOBAL DE TAREAS
 elif st.session_state['menu_radio'] == "☑️ Tareas":
-    st.title("☑️ Gestor Global de Tareas")
+    st.title("Tareas")
+    st.markdown("<span style='color:#6b778c;'>Revisa y gestiona todas tus tareas</span>", unsafe_allow_html=True)
+    
     df_t = leer_csv_local(ARCHIVO_TAREAS)
+    df_t['Propietario_Vista'] = usuario_actual
+    
+    ES_ADMIN_TAREAS = usuario_actual == "Narratia"
+    if ES_ADMIN_TAREAS:
+        archivos_tareas_equipo = glob.glob("base_tareas_*.csv")
+        piezas_tareas_eq = []
+        for arch_t in archivos_tareas_equipo:
+            propietario_t = arch_t.replace("base_tareas_", "").replace(".csv", "")
+            temp_t_eq = leer_csv_local(arch_t)
+            if not temp_t_eq.empty:
+                temp_t_eq = temp_t_eq.copy()
+                temp_t_eq['Propietario_Vista'] = propietario_t
+                piezas_tareas_eq.append(temp_t_eq)
+        if piezas_tareas_eq:
+            df_t = pd.concat(piezas_tareas_eq, ignore_index=True)
+    
+    n_rechazadas = len(df_t[df_t['Estado'] == 'Rechazada']) if not df_t.empty else 0
+    n_en_progreso = len(df_t[df_t['Estado'] == 'En progreso']) if not df_t.empty else 0
+    n_completadas = len(df_t[df_t['Estado'] == 'Aprobada']) if not df_t.empty else 0
+    
+    c_st1, c_st2, c_st3 = st.columns(3)
+    with c_st1:
+        st.markdown(f"""<div class="dash-card"><span style="color:#6b778c; font-size:14px;">Tareas rechazadas</span><br>
+        <span style="font-size:32px; font-weight:700; color:#172b4d;">{n_rechazadas}</span><br>
+        <span style="color:#bf2600; font-size:13px;">❌ Requieren atención</span></div>""", unsafe_allow_html=True)
+    with c_st2:
+        st.markdown(f"""<div class="dash-card"><span style="color:#6b778c; font-size:14px;">En progreso</span><br>
+        <span style="font-size:32px; font-weight:700; color:#172b4d;">{n_en_progreso}</span><br>
+        <span style="color:#7a5b00; font-size:13px;">🕐 Tareas activas</span></div>""", unsafe_allow_html=True)
+    with c_st3:
+        st.markdown(f"""<div class="dash-card"><span style="color:#6b778c; font-size:14px;">Completadas</span><br>
+        <span style="font-size:32px; font-weight:700; color:#172b4d;">{n_completadas}</span><br>
+        <span style="color:#1b7a4a; font-size:13px;">✅ Total</span></div>""", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     
     if df_t.empty: 
         st.info("No hay tareas creadas en el sistema.")
     else:
-        for idx, row in df_t.iterrows():
+        c_busq, c_filt, c_dl_t = st.columns([2.5, 1.5, 1])
+        busqueda_tarea = c_busq.text_input("Buscar", placeholder="Tarea, Causa...", label_visibility="collapsed")
+        filtro_estado_t = c_filt.selectbox("Estado", ["Todas", "En progreso", "Aprobada", "Rechazada"], label_visibility="collapsed")
+        
+        df_t_filt = df_t.copy()
+        if busqueda_tarea.strip():
+            q = busqueda_tarea.strip().lower()
+            df_t_filt = df_t_filt[
+                df_t_filt['Titulo'].astype(str).str.lower().str.contains(q, na=False) |
+                df_t_filt['ROL'].astype(str).str.lower().str.contains(q, na=False)
+            ]
+        if filtro_estado_t != "Todas":
+            df_t_filt = df_t_filt[df_t_filt['Estado'] == filtro_estado_t]
+        with c_dl_t:
+            boton_descargar_excel(df_t_filt, "tareas_jurisync.xlsx", key="dl_excel_tareas")
+        
+        for idx, row in df_t_filt.iterrows():
+            fila_tarea_propia = row.get('Propietario_Vista', usuario_actual) == usuario_actual
             with st.container(border=True):
                 prio_color = "#ff5630" if row.get('Prioridad') == "Alta" else ("#ffc400" if row.get('Prioridad') == "Media" else "#57a15a")
                 st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                 c1, c2, c3 = st.columns([4, 2, 1])
                 with c1:
-                    st.markdown(f"<div style='display: flex; align-items: center; margin-bottom: 5px;'><img src='{LOGO_URL}' style='height: 25px; margin-right: 8px;' onerror=\"this.onerror=null; this.src='https://img.icons8.com/color/48/user.png';\"><strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong><span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span></div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='display: flex; align-items: center; margin-bottom: 5px;'><strong style='font-size:16px; color:#172b4d;'>{row['Titulo']}</strong><span style='font-size:12px; color:{prio_color}; font-weight:bold; margin-left:8px;'>[{row.get('Prioridad', 'Media')}]</span></div>", unsafe_allow_html=True)
                     st.markdown(f"<span style='color:#6b778c;'>{str(row['Descripcion'])[:60]}...</span>", unsafe_allow_html=True)
+                    if not fila_tarea_propia:
+                        nombre_dueno_t = NOMBRES_REALES.get(row.get('Propietario_Vista'), row.get('Propietario_Vista'))
+                        st.markdown(f"<span style='background:#fff0e0; color:#ff8b00; font-size:10px; font-weight:700; padding:2px 6px; border-radius:8px;'>👤 {nombre_dueno_t}</span>", unsafe_allow_html=True)
                 with c2:
-                    color_bd = "#ffc400" if row['Estado'] == 'En progreso' else ("#57a15a" if row['Estado'] == 'Aprobada' else "#ff5630")
-                    st.markdown(f"<span style='background:{color_bd}; padding:3px 8px; border-radius:10px; font-size:12px; font-weight:bold; color:black;'>{row['Estado']}</span>", unsafe_allow_html=True)
+                    color_bd = "#fff0b3" if row['Estado'] == 'En progreso' else ("#e3fcef" if row['Estado'] == 'Aprobada' else "#ffebe6")
+                    texto_bd = "#7a5b00" if row['Estado'] == 'En progreso' else ("#1b7a4a" if row['Estado'] == 'Aprobada' else "#bf2600")
+                    st.markdown(f"<span style='background:{color_bd}; color:{texto_bd}; padding:3px 10px; border-radius:12px; font-size:12px; font-weight:700;'>{row['Estado']}</span>", unsafe_allow_html=True)
                     st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']} | Vence: {row['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
                 with c3:
-                    st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}", on_click=ir_a_expediente, args=(row['ROL'],))
+                    st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
 
 # 12. EXCEL IMPORTADOR 
 elif st.session_state['menu_radio'] == "📥 Excel":
