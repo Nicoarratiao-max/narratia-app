@@ -10,3 +10,4 @@ google-generativeai>=0.8.2
 PyPDF2
 st-gsheets-connection
 extra-streamlit-components
+openpyxl
