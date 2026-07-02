@@ -1639,99 +1639,249 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.markdown("### Módulo 1: Naturaleza Jurídica del Juicio")
             
             diccionario_servicios = {
-                "Derecho Civil y Patrimonial": [
-                    "Juicio Ejecutivo (Cobro de Pagaré)", "Juicio Ejecutivo (Cobro de Cheque)", "Juicio Ejecutivo (Cobro de Facturas)",
-                    "Gestión Preparatoria de la Vía Ejecutiva", "Tercería de Posesión", "Tercería de Dominio", "Tercería de Prelación", "Tercería de Pago",
-                    "Liquidación Voluntaria (Ley 20.720)", "Liquidación Forzosa", "Renegociación de Deudas (Ley 20.720)",
-                    "Juicio de Arrendamiento (Cobro de Rentas)", "Juicio de Arrendamiento (Término y Restitución)",
-                    "Juicio Ordinario de Mayor Cuantía", "Juicio Ordinario de Menor Cuantía", "Juicio Sumario",
-                    "Juicio de Precario", "Comodato Precario", "Posesión Efectiva Intestada", "Posesión Efectiva Testada",
-                    "Partición de Herencia", "Estudio de Títulos", "Prescripción Adquisitiva de Dominio", "Servidumbres",
-                    "Indemnización de Perjuicios (Contractual)", "Indemnización de Perjuicios (Extracontractual)",
-                    "Nulidad de Contrato", "Resolución de Contrato", "Cumplimiento Forzado de Contrato",
-                    "Interdicción por Demencia / Discapacidad", "Designación de Curador"
-                ],
-                "Derecho de Familia": [
-                    "Pensión de Alimentos Mayores", "Pensión de Alimentos Menores", "Aumento de Pensión de Alimentos",
-                    "Rebaja de Pensión de Alimentos", "Cese de Pensión de Alimentos", "Apremio por No Pago de Alimentos (Arresto)",
-                    "Retención de Devolución de Impuestos (Alimentos)", "Autorización de Salida del País",
-                    "Divorcio de Mutuo Acuerdo", "Divorcio Unilateral (Cese de Convivencia)", "Divorcio Culposo",
-                    "Nulidad de Matrimonio", "Compensación Económica", "Cuidado Personal (Tuición)",
-                    "Relación Directa y Regular (Visitas)", "Violencia Intrafamiliar (VIF)", "Medidas de Protección de Menores",
-                    "Adopción", "Reconocimiento de Paternidad", "Impugnación de Paternidad", "Término de Acuerdo de Unión Civil",
-                    "Interdicción y Curaduría", "Declaración de Bien Familiar"
-                ],
-                "Derecho Laboral": [
-                    "Despido Injustificado / Indebido / Improcedente", "Despido Indirecto (Autodespido)", "Tutela Laboral (Derechos Fundamentales)",
-                    "Cobro de Prestaciones Laborales", "Nulidad del Despido (Ley Bustos)", "Accidente del Trabajo / Enfermedad Profesional",
-                    "Fuero Laboral (Maternal / Sindical)", "Práctica Antisindical o Desleal", "Reclamo por Multa Administrativa (DT)",
-                    "Defensa Corporativa (Empleador)", "Negociación Colectiva", "Acoso Laboral / Sexual"
-                ],
-                "Derecho Penal": [
-                    "Querella Criminal", "Defensa Penal (Etapa de Investigación)", "Defensa Penal (Juicio Oral)",
-                    "Suspensión Condicional del Procedimiento", "Acuerdos Reparatorios", "Procedimiento Abreviado",
-                    "Recurso de Nulidad", "Eliminación de Antecedentes Penales", "Amparo ante el Juez de Garantía",
-                    "Revisión de Medidas Cautelares (Prisión Preventiva)", "Delitos de Violencia Intrafamiliar",
-                    "Responsabilidad Penal de Personas Jurídicas (Ley 20.393)"
-                ],
-                "Derecho Constitucional": [
-                    "Recurso de Protección", "Recurso de Amparo", "Recurso de Amparo Económico",
-                    "Acción de Inaplicabilidad por Inconstitucionalidad", "Reclamación de Nacionalidad"
-                ],
-                "Derecho del Consumidor": [
-                    "Demanda Individual Ley del Consumidor (JPL)", "Querella Infraccional (Juzgado de Policía Local)",
-                    "Defensa ante Demanda Colectiva (SERNAC)", "Mediación Colectiva SERNAC", "Reclamo por Publicidad Engañosa"
-                ],
-                "Derecho Administrativo": [
-                    "Reclamo de Ilegalidad Municipal", "Sumario Administrativo", "Nulidad de Derecho Público",
-                    "Reclamación ante la Contraloría General de la República", "Recurso Jerárquico / Reposición Administrativa",
-                    "Responsabilidad del Estado por Falta de Servicio", "Reclamo de Monto en Expropiación"
-                ],
-                "Derecho Tributario": [
-                    "Reclamo Tributario (Tribunales Tributarios y Aduaneros)", "Recurso de Reposición Administrativa Voluntaria (RAV)",
-                    "Defensa en Fiscalización SII", "Condonación de Intereses y Multas", "Delito Tributario"
-                ],
-                "Derecho Comercial y Societario": [
-                    "Constitución de Sociedades", "Modificación de Sociedades", "Disolución de Sociedades",
-                    "Juicio Arbitral Societario", "Protesto de Letra de Cambio / Pagaré", "Liquidación Forzosa de Empresa Deudora",
-                    "Convenio Judicial Preventivo", "Asesoría en Fusiones y Adquisiciones"
-                ],
-                "Derecho Inmobiliario y Urbanismo": [
-                    "Estudio de Títulos Inmobiliarios", "Reclamo por Permiso de Edificación", "Copropiedad Inmobiliaria (Ley 21.442)",
-                    "Deslinde y Amojonamiento", "Regularización de Loteo Irregular"
-                ],
-                "Propiedad Intelectual e Industrial": [
-                    "Registro de Marca (INAPI)", "Oposición a Registro de Marca", "Nulidad de Marca o Patente",
-                    "Infracción de Derechos de Autor"
-                ],
-                "Derecho Migratorio y Extranjería": [
-                    "Solicitud de Visa / Residencia", "Recurso contra Expulsión", "Recurso contra Rechazo de Visa", "Nacionalización"
-                ],
-                "Derecho de Aguas": [
-                    "Constitución de Derechos de Aprovechamiento", "Oposición ante la Dirección General de Aguas (DGA)", "Juicio de Aguas"
-                ],
-                "Policía Local y Tránsito": [
-                    "Infracción de Tránsito", "Accidente de Tránsito (Cobro de Daños)", "Infracción a Ordenanzas Municipales"
-                ],
-                "Derecho Ambiental": [
-                    "Reclamación ante el Tribunal Ambiental", "Impugnación de Resolución de Calificación Ambiental (RCA)", "Denuncia por Daño Ambiental"
-                ],
-                "Derecho Bancario, Seguros y Ejecutivo Hipotecario": [
-                    "Juicio Ejecutivo Hipotecario", "Reclamo ante la CMF (Bancos/Seguros)", "Repactación de Deuda Bancaria"
-                ]
+                "Derecho Civil y Patrimonial": {
+                    "Juicio Ejecutivo (Cobro de Pagaré)": "Iniciar juicio ejecutivo para el cobro forzado de la deuda contenida en el pagaré adeudado por el demandado.",
+                    "Juicio Ejecutivo (Cobro de Cheque)": "Iniciar juicio ejecutivo para el cobro forzado del cheque protestado por el librador.",
+                    "Juicio Ejecutivo (Cobro de Facturas)": "Iniciar juicio ejecutivo para el cobro de facturas impagas con mérito ejecutivo conforme a la Ley 19.983.",
+                    "Gestión Preparatoria de la Vía Ejecutiva": "Preparar la vía ejecutiva mediante notificación judicial previa, a fin de dotar de mérito ejecutivo al título.",
+                    "Tercería de Posesión": "Interponer tercería de posesión para proteger la posesión de bienes embargados que pertenecen a un tercero.",
+                    "Tercería de Dominio": "Interponer tercería de dominio para acreditar y proteger el dominio sobre bienes embargados.",
+                    "Tercería de Prelación": "Interponer tercería de prelación para hacer valer un mejor derecho de pago frente a otros acreedores.",
+                    "Tercería de Pago": "Interponer tercería de pago para concurrir proporcionalmente al producto del remate de los bienes embargados.",
+                    "Liquidación Voluntaria (Ley 20.720)": "Solicitar la liquidación voluntaria de los bienes del deudor conforme a la Ley 20.720 de Insolvencia y Reemprendimiento.",
+                    "Liquidación Forzosa": "Solicitar la liquidación forzosa de los bienes del deudor por incumplimiento de sus obligaciones.",
+                    "Renegociación de Deudas (Ley 20.720)": "Iniciar el procedimiento de renegociación de deudas de persona natural ante la Superintendencia de Insolvencia y Reemprendimiento.",
+                    "Juicio de Arrendamiento (Cobro de Rentas)": "Iniciar juicio para el cobro de rentas de arrendamiento adeudadas por el arrendatario.",
+                    "Juicio de Arrendamiento (Término y Restitución)": "Iniciar juicio de terminación de contrato de arrendamiento y restitución del inmueble.",
+                    "Juicio Ordinario de Mayor Cuantía": "Iniciar juicio ordinario de mayor cuantía para la declaración y reconocimiento judicial del derecho reclamado.",
+                    "Juicio Ordinario de Menor Cuantía": "Iniciar juicio ordinario de menor cuantía para la declaración y reconocimiento judicial del derecho reclamado.",
+                    "Juicio Sumario": "Iniciar procedimiento sumario, dada la naturaleza de la acción que requiere una tramitación rápida.",
+                    "Juicio de Precario": "Iniciar juicio de precario para obtener la restitución de un inmueble ocupado sin título que lo justifique.",
+                    "Comodato Precario": "Iniciar acción de restitución por comodato precario del bien entregado a título gratuito.",
+                    "Posesión Efectiva Intestada": "Tramitar la posesión efectiva de la herencia intestada del causante ante el Registro Civil o tribunal competente.",
+                    "Posesión Efectiva Testada": "Tramitar la posesión efectiva de la herencia testada del causante.",
+                    "Partición de Herencia": "Solicitar la partición de los bienes quedados al fallecimiento del causante entre los herederos.",
+                    "Estudio de Títulos": "Efectuar el estudio de títulos de dominio de un bien raíz para verificar su saneamiento legal.",
+                    "Prescripción Adquisitiva de Dominio": "Interponer acción para que se declare la prescripción adquisitiva de dominio sobre el bien poseído.",
+                    "Servidumbres": "Constituir o hacer valer judicialmente una servidumbre legal o convencional sobre el predio.",
+                    "Indemnización de Perjuicios (Contractual)": "Demandar indemnización de perjuicios por incumplimiento de obligaciones contractuales.",
+                    "Indemnización de Perjuicios (Extracontractual)": "Demandar indemnización de perjuicios por responsabilidad extracontractual, conforme al artículo 2314 del Código Civil.",
+                    "Nulidad de Contrato": "Solicitar la declaración de nulidad absoluta o relativa del contrato celebrado.",
+                    "Resolución de Contrato": "Solicitar la resolución del contrato por incumplimiento de la contraparte, con la correspondiente indemnización de perjuicios.",
+                    "Cumplimiento Forzado de Contrato": "Demandar el cumplimiento forzado de las obligaciones contractuales incumplidas.",
+                    "Interdicción por Demencia / Discapacidad": "Solicitar la declaración de interdicción por demencia o discapacidad mental de una persona.",
+                    "Designación de Curador": "Solicitar la designación de curador para la administración de los bienes del interdicto."
+                },
+                "Derecho de Familia": {
+                    "Pensión de Alimentos Mayores": "Demandar pensión de alimentos en favor de un alimentario mayor de edad.",
+                    "Pensión de Alimentos Menores": "Demandar pensión de alimentos en favor de hijos menores de edad.",
+                    "Aumento de Pensión de Alimentos": "Solicitar el aumento de la pensión de alimentos previamente decretada.",
+                    "Rebaja de Pensión de Alimentos": "Solicitar la rebaja de la pensión de alimentos previamente decretada.",
+                    "Cese de Pensión de Alimentos": "Solicitar el cese de la obligación alimenticia por cumplirse los requisitos legales.",
+                    "Apremio por No Pago de Alimentos (Arresto)": "Solicitar el apremio (arresto) en contra del alimentante por el no pago de pensiones alimenticias.",
+                    "Retención de Devolución de Impuestos (Alimentos)": "Solicitar la retención de la devolución de impuestos del alimentante moroso.",
+                    "Autorización de Salida del País": "Solicitar autorización judicial de salida del país en favor de un menor de edad.",
+                    "Divorcio de Mutuo Acuerdo": "Tramitar el divorcio de mutuo acuerdo entre los cónyuges, incluyendo el acuerdo regulador de sus relaciones mutuas.",
+                    "Divorcio Unilateral (Cese de Convivencia)": "Tramitar el divorcio unilateral por cese efectivo de la convivencia conyugal.",
+                    "Divorcio Culposo": "Tramitar el divorcio por falta imputable al otro cónyuge.",
+                    "Nulidad de Matrimonio": "Solicitar la declaración de nulidad del matrimonio por un vicio en su celebración.",
+                    "Compensación Económica": "Demandar compensación económica por el menoscabo económico sufrido durante el matrimonio.",
+                    "Cuidado Personal (Tuición)": "Solicitar la determinación judicial del cuidado personal (tuición) de los hijos.",
+                    "Relación Directa y Regular (Visitas)": "Solicitar la fijación de un régimen de relación directa y regular (visitas) con los hijos.",
+                    "Violencia Intrafamiliar (VIF)": "Solicitar medidas de protección frente a hechos de violencia intrafamiliar.",
+                    "Medidas de Protección de Menores": "Solicitar medidas de protección judicial en favor de niños, niñas o adolescentes.",
+                    "Adopción": "Tramitar el proceso de adopción conforme a la Ley 19.620.",
+                    "Reconocimiento de Paternidad": "Solicitar el reconocimiento judicial de paternidad o maternidad.",
+                    "Impugnación de Paternidad": "Solicitar la impugnación judicial de la paternidad o maternidad determinada.",
+                    "Término de Acuerdo de Unión Civil": "Tramitar el término del Acuerdo de Unión Civil (AUC).",
+                    "Interdicción y Curaduría": "Solicitar la interdicción y designación de curador en un contexto de familia.",
+                    "Declaración de Bien Familiar": "Solicitar la declaración de un inmueble como bien familiar."
+                },
+                "Derecho Laboral": {
+                    "Despido Injustificado / Indebido / Improcedente": "Demandar la calificación de despido injustificado, indebido o improcedente y el pago de las indemnizaciones correspondientes.",
+                    "Despido Indirecto (Autodespido)": "Demandar el despido indirecto (autodespido) por incumplimiento grave de las obligaciones del empleador.",
+                    "Tutela Laboral (Derechos Fundamentales)": "Interponer acción de tutela laboral por vulneración de derechos fundamentales del trabajador.",
+                    "Cobro de Prestaciones Laborales": "Demandar el cobro de remuneraciones y prestaciones laborales adeudadas.",
+                    "Nulidad del Despido (Ley Bustos)": "Demandar la nulidad del despido por falta de pago de cotizaciones previsionales, conforme a la Ley Bustos.",
+                    "Accidente del Trabajo / Enfermedad Profesional": "Demandar indemnización por accidente del trabajo o enfermedad profesional (Ley 16.744).",
+                    "Fuero Laboral (Maternal / Sindical)": "Solicitar el respeto o restitución del fuero laboral maternal o sindical.",
+                    "Práctica Antisindical o Desleal": "Denunciar prácticas antisindicales o desleales ante la Inspección del Trabajo o el tribunal competente.",
+                    "Reclamo por Multa Administrativa (DT)": "Reclamar judicialmente en contra de una multa cursada por la Dirección del Trabajo.",
+                    "Defensa Corporativa (Empleador)": "Asumir la defensa del empleador en el juicio laboral iniciado por el trabajador.",
+                    "Negociación Colectiva": "Asesorar en el proceso de negociación colectiva con el sindicato o grupo negociador.",
+                    "Acoso Laboral, Sexual o Violencia en el Trabajo (Ley Karin 21.643)": "Denunciar o defender hechos de acoso laboral, acoso sexual o violencia en el trabajo conforme a la Ley 21.643 (Ley Karin)."
+                },
+                "Derecho Penal": {
+                    "Querella Criminal": "Interponer querella criminal en representación de la víctima del delito.",
+                    "Defensa Penal (Etapa de Investigación)": "Asumir la defensa penal del imputado durante la etapa de investigación.",
+                    "Defensa Penal (Juicio Oral)": "Asumir la defensa penal del acusado en la etapa de juicio oral.",
+                    "Suspensión Condicional del Procedimiento": "Solicitar la suspensión condicional del procedimiento como salida alternativa.",
+                    "Acuerdos Reparatorios": "Negociar y formalizar un acuerdo reparatorio entre imputado y víctima.",
+                    "Procedimiento Abreviado": "Acogerse al procedimiento abreviado para la resolución anticipada de la causa penal.",
+                    "Recurso de Nulidad": "Interponer recurso de nulidad en contra de la sentencia definitiva dictada en el juicio oral.",
+                    "Eliminación de Antecedentes Penales": "Tramitar la eliminación de antecedentes penales conforme al Decreto Ley 409.",
+                    "Amparo ante el Juez de Garantía": "Interponer amparo ante el Juez de Garantía por afectación de la libertad personal.",
+                    "Revisión de Medidas Cautelares (Prisión Preventiva)": "Solicitar la revisión, sustitución o cese de las medidas cautelares personales, incluida la prisión preventiva.",
+                    "Delitos de Violencia Intrafamiliar": "Asumir la representación de la víctima o la defensa del imputado en delitos de violencia intrafamiliar.",
+                    "Responsabilidad Penal de Personas Jurídicas (Ley 20.393)": "Asesorar o defender a la persona jurídica en un proceso por responsabilidad penal conforme a la Ley 20.393."
+                },
+                "Derecho Constitucional": {
+                    "Recurso de Protección": "Interponer recurso de protección ante la Corte de Apelaciones por afectación de garantías constitucionales.",
+                    "Recurso de Amparo": "Interponer recurso de amparo por afectación de la libertad personal y seguridad individual.",
+                    "Recurso de Amparo Económico": "Interponer recurso de amparo económico por infracción al artículo 19 N°21 de la Constitución.",
+                    "Acción de Inaplicabilidad por Inconstitucionalidad": "Solicitar ante el Tribunal Constitucional la inaplicabilidad de un precepto legal por inconstitucionalidad.",
+                    "Reclamación de Nacionalidad": "Interponer reclamación de nacionalidad ante la Corte Suprema."
+                },
+                "Derecho del Consumidor": {
+                    "Demanda Individual Ley del Consumidor (Ley 19.496)": "Demandar en juicio de policía local la protección de los derechos del consumidor conforme a la Ley 19.496.",
+                    "Querella Infraccional (Juzgado de Policía Local)": "Interponer querella infraccional por infracción a la Ley del Consumidor ante el Juzgado de Policía Local.",
+                    "Defensa ante Demanda Colectiva (SERNAC)": "Asumir la defensa del proveedor ante una demanda colectiva iniciada por SERNAC.",
+                    "Mediación Colectiva SERNAC": "Representar a las partes en un procedimiento de mediación colectiva ante SERNAC.",
+                    "Reclamo por Publicidad Engañosa": "Reclamar por publicidad engañosa o falta de información veraz al consumidor.",
+                    "Reclamo o Defensa por Fraude en Tarjetas (Ley 20.009)": "Reclamar o defender la responsabilidad por operaciones realizadas con tarjetas de pago extraviadas, hurtadas, robadas o mediante fraude, conforme a la Ley 20.009.",
+                    "Reclamo Financiero (Ley 20.555 - Sernac Financiero)": "Reclamar por infracción a las obligaciones especiales de información y protección en productos financieros, conforme a la Ley 20.555.",
+                    "Reclamo por Cobranza Extrajudicial Abusiva (Art. 37 Ley 19.496)": "Reclamar por prácticas de cobranza extrajudicial que excedan los límites del artículo 37 de la Ley 19.496."
+                },
+                "Derecho Administrativo": {
+                    "Reclamo de Ilegalidad Municipal": "Interponer reclamo de ilegalidad municipal ante la Corte de Apelaciones.",
+                    "Sumario Administrativo": "Representar al funcionario o a la entidad en un sumario administrativo.",
+                    "Nulidad de Derecho Público": "Demandar la nulidad de derecho público de un acto administrativo.",
+                    "Reclamación ante la Contraloría General de la República": "Presentar una reclamación o presentación ante la Contraloría General de la República.",
+                    "Recurso Jerárquico / Reposición Administrativa": "Interponer recurso jerárquico o de reposición administrativa en contra de un acto de la Administración.",
+                    "Responsabilidad del Estado por Falta de Servicio": "Demandar la responsabilidad patrimonial del Estado por falta de servicio.",
+                    "Reclamo de Monto en Expropiación": "Reclamar judicialmente el monto de la indemnización fijada en un proceso de expropiación."
+                },
+                "Derecho Tributario": {
+                    "Reclamo Tributario (Tribunales Tributarios y Aduaneros - Ley 20.322)": "Interponer reclamo tributario ante el Tribunal Tributario y Aduanero competente, conforme a la Ley 20.322.",
+                    "Recurso de Reposición Administrativa Voluntaria (RAV)": "Interponer recurso de reposición administrativa voluntaria ante el Servicio de Impuestos Internos.",
+                    "Defensa en Fiscalización SII": "Asumir la defensa del contribuyente durante un proceso de fiscalización del Servicio de Impuestos Internos.",
+                    "Condonación de Intereses y Multas": "Solicitar la condonación de intereses y multas tributarias adeudadas.",
+                    "Delito Tributario (Código Tributario Art. 97)": "Asumir la defensa penal tributaria conforme a las infracciones del artículo 97 del Código Tributario.",
+                    "Reclamo por Giro de Cobranza TGR": "Reclamar en contra de un giro o cobranza indebida iniciada por la Tesorería General de la República."
+                },
+                "Derecho Comercial y Societario": {
+                    "Constitución de Sociedades": "Asesorar y tramitar la constitución de una sociedad conforme al tipo social elegido.",
+                    "Modificación de Sociedades": "Tramitar la modificación de los estatutos o el pacto social de una sociedad.",
+                    "Disolución de Sociedades": "Tramitar la disolución y liquidación de una sociedad.",
+                    "Juicio Arbitral Societario": "Representar a la parte en un juicio arbitral derivado de un conflicto societario.",
+                    "Protesto de Letra de Cambio / Pagaré": "Efectuar el protesto de una letra de cambio o pagaré por falta de pago, aceptación o fecha.",
+                    "Liquidación Forzosa de Empresa Deudora (Ley 20.720)": "Solicitar la liquidación forzosa de una empresa deudora conforme a la Ley 20.720.",
+                    "Convenio Judicial Preventivo": "Proponer o negociar un convenio judicial preventivo con los acreedores.",
+                    "Asesoría en Fusiones y Adquisiciones": "Asesorar jurídicamente en un proceso de fusión, adquisición o reorganización societaria."
+                },
+                "Derecho Inmobiliario y Urbanismo": {
+                    "Estudio de Títulos Inmobiliarios": "Efectuar el estudio de títulos de un bien raíz para verificar su saneamiento legal.",
+                    "Reclamo por Permiso de Edificación": "Reclamar administrativa o judicialmente por la denegación u observaciones a un permiso de edificación.",
+                    "Copropiedad Inmobiliaria (Ley 21.442)": "Asesorar o representar en conflictos de copropiedad inmobiliaria conforme a la Ley 21.442.",
+                    "Deslinde y Amojonamiento": "Solicitar la fijación judicial de deslindes y el amojonamiento del predio.",
+                    "Regularización de Loteo Irregular": "Tramitar la regularización de un loteo irregular ante la autoridad competente."
+                },
+                "Propiedad Intelectual e Industrial": {
+                    "Registro de Marca (INAPI)": "Tramitar el registro de una marca comercial ante el Instituto Nacional de Propiedad Industrial (INAPI).",
+                    "Oposición a Registro de Marca": "Presentar oposición a la solicitud de registro de una marca de un tercero.",
+                    "Nulidad de Marca o Patente": "Solicitar la declaración de nulidad de una marca o patente registrada.",
+                    "Infracción de Derechos de Autor": "Demandar por infracción a los derechos de propiedad intelectual conforme a la Ley 17.336."
+                },
+                "Derecho Migratorio y Extranjería": {
+                    "Solicitud de Visa / Residencia": "Tramitar una solicitud de visa o residencia ante el Servicio Nacional de Migraciones.",
+                    "Recurso contra Expulsión": "Interponer recurso en contra de una orden de expulsión del territorio nacional.",
+                    "Recurso contra Rechazo de Visa": "Interponer recurso administrativo o judicial en contra del rechazo de una solicitud de visa.",
+                    "Nacionalización": "Tramitar el proceso de nacionalización de un extranjero residente en Chile."
+                },
+                "Derecho de Aguas": {
+                    "Constitución de Derechos de Aprovechamiento": "Tramitar la constitución de derechos de aprovechamiento de aguas ante la DGA.",
+                    "Oposición ante la Dirección General de Aguas (DGA)": "Presentar oposición a una solicitud de derechos de aprovechamiento de aguas de un tercero.",
+                    "Juicio de Aguas": "Representar a la parte en un juicio derivado de un conflicto sobre derechos de aprovechamiento de aguas."
+                },
+                "Policía Local y Tránsito": {
+                    "Infracción de Tránsito": "Asumir la defensa o el descargo por una infracción de tránsito cursada.",
+                    "Accidente de Tránsito (Cobro de Daños)": "Demandar la indemnización de daños y perjuicios derivados de un accidente de tránsito.",
+                    "Infracción a Ordenanzas Municipales": "Asumir la defensa por infracción a una ordenanza municipal."
+                },
+                "Derecho Ambiental": {
+                    "Reclamación ante el Tribunal Ambiental": "Interponer reclamación ante el Tribunal Ambiental competente.",
+                    "Impugnación de Resolución de Calificación Ambiental (RCA)": "Impugnar administrativa o judicialmente una Resolución de Calificación Ambiental (RCA).",
+                    "Denuncia por Daño Ambiental": "Interponer denuncia o demanda por daño ambiental ante la autoridad competente."
+                },
+                "Derecho Bancario, Seguros y Ejecutivo Hipotecario": {
+                    "Juicio Ejecutivo Hipotecario": "Iniciar juicio ejecutivo para el cobro de una deuda hipotecaria y el remate del inmueble dado en garantía.",
+                    "Reclamo ante la CMF (Bancos/Seguros)": "Presentar un reclamo ante la Comisión para el Mercado Financiero por conductas de bancos o aseguradoras.",
+                    "Repactación de Deuda Bancaria": "Negociar y formalizar la repactación de una deuda bancaria.",
+                    "Reclamo o Defensa por Fraude en Tarjetas (Ley 20.009)": "Reclamar o defender la responsabilidad por operaciones realizadas con tarjetas de pago extraviadas, hurtadas, robadas o mediante fraude, conforme a la Ley 20.009.",
+                    "Alzamiento de Hipoteca / Desarchivo": "Tramitar el alzamiento de una hipoteca y el desarchivo del expediente judicial correspondiente.",
+                    "Ejecución de Prenda sin Desplazamiento": "Iniciar la ejecución de una prenda sin desplazamiento constituida en garantía de una obligación."
+                },
+                "Protección de Datos Personales y Ciberseguridad": {
+                    "Reclamo ante la Agencia de Protección de Datos Personales (Ley 21.719)": "Presentar un reclamo ante la Agencia de Protección de Datos Personales conforme a la Ley 21.719.",
+                    "Ejercicio de Derechos ARCO+ (Acceso, Rectificación, Cancelación, Oposición, Portabilidad)": "Ejercer ante el responsable de datos los derechos ARCO+ del titular de los datos personales.",
+                    "Registro de Actividades de Tratamiento (RAT)": "Asesorar en la confección y mantención del Registro de Actividades de Tratamiento de datos personales.",
+                    "Notificación de Brecha de Seguridad (Plazo 72 Horas)": "Asesorar en la notificación de una brecha de seguridad de datos personales dentro del plazo legal de 72 horas.",
+                    "Defensa ante Fiscalización de la Agencia de Protección de Datos": "Asumir la defensa de la organización ante un procedimiento de fiscalización de la Agencia de Protección de Datos.",
+                    "Delito Informático (Ley 19.223)": "Asumir la representación de la víctima o la defensa del imputado en un delito informático conforme a la Ley 19.223.",
+                    "Cumplimiento Normativo Ley de Ciberseguridad (Ley 21.663)": "Asesorar en el cumplimiento de las obligaciones de la Ley Marco de Ciberseguridad (Ley 21.663)."
+                },
+                "Seguridad Social y Previsional": {
+                    "Reforma Previsional - Beneficios (Ley 21.735)": "Asesorar y tramitar la solicitud de los nuevos beneficios previsionales creados por la Ley 21.735.",
+                    "Reclamo por Cobranza de Cotizaciones Previsionales (Ley 17.322)": "Reclamar o gestionar el cobro de cotizaciones previsionales impagas conforme a la Ley 17.322.",
+                    "Solicitud de Pensión de Invalidez": "Tramitar la solicitud de pensión de invalidez ante la Comisión Médica correspondiente.",
+                    "Reclamo ante la Superintendencia de Pensiones": "Presentar un reclamo ante la Superintendencia de Pensiones por conductas de una AFP.",
+                    "Solicitud de Pensión Garantizada Universal (PGU)": "Tramitar la solicitud de la Pensión Garantizada Universal (PGU) ante el Instituto de Previsión Social.",
+                    "Retiro de Fondos Previsionales (Casos Especiales)": "Asesorar en solicitudes de retiro de fondos previsionales en los casos especiales que la ley contemple."
+                },
+                "Libre Competencia": {
+                    "Denuncia ante la Fiscalía Nacional Económica (FNE)": "Interponer una denuncia ante la Fiscalía Nacional Económica por atentados a la libre competencia.",
+                    "Defensa ante Requerimiento del TDLC (DL 211)": "Asumir la defensa ante un requerimiento del Tribunal de Defensa de la Libre Competencia, conforme al DL 211.",
+                    "Consulta de Operación de Concentración": "Presentar una consulta o notificación de una operación de concentración ante la FNE.",
+                    "Demanda de Indemnización por Ilícito Anticompetitivo": "Demandar indemnización de perjuicios derivada de un ilícito anticompetitivo declarado por el TDLC."
+                },
+                "Derecho Sanitario": {
+                    "Reclamo por Negligencia Médica": "Demandar indemnización de perjuicios por negligencia médica u error en la prestación de salud.",
+                    "Reclamo ante la Superintendencia de Salud": "Presentar un reclamo ante la Superintendencia de Salud por conductas de una Isapre o prestador.",
+                    "Defensa de Derechos y Deberes del Paciente (Ley 20.584)": "Ejercer los derechos del paciente conforme a la Ley 20.584 sobre Derechos y Deberes de las Personas en Salud.",
+                    "Reclamo por Cobertura GES/AUGE": "Reclamar por la denegación o incumplimiento de la cobertura de una patología GES/AUGE."
+                },
+                "Recursos Procesales Generales": {
+                    "Recurso de Apelación": "Interponer recurso de apelación en contra de una resolución judicial para que sea revisada por el tribunal superior.",
+                    "Recurso de Casación en la Forma": "Interponer recurso de casación en la forma por vicios en el procedimiento o en la sentencia.",
+                    "Recurso de Casación en el Fondo": "Interponer recurso de casación en el fondo por infracción de ley que ha influido sustancialmente en lo dispositivo del fallo.",
+                    "Recurso de Queja": "Interponer recurso de queja por falta o abuso grave cometido en la dictación de una resolución.",
+                    "Recurso de Hecho": "Interponer recurso de hecho ante la denegación indebida de un recurso de apelación.",
+                    "Arbitraje Comercial (Ley 19.971)": "Representar a la parte en un procedimiento de arbitraje comercial nacional o internacional conforme a la Ley 19.971."
+                }
             }
+            
+            # Cláusula de escape: ninguna lista puede cubrir el 100% de la normativa chilena,
+            # así que cada rama permite escribir una acción a medida si no aparece en el catálogo.
+            for _rama_k in diccionario_servicios:
+                diccionario_servicios[_rama_k]["➕ Otra Acción (especificar más abajo)"] = ""
             
             with st.container(border=True):
                 col_mat1, col_mat2 = st.columns(2)
                 with col_mat1:
                     materia_sel = st.selectbox("Rama del Derecho", list(diccionario_servicios.keys()), key="gen_con_rama")
                 with col_mat2:
-                    accion_sel = st.selectbox("Acción / Procedimiento Específico", diccionario_servicios[materia_sel], key="gen_con_accion")
+                    accion_sel = st.selectbox("Acción / Procedimiento Específico", list(diccionario_servicios[materia_sel].keys()), key="gen_con_accion")
                 
-                tipo_servicio_final = f"{materia_sel}: {accion_sel}"
+                if accion_sel == "➕ Otra Acción (especificar más abajo)":
+                    accion_manual = st.text_input("Especifica la acción / procedimiento no listado", placeholder="Ej: Acción de desafuero maternal, Ley 21.484...", key="gen_con_accion_manual")
+                    accion_final = accion_manual.strip() if accion_manual.strip() else "Acción sin especificar"
+                    finalidad_auto = f"Representar y patrocinar al Cliente en la acción de \"{accion_final}\"." if accion_manual.strip() else ""
+                else:
+                    accion_final = accion_sel
+                    finalidad_auto = diccionario_servicios[materia_sel].get(accion_sel, "")
+                
+                tipo_servicio_final = f"{materia_sel}: {accion_final}"
+                
+                # Auto-relleno de la Cláusula Primera: solo se sobrescribe cuando cambia
+                # la rama/acción seleccionada, para no borrar ediciones manuales del abogado
+                # si simplemente está revisando el formulario sin cambiar la selección.
+                _clave_seleccion_actual = f"{materia_sel}|{accion_final}"
+                if st.session_state.get('_ultima_seleccion_clausula') != _clave_seleccion_actual:
+                    st.session_state['gen_con_detalle'] = finalidad_auto
+                    st.session_state['_ultima_seleccion_clausula'] = _clave_seleccion_actual
 
             with st.form("form_generador_contratos", clear_on_submit=False):
-                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100, key="gen_con_detalle")
+                detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100, key="gen_con_detalle", help="Se autocompleta según la acción elegida arriba. Puedes editarla libremente antes de generar el contrato.")
                 
                 col_ab, col_cl = st.columns(2)
                 with col_ab:
@@ -1790,7 +1940,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = leer_csv_local(ARCHIVO_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 
-                            'Cliente': cli_nom, 'Servicio': accion_sel, 'Honorarios': hon_num, 'Archivo_B64': b64_docx,
+                            'Cliente': cli_nom, 'Servicio': accion_final, 'Honorarios': hon_num, 'Archivo_B64': b64_docx,
                             'Archivo_Drive_ID': drive_id_con, 'Usuario_Propietario': usuario_actual
                         }
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
