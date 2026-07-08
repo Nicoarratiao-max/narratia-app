@@ -13,12 +13,19 @@ import requests
 import glob
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
 from datetime import datetime, timedelta
 from bs4 import BeautifulSoup
 from streamlit_calendar import calendar
 from streamlit_gsheets import GSheetsConnection
 import extra_streamlit_components as stx
+
+try:
+    from googleapiclient.http import MediaIoBaseUpload, MediaIoBaseDownload
+    DRIVE_LIB_READY = True
+except ImportError:
+    # Si por alguna razón esta submódulo no está disponible, la app sigue
+    # funcionando: simplemente el guardado de adjuntos cae de vuelta a base64.
+    DRIVE_LIB_READY = False
 
 try:
     import bcrypt
