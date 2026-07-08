@@ -994,7 +994,7 @@ if not os.path.exists(ARCHIVO_TAREAS):
     df_vacio_t = pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
     df_vacio_t.to_csv(ARCHIVO_TAREAS, index=False)
 else:
-    df_t_check = leer_csv_local(ARCHIVO_TAREAS)
+    df_t_check = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     if 'Prioridad' not in df_t_check.columns:
         df_t_check['Prioridad'] = 'Media'
         df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
@@ -1300,7 +1300,7 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     st.write("<br>", unsafe_allow_html=True)
     
     df_causas_totales = leer_csv_local(ARCHIVO_BD)
-    df_tareas_totales = leer_csv_local(ARCHIVO_TAREAS)
+    df_tareas_totales = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     
     cant_causas = len(df_causas_totales) if not df_causas_totales.empty else 0
     cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty and 'Cliente' in df_causas_totales.columns else 0
@@ -1436,7 +1436,7 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
     st.title("📝 Control de Trámites y Fondos de Auxiliares")
     st.markdown("Registro estricto de dinero solicitado a clientes para pagos de Receptores Judiciales, Peritos, Notarios o Conservadores.")
     
-    df_causas = leer_csv_local(ARCHIVO_BD)
+    df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     df_tramites = leer_csv_local(ARCHIVO_TRAMITES)
     
     tab_ingreso_t, tab_historial_t = st.tabs(["Ingresar Pago de Trámite", "Historial de Comprobantes"])
@@ -1506,7 +1506,7 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
     st.markdown("Herramienta para automatizar la revisión del Estado Diario del Poder Judicial Chileno.")
     
     col_auto, col_man = st.columns(2)
-    df_causas = leer_csv_local(ARCHIVO_BD)
+    df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     df_pj = pd.DataFrame()
     
     with col_auto:
@@ -2107,7 +2107,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         texto_json = respuesta.text.replace('```json', '').replace('```', '').strip()
                         datos_extraidos = json.loads(texto_json)
                         
-                        df_causas = leer_csv_local(ARCHIVO_BD)
+                        df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
                         nombre_extraido = datos_extraidos.get('cliente_nombre', 'Cliente Importado')
                         
                         nuevo_cliente = {
@@ -2145,7 +2145,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         ARCHIVO_BD = f"base_causas_{_propietario_vista}.csv"
         ARCHIVO_TAREAS = f"base_tareas_{_propietario_vista}.csv"
     
-    df_causas = leer_csv_local(ARCHIVO_BD)
+    df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     df_clientes = safe_read_sheet("base_clientes", ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
     
     @st.dialog("Editar tarea")
@@ -2163,7 +2163,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         nuevo_estado = st.selectbox("Estado", opciones_estado, index=opciones_estado.index(tarea_estado) if tarea_estado in opciones_estado else 0)
         
         if st.button("Guardar", type="primary", use_container_width=True):
-            df_t_local = leer_csv_local(ARCHIVO_TAREAS)
+            df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
             df_t_local.loc[df_t_local['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
             df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
             
@@ -2503,7 +2503,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.success("✅ Tarea registrada exitosamente.")
                             import time; time.sleep(1); st.rerun()
                             
-                df_t_local = leer_csv_local(ARCHIVO_TAREAS)
+                df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
                 tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual]
                 
                 if tareas_de_esta_causa.empty:
@@ -2653,7 +2653,7 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
     fecha_hoy = datetime.now().strftime("%d/%m/%Y")
     st.write(f"Gestiones legales que vencen indefectiblemente el día de hoy: **{fecha_hoy}**")
     
-    df_t = leer_csv_local(ARCHIVO_TAREAS)
+    df_t = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     if df_t.empty:
         st.info("No existen registros de plazos en el sistema.")
     else:
@@ -2847,7 +2847,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         if st.session_state['username'] == "Narratia": 
             if c_del.button("🗑️ Eliminar Cliente", use_container_width=True):
                 with st.spinner("Borrando cliente y limpiando datos en cascada..."):
-                    df_causas = leer_csv_local(ARCHIVO_BD)
+                    df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
                     roles_a_borrar = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]['ROL'].tolist() if not df_causas.empty else []
                     nombre_borrar = datos_cli['Nombre']
                     
@@ -2858,7 +2858,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     dn_c = safe_read_sheet("base_causas", COLS_CAUSAS)
                     if not dn_c.empty: safe_update_sheet("base_causas", dn_c[dn_c['RUT'].astype(str) != str(rut_actual)])
                     
-                    df_t_local = leer_csv_local(ARCHIVO_TAREAS)
+                    df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
                     if not df_t_local.empty and roles_a_borrar:
                         df_t_local = df_t_local[~df_t_local['ROL'].isin(roles_a_borrar)]
                         df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
@@ -2944,7 +2944,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 import time; time.sleep(1.5); st.rerun()
 
                 st.subheader("Causas Asociadas Vigentes")
-                df_causas = leer_csv_local(ARCHIVO_BD)
+                df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
                 if not df_causas.empty:
                     causas_cli = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
                     if causas_cli.empty:
@@ -2986,7 +2986,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
     st.title("Tareas")
     st.markdown("<span style='color:#6b778c;'>Revisa y gestiona todas tus tareas</span>", unsafe_allow_html=True)
     
-    df_t = leer_csv_local(ARCHIVO_TAREAS)
+    df_t = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     df_t['Propietario_Vista'] = usuario_actual
     
     ES_ADMIN_TAREAS = usuario_actual == "Narratia"
