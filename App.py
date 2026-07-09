@@ -179,6 +179,22 @@ def fecha_segura(valor, formato="%Y-%m-%d"):
     except (ValueError, TypeError):
         return datetime.now()
 
+def _corregir_dtypes_texto(df):
+    """
+    Corrige columnas mal tipadas por inferencia automática de pandas:
+    - Columnas 100% "True"/"False" -> quedan como bool -> se pasan a texto.
+    - Columnas 100% vacías -> quedan como float (puro NaN) -> se pasan a texto.
+    Sin esto, asignar después un string en esas columnas revienta con
+    TypeError (ya pasó con 'Fecha_Inicio' y 'Debe_Cambiar_Clave'). Las
+    columnas numéricas reales (con datos) no se tocan.
+    """
+    for col in df.columns:
+        if df[col].dtype == bool:
+            df[col] = df[col].astype(str)
+        elif df[col].dtype == float and df[col].isna().all():
+            df[col] = df[col].astype(object)
+    return df
+
 def leer_csv_local(path, default_cols=None):
     """
     Lee un CSV local cacheándolo en st.session_state mientras el archivo no
@@ -198,6 +214,7 @@ def leer_csv_local(path, default_cols=None):
         return cached[1].copy()
     try:
         df = pd.read_csv(path)
+        df = _corregir_dtypes_texto(df)
     except Exception:
         return pd.DataFrame(columns=default_cols) if default_cols is not None else pd.DataFrame()
     st.session_state[cache_key] = (mtime, df)
@@ -324,6 +341,7 @@ def safe_read_sheet(worksheet_name, default_cols=None):
         df = fetch_sheet_cached(worksheet_name)
         if df is not None and not df.empty:
             df_clean = df.dropna(how="all")
+            df_clean = _corregir_dtypes_texto(df_clean)
             # Guarda un respaldo local silencioso
             df_clean.to_csv(f"{worksheet_name}.csv", index=False)
             return df_clean
@@ -334,7 +352,7 @@ def safe_read_sheet(worksheet_name, default_cols=None):
     csv_path = f"{worksheet_name}.csv"
     if os.path.exists(csv_path):
         try:
-            return pd.read_csv(csv_path)
+            return _corregir_dtypes_texto(pd.read_csv(csv_path))
         except Exception:
             pass
             
@@ -924,7 +942,7 @@ if not st.session_state['logged_in']:
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = user_clean
                             import time
-                            time.sleep(1)
+                            time.sleep(0.3)
                             st.rerun()
                     else:
                         st.error("❌ Usuario o contraseña incorrectos.")
@@ -1267,6 +1285,13 @@ with st.sidebar:
         st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
         with st.form("form_perfil"):
             df_usr = leer_csv_local(ARCHIVO_USUARIOS)
+            # Mismo tipo de bug que ya vimos con Fecha_Inicio: si la columna quedó
+            # tipada como booleano/número (por ejemplo, todo "True"/"False" que
+            # pandas infiere como bool), asignar un string ahí revienta con
+            # TypeError. Forzamos texto antes de cualquier asignación.
+            for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
+                if _col_segura in df_usr.columns:
+                    df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
             mi_correo = str(df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'].values[0])
             if mi_correo == "nan" or mi_correo == "pendiente": 
                 mi_correo = ""
@@ -1489,7 +1514,7 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
                         
                     st.success("✅ Registro de trámite respaldado en la nube.")
                     import time
-                    time.sleep(1)
+                    time.sleep(0.3)
                     st.rerun()
                     
     with tab_historial_t:
@@ -2181,7 +2206,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 
             st.session_state['editando_tarea'] = None
             st.success("✅ Tarea actualizada correctamente.")
-            import time; time.sleep(1); st.rerun()
+            import time; time.sleep(0.3); st.rerun()
 
     if st.session_state['causa_seleccionada'] is None:
         st.session_state['modo_edicion'] = False
@@ -2250,7 +2275,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             
                             st.session_state['creando_causa'] = False
                             st.success("✅ Causa creada y vinculada al cliente exitosamente.")
-                            import time; time.sleep(1); st.rerun()
+                            import time; time.sleep(0.3); st.rerun()
 
         st.write("---")
         
@@ -2508,7 +2533,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 
                             st.session_state['creando_tarea'] = False
                             st.success("✅ Tarea registrada exitosamente.")
-                            import time; time.sleep(1); st.rerun()
+                            import time; time.sleep(0.3); st.rerun()
                             
                 df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
                 tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual]
@@ -2886,7 +2911,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     
                 st.session_state['cliente_seleccionado'] = None
                 st.success("✅ Cliente y TODO su historial asociado fue desintegrado.")
-                import time; time.sleep(1.5); st.rerun()
+                import time; time.sleep(0.4); st.rerun()
             
         st.title(f"Ficha: {datos_cli['Nombre']}")
         tab1, tab2, tab3 = st.tabs(["👤 Información y Causas", "💰 Contabilidad", "📄 Contratos"])
@@ -2948,7 +2973,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 safe_update_sheet("base_causas", dn_c)
                                 
                                 st.success(f"✅ Causa {rol_n.upper()} asociada exitosamente.")
-                                import time; time.sleep(1.5); st.rerun()
+                                import time; time.sleep(0.4); st.rerun()
 
                 st.subheader("Causas Asociadas Vigentes")
                 df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
@@ -3236,7 +3261,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                                 pd.DataFrame(columns=COLS_TAREAS).to_csv(archivo_tareas_nuevo, index=False)
                                 
                             st.success(f"✅ ¡Cuenta autorizada! El usuario **{nuevo_user}** ya puede acceder con el plan **{nuevo_plan}**.")
-                            import time; time.sleep(1.5); st.rerun()
+                            import time; time.sleep(0.4); st.rerun()
 
     with tab_editar:
         with st.container(border=True):
@@ -3260,7 +3285,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                         df_usuarios_admin.loc[df_usuarios_admin['Usuario'] == usuario_editar, 'Plan'] = nuevo_plan_edit
                         safe_update_sheet("base_usuarios", df_usuarios_admin)
                         st.success(f"✅ Los permisos de **{usuario_editar}** han sido actualizados en el sistema.")
-                        import time; time.sleep(1.5); st.rerun()
+                        import time; time.sleep(0.4); st.rerun()
                         
         st.markdown("**Resumen de Usuarios Activos**")
         st.dataframe(df_usuarios_admin[['Usuario', 'Nombre_Real', 'Plan', 'Correo']], use_container_width=True)
@@ -3331,7 +3356,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                 
                 st.cache_data.clear()
             st.success("✅ Limpieza extrema completada. Sistema restablecido a cero.")
-            import time; time.sleep(2); st.rerun()
+            import time; time.sleep(0.6); st.rerun()
 
 # 15. REDACTOR AUTOMÁTICO IA
 elif st.session_state['menu_radio'] == "📝 Redactor IA":
