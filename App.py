@@ -996,19 +996,34 @@ if not st.session_state['logged_in']:
                         st.error("Por favor, ingresa un correo electrónico válido.")
                     elif nueva_cl != conf_cl:
                         st.error("Las contraseñas no coinciden.")
+                    elif usr_actualizar not in df_usuarios['Usuario'].values:
+                        st.error(f"⚠️ No se encontró el usuario '{usr_actualizar}' en la base de datos. Contacta al administrador.")
                     else:
-                        idx_mod = df_usuarios[df_usuarios['Usuario'] == usr_actualizar].index[0]
-                        df_usuarios.at[idx_mod, 'Password'] = hash_password(nueva_cl)
-                        df_usuarios.at[idx_mod, 'Correo'] = nuevo_correo
-                        df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = 'False'
-                        
-                        guardar_en_nube(df_usuarios)
-                        cookie_manager.set("jurisync_user", generar_token_sesion(usr_actualizar), key="cookie_registro_inicial")
-                        
-                        st.session_state['logged_in'] = True
-                        st.session_state['username'] = usr_actualizar
-                        st.session_state['requiere_registro_inicial'] = False
-                        st.rerun()
+                        try:
+                            # Blindaje extra: fuerza estas columnas a texto ANTES de
+                            # asignar, por si quedaron mal tipadas (mismo tipo de bug
+                            # ya visto antes con Debe_Cambiar_Clave).
+                            df_usuarios = _corregir_dtypes_texto(df_usuarios)
+                            for _col in ['Password', 'Correo', 'Debe_Cambiar_Clave']:
+                                if _col in df_usuarios.columns:
+                                    df_usuarios[_col] = df_usuarios[_col].astype(object)
+                            
+                            idx_mod = df_usuarios[df_usuarios['Usuario'] == usr_actualizar].index[0]
+                            df_usuarios.at[idx_mod, 'Password'] = hash_password(nueva_cl)
+                            df_usuarios.at[idx_mod, 'Correo'] = nuevo_correo
+                            df_usuarios.at[idx_mod, 'Debe_Cambiar_Clave'] = 'False'
+                            
+                            guardar_en_nube(df_usuarios)
+                            cookie_manager.set("jurisync_user", generar_token_sesion(usr_actualizar), key="cookie_registro_inicial")
+                            
+                            st.session_state['logged_in'] = True
+                            st.session_state['username'] = usr_actualizar
+                            st.session_state['requiere_registro_inicial'] = False
+                            st.success("✅ Credenciales actualizadas correctamente.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
+                            st.info("Si el problema persiste, avísale a Nicolás con este mensaje de error.")
     st.stop()
 
 
@@ -1321,10 +1336,18 @@ with st.sidebar:
                         st.error("La clave debe tener mínimo 6 caracteres")
                 
                 if cambios:
-                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
-                    df_usr.to_csv(ARCHIVO_USUARIOS, index=False)
-                    st.success("¡Datos actualizados correctamente!")
-                    st.rerun()
+                    try:
+                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
+                        # BUGFIX: antes esto solo se guardaba en el archivo local, nunca
+                        # se sincronizaba con Google Sheets. Como el login verifica las
+                        # credenciales contra la copia de Sheets, un cambio de contraseña
+                        # hecho aquí podía "perderse" y la próxima vez pedir lo mismo de
+                        # nuevo, o directamente no dejar entrar con la clave nueva.
+                        guardar_en_nube(df_usr)
+                        st.success("¡Datos actualizados correctamente! Ya quedaron sincronizados en la nube.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
 
     st.write("")
     if st.button("🚪 Cerrar Sesión", use_container_width=True):
