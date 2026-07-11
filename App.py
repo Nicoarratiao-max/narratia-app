@@ -195,6 +195,15 @@ def _corregir_dtypes_texto(df):
             df[col] = df[col].astype(object)
     return df
 
+def boton_refrescar_equipo(key):
+    """Fuerza una relectura desde disco de todos los archivos base_causas_*/base_tareas_*
+    del equipo, por si un cambio reciente de otro usuario no se refleja aún."""
+    if st.button("🔄 Actualizar datos del equipo", key=key, help="Si algún cambio reciente de otro abogado no aparece, presiona aquí."):
+        claves_a_limpiar = [k for k in st.session_state.keys() if k.startswith("_csv_cache_base_causas_") or k.startswith("_csv_cache_base_tareas_")]
+        for k in claves_a_limpiar:
+            del st.session_state[k]
+        st.rerun()
+
 def leer_csv_local(path, default_cols=None):
     """
     Lee un CSV local cacheándolo en st.session_state mientras el archivo no
@@ -2283,6 +2292,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         df_para_listado['Propietario_Vista'] = usuario_actual
         
         if ES_ADMIN_NARRATIA:
+            boton_refrescar_equipo("refresh_causas_equipo")
             archivos_causas_equipo = glob.glob("base_causas_*.csv")
             piezas_equipo = []
             for arch in archivos_causas_equipo:
@@ -2804,6 +2814,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         # CRUZAMOS DATOS PARA NO PERDER CLIENTES HISTÓRICOS (y, para el admin, de todo el equipo)
         ES_ADMIN_CLIENTES = usuario_actual == "Narratia"
         if ES_ADMIN_CLIENTES:
+            boton_refrescar_equipo("refresh_clientes_equipo")
             df_causas_local = pd.DataFrame()
             piezas_causas_cli = []
             for arch_cli in glob.glob("base_causas_*.csv"):
@@ -3023,6 +3034,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
     
     ES_ADMIN_TAREAS = usuario_actual == "Narratia"
     if ES_ADMIN_TAREAS:
+        boton_refrescar_equipo("refresh_tareas_equipo")
         archivos_tareas_equipo = glob.glob("base_tareas_*.csv")
         piezas_tareas_eq = []
         for arch_t in archivos_tareas_equipo:
@@ -3292,22 +3304,35 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
 
     with tab_vision:
         st.subheader("Monitoreo Absoluto de la Oficina")
+        
+        c_refresh, _ = st.columns([1, 4])
+        if c_refresh.button("🔄 Actualizar ahora", help="Fuerza una relectura de todos los archivos del equipo, por si algún cambio reciente no se refleja."):
+            # Limpia del caché de sesión cualquier archivo base_causas_*/base_tareas_*
+            # para forzar que se vuelvan a leer del disco en este instante.
+            claves_a_limpiar = [k for k in st.session_state.keys() if k.startswith("_csv_cache_base_causas_") or k.startswith("_csv_cache_base_tareas_")]
+            for k in claves_a_limpiar:
+                del st.session_state[k]
+            st.rerun()
+        
         todas_causas = []
         todas_tareas = []
         
-        for u in df_usuarios_admin['Usuario']:
-            arch_c = f"base_causas_{u}.csv"
-            arch_t = f"base_tareas_{u}.csv"
-            if os.path.exists(arch_c):
-                temp_c = leer_csv_local(arch_c)
-                if not temp_c.empty:
-                    temp_c['Usuario_Propietario'] = u 
-                    todas_causas.append(temp_c)
-            if os.path.exists(arch_t):
-                temp_t = leer_csv_local(arch_t)
-                if not temp_t.empty:
-                    temp_t['Usuario_Propietario'] = u
-                    todas_tareas.append(temp_t)
+        # IMPORTANTE: se lee directo de los archivos que existen en el disco (glob),
+        # en vez de depender de la lista de usuarios de Google Sheets. Si un usuario
+        # nuevo no queda bien reflejado ahí (o esa lectura está desactualizada), su
+        # archivo de causas/tareas igual se detecta y se muestra aquí.
+        for arch_c in glob.glob("base_causas_*.csv"):
+            u = arch_c.replace("base_causas_", "").replace(".csv", "")
+            temp_c = leer_csv_local(arch_c)
+            if not temp_c.empty:
+                temp_c['Usuario_Propietario'] = u 
+                todas_causas.append(temp_c)
+        for arch_t in glob.glob("base_tareas_*.csv"):
+            u = arch_t.replace("base_tareas_", "").replace(".csv", "")
+            temp_t = leer_csv_local(arch_t)
+            if not temp_t.empty:
+                temp_t['Usuario_Propietario'] = u
+                todas_tareas.append(temp_t)
         
         col_v1, col_v2 = st.columns(2)
         with col_v1:
