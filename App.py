@@ -327,6 +327,100 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan']
 COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']
 COLS_CAUSAS = ['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']
+
+# =====================================================================
+# 🏛️ CATÁLOGO DE TRIBUNALES DE CHILE (para seleccionar, no escribir a mano)
+# =====================================================================
+CATALOGO_TRIBUNALES = {
+    "Cortes y Tribunal Supremo": [
+        "Corte Suprema", "Corte de Apelaciones de Arica", "Corte de Apelaciones de Iquique",
+        "Corte de Apelaciones de Antofagasta", "Corte de Apelaciones de Copiapó", "Corte de Apelaciones de La Serena",
+        "Corte de Apelaciones de Valparaíso", "Corte de Apelaciones de Santiago", "Corte de Apelaciones de San Miguel",
+        "Corte de Apelaciones de Rancagua", "Corte de Apelaciones de Talca", "Corte de Apelaciones de Chillán",
+        "Corte de Apelaciones de Concepción", "Corte de Apelaciones de Temuco", "Corte de Apelaciones de Valdivia",
+        "Corte de Apelaciones de Puerto Montt", "Corte de Apelaciones de Coyhaique", "Corte de Apelaciones de Punta Arenas"
+    ],
+    "Juzgados Civiles de Santiago": [f"{i}° Juzgado Civil de Santiago" for i in range(1, 31)],
+    "Juzgados de Familia de Santiago": [f"{i}° Juzgado de Familia de Santiago" for i in range(1, 5)],
+    "Juzgados Laborales de Santiago": [
+        "1° Juzgado de Letras del Trabajo de Santiago", "2° Juzgado de Letras del Trabajo de Santiago",
+        "3° Juzgado de Letras del Trabajo de Santiago", "Juzgado de Cobranza Laboral y Previsional de Santiago"
+    ],
+    "Juzgados Penales de Santiago": [
+        "Juzgado de Garantía de Santiago", "Juzgado de Garantía de San Miguel", "Juzgado de Garantía de San Bernardo",
+        "Juzgado de Garantía de Puente Alto", "Juzgado de Garantía de Colina", "Juzgado de Garantía de Talagante",
+        "Tribunal de Juicio Oral en lo Penal de Santiago", "Tribunal de Juicio Oral en lo Penal de San Miguel"
+    ],
+    "Tribunales Regionales - Zona Norte": [
+        "Juzgado de Letras de Arica", "Juzgado de Familia de Arica", "Juzgado de Garantía de Arica",
+        "Juzgado de Letras de Iquique", "Juzgado de Familia de Iquique", "Juzgado de Garantía de Iquique",
+        "1° Juzgado Civil de Antofagasta", "2° Juzgado Civil de Antofagasta", "Juzgado de Familia de Antofagasta",
+        "Juzgado de Garantía de Antofagasta", "Juzgado de Letras del Trabajo de Antofagasta",
+        "Juzgado de Letras de Copiapó", "Juzgado de Familia de Copiapó", "Juzgado de Garantía de Copiapó",
+        "1° Juzgado Civil de La Serena", "2° Juzgado Civil de La Serena", "Juzgado de Familia de La Serena", "Juzgado de Garantía de La Serena"
+    ],
+    "Tribunales Regionales - Zona Centro": [
+        "1° Juzgado Civil de Valparaíso", "2° Juzgado Civil de Valparaíso", "3° Juzgado Civil de Valparaíso",
+        "Juzgado de Familia de Valparaíso", "Juzgado de Garantía de Valparaíso", "Juzgado de Letras del Trabajo de Valparaíso",
+        "1° Juzgado Civil de Viña del Mar", "2° Juzgado Civil de Viña del Mar", "Juzgado de Familia de Viña del Mar",
+        "1° Juzgado Civil de Rancagua", "2° Juzgado Civil de Rancagua", "Juzgado de Familia de Rancagua", "Juzgado de Garantía de Rancagua",
+        "1° Juzgado Civil de Talca", "2° Juzgado Civil de Talca", "Juzgado de Familia de Talca", "Juzgado de Garantía de Talca",
+        "Juzgado de Letras de Chillán", "Juzgado de Familia de Chillán", "Juzgado de Garantía de Chillán"
+    ],
+    "Tribunales Regionales - Zona Sur": [
+        "1° Juzgado Civil de Concepción", "2° Juzgado Civil de Concepción", "3° Juzgado Civil de Concepción",
+        "Juzgado de Familia de Concepción", "Juzgado de Garantía de Concepción", "Juzgado de Letras del Trabajo de Concepción",
+        "1° Juzgado Civil de Temuco", "2° Juzgado Civil de Temuco", "Juzgado de Familia de Temuco", "Juzgado de Garantía de Temuco",
+        "Juzgado de Letras de Valdivia", "Juzgado de Familia de Valdivia", "Juzgado de Garantía de Valdivia",
+        "Juzgado de Letras de Osorno", "Juzgado de Familia de Osorno", "Juzgado de Garantía de Osorno",
+        "1° Juzgado Civil de Puerto Montt", "2° Juzgado Civil de Puerto Montt", "Juzgado de Familia de Puerto Montt", "Juzgado de Garantía de Puerto Montt"
+    ],
+    "Tribunales Regionales - Zona Austral": [
+        "Juzgado de Letras de Coyhaique", "Juzgado de Familia de Coyhaique", "Juzgado de Garantía de Coyhaique",
+        "Juzgado de Letras de Punta Arenas", "Juzgado de Familia de Punta Arenas", "Juzgado de Garantía de Punta Arenas"
+    ],
+    "Juzgados de Policía Local (RM)": [
+        "1° Juzgado de Policía Local de Santiago", "2° Juzgado de Policía Local de Santiago",
+        "Juzgado de Policía Local de Providencia", "Juzgado de Policía Local de Las Condes",
+        "Juzgado de Policía Local de Ñuñoa", "Juzgado de Policía Local de La Florida",
+        "Juzgado de Policía Local de Maipú", "Juzgado de Policía Local de Puente Alto",
+        "Juzgado de Policía Local de San Bernardo", "Juzgado de Policía Local de Peñalolén"
+    ],
+    "Tribunales Especiales": [
+        "Tribunal Tributario y Aduanero de la Región Metropolitana - Santiago Oriente",
+        "Tribunal Tributario y Aduanero de la Región Metropolitana - Santiago Poniente",
+        "Tribunal de Defensa de la Libre Competencia", "1° Tribunal Ambiental (Antofagasta)",
+        "2° Tribunal Ambiental (Santiago)", "3° Tribunal Ambiental (Valdivia)",
+        "Tribunal Constitucional", "Tribunal Calificador de Elecciones"
+    ]
+}
+_LISTA_PLANA_TRIBUNALES = []
+for _grupo_trib in CATALOGO_TRIBUNALES.values():
+    _LISTA_PLANA_TRIBUNALES.extend(_grupo_trib)
+_LISTA_PLANA_TRIBUNALES.append("✏️ Otro (no está en la lista)")
+
+def selector_tribunal(valor_actual="", key_prefix="trib"):
+    """
+    Selector predeterminado de tribunales de Chile: un desplegable único con
+    los ~150 tribunales del catálogo (Streamlit permite escribir para filtrar
+    dentro del propio selectbox), más un campo de texto de respaldo siempre
+    visible para los casos no listados. Se diseñó así (un solo nivel, sin
+    selects en cascada) para que funcione bien tanto dentro como fuera de un
+    st.form, donde los widgets no se actualizan entre sí hasta enviar el formulario.
+    Devuelve el nombre final del tribunal como texto (igual que antes).
+    """
+    idx_default = 0
+    if valor_actual and valor_actual in _LISTA_PLANA_TRIBUNALES:
+        idx_default = _LISTA_PLANA_TRIBUNALES.index(valor_actual)
+    trib_sel = st.selectbox("Tribunal (escribe para buscar)", _LISTA_PLANA_TRIBUNALES, index=idx_default, key=f"{key_prefix}_sel")
+    trib_manual = st.text_input("¿No está en la lista? Escríbelo aquí (tiene prioridad sobre lo seleccionado arriba)",
+                                 value=valor_actual if valor_actual and valor_actual not in _LISTA_PLANA_TRIBUNALES else "",
+                                 key=f"{key_prefix}_manual", placeholder="Ej: Juzgado de Letras de Melipilla")
+    if trib_manual.strip():
+        return trib_manual.strip()
+    if trib_sel == "✏️ Otro (no está en la lista)":
+        return ""
+    return trib_sel
 COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']
 COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
@@ -576,7 +670,7 @@ def obtener_feriados_chile():
     ])
     return feriados
 
-# --- MOTOR REDACTOR DE CONTRATOS EN WORD ---
+# --- MOTOR REDACTOR DE CONTRATOS EN WORD (VERSIÓN COMPLETA, 18 CLÁUSULAS) ---
 def crear_contrato_word(datos):
     if not DOCX_READY: 
         return None
@@ -586,6 +680,15 @@ def crear_contrato_word(datos):
     font = style.font
     font.name = 'Arial'
     font.size = Pt(11)
+    
+    def clausula(doc, numero_texto, titulo_texto, *runs_de_texto):
+        """Helper para no repetir el mismo bloque de formato en cada cláusula."""
+        p = doc.add_paragraph()
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p.add_run(f"\nCLÁUSULA {numero_texto}: {titulo_texto}. ").bold = True
+        for texto in runs_de_texto:
+            p.add_run(texto)
+        return p
     
     titulo = doc.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -599,27 +702,36 @@ def crear_contrato_word(datos):
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     intro.add_run(f"En Santiago, República de Chile, a {fecha_str}, comparecen:\n\n")
-    intro.add_run(f"Por una parte, don/doña {datos['abogado_nombre']}, de nacionalidad chilena, abogado, cédula nacional de identidad número {datos['abogado_rut']}, con domicilio profesional en {datos['abogado_domicilio']}, correo electrónico {datos['abogado_correo']}, en adelante e indistintamente como \"EL ABOGADO\"; y,\n\n")
-    intro.add_run(f"Por otra parte, don/doña {datos['cliente_nombre']}, de nacionalidad chilena, cédula nacional de identidad número {datos['cliente_rut']}, con domicilio en {datos['cliente_domicilio']}, número telefónico de contacto {datos['cliente_tel']}, correo electrónico {datos['cliente_correo']}, en adelante como \"EL CLIENTE\".\n\n")
-    intro.add_run("Ambas partes de conformidad y compareciendo como mayores de edad, exponen que han convenido el siguiente contrato:")
+    intro.add_run(f"Por una parte, don/doña {datos['abogado_nombre']}, de nacionalidad chilena, abogado/a, cédula nacional de identidad número {datos['abogado_rut']}, con domicilio profesional en {datos['abogado_domicilio']}, correo electrónico {datos['abogado_correo']}, en adelante e indistintamente \"EL ABOGADO\" o \"el mandatario\"; y,\n\n")
+    intro.add_run(f"Por otra parte, don/doña {datos['cliente_nombre']}, cédula nacional de identidad número {datos['cliente_rut']}, con domicilio en {datos['cliente_domicilio']}, número telefónico de contacto {datos['cliente_tel']}, correo electrónico {datos['cliente_correo']}, en adelante \"EL CLIENTE\" o \"el mandante\".\n\n")
+    intro.add_run("Ambas partes, compareciendo como mayores de edad, exponen que han convenido celebrar el siguiente contrato de prestación de servicios profesionales, el que se regirá por las cláusulas que a continuación se singularizan:")
     
+    # --- CLÁUSULA PRIMERA: OBJETO ---
     p1 = doc.add_paragraph()
     p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p1.add_run("\nCLÁUSULA PRIMERA: OBJETO DEL CONTRATO. ").bold = True
-    p1.add_run(f"Por medio de este instrumento, el Cliente encomienda la representation y patrocinio legal a El Abogado para la tramitación judicial y defensa respectiva de un procedimiento de {datos['tipo_servicio'].upper()}.\n")
-    p1.add_run("Los servicios profesionales comprometidos por el profesional contemplan de forma específica lo siguiente:\n")
+    p1.add_run(f"Por medio del presente instrumento, El Cliente confiere patrocinio y poder a El Abogado para que asuma la representación, tramitación y defensa de sus intereses en un procedimiento de {datos['tipo_servicio'].upper()}.\n")
+    p1.add_run("Los servicios profesionales comprometidos comprenden, de forma específica, lo siguiente:\n")
     p1.add_run(datos['detalle_servicio'])
     
-    p2 = doc.add_paragraph()
-    p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p2.add_run("\nCLÁUSULA SEGUNDA: HONORARIOS PROFESIONALES. ").bold = True
-    p2.add_run(f"Los honorarios totales convenidos por la prestacion de los servicios profesionales ascienden a la suma correlativa de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n")
-    p2.add_run("Esta suma se considera alzada y fija por la tramitación completa descrita en la cláusula anterior.")
+    # --- CLÁUSULA SEGUNDA: ALCANCE Y EXCLUSIONES DEL SERVICIO ---
+    clausula(doc, "SEGUNDA", "ALCANCE Y EXCLUSIONES DEL SERVICIO",
+        "El encargo referido en la cláusula precedente será desarrollado personalmente por El Abogado, o por los profesionales que este último destine al efecto dentro de su mismo estudio jurídico, quienes se sujetarán íntegramente a los términos de este contrato.\n",
+        "El servicio contratado comprende únicamente la tramitación en primera instancia del asunto encomendado. Quedan expresamente excluidos, salvo pacto escrito adicional entre las partes, la presentación, defensa y tramitación de recursos procesales de segunda instancia o extraordinarios, tales como recursos de apelación, casación en la forma, casación en el fondo, nulidad, queja o unificación de jurisprudencia, cuyo eventual encargo dará lugar a honorarios adicionales que se acordarán separadamente.\n",
+        "En caso de que durante la tramitación del asunto encomendado surjan materias distintas de las descritas en la cláusula primera, las partes podrán suscribir un anexo al presente contrato en el que se individualicen los nuevos servicios y los honorarios correspondientes."
+    )
     
-    p3 = doc.add_paragraph()
-    p3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p3.add_run("\nCLÁUSULA TERCERA: CONDICIONES Y FORMA DE PAGO. ").bold = True
-    p3.add_run(f"La suma total de los honorarios fijados será prorrateada y pagada en un total de {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas por un valor individual de {datos['cuotas_monto']} cada una.\n")
+    # --- CLÁUSULA TERCERA: HONORARIOS ---
+    clausula(doc, "TERCERA", "HONORARIOS PROFESIONALES",
+        f"Los honorarios totales convenidos por la prestación de los servicios profesionales descritos ascienden a la suma de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n",
+        "Esta suma corresponde a la tramitación completa del asunto encomendado en primera instancia, conforme a lo señalado en la cláusula segunda, sin perjuicio de los honorarios adicionales que puedan devengarse por servicios excluidos o complementarios que las partes acuerden por separado."
+    )
+    
+    # --- CLÁUSULA CUARTA: FORMA DE PAGO ---
+    p4 = doc.add_paragraph()
+    p4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p4.add_run("\nCLÁUSULA CUARTA: CONDICIONES Y FORMA DE PAGO. ").bold = True
+    p4.add_run(f"La suma total de los honorarios fijados en la cláusula precedente será pagada en un total de {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas, por un valor individual de {datos['cuotas_monto']} cada una, conforme al siguiente plan de pago:\n")
     
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
@@ -640,51 +752,103 @@ def crear_contrato_word(datos):
         row_cells[2].text = str(datos['cuotas_monto'])
         row_cells[3].text = "PENDIENTE"
         
-    p3_bis = doc.add_paragraph()
-    p3_bis.add_run("\nInformación Bancaria para Transferencias Electrónicas:\n").bold = True
-    p3_bis.add_run(f"Titular de la Cuenta: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nInstitución Bancaria: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nNúmero de Cuenta: {datos['num_cuenta']}")
+    p4_bis = doc.add_paragraph()
+    p4_bis.add_run("\nInformación Bancaria para Transferencias Electrónicas:\n").bold = True
+    p4_bis.add_run(f"Titular de la Cuenta: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nInstitución Bancaria: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nNúmero de Cuenta: {datos['num_cuenta']}\n")
+    p4_bis.add_run("El Cliente deberá remitir el comprobante de cada pago al correo electrónico de El Abogado individualizado en la comparecencia, dentro de las 24 horas siguientes a su realización.")
 
-    p4 = doc.add_paragraph()
-    p4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p4.add_run("\nCLÁUSULA CUARTA: EFECTOS DEL INCUMPLIMIENTO Y MOROSIDAD. ").bold = True
-    p4.add_run("El cumplimiento exacto de los plazos de pago constituye un elemento esencial del presente contrato. Ante la ocurrencia de morosidad o retardo en el pago de cualquiera de las cuotas mensuales devengadas, operarán los siguientes efectos jurídicos:\n")
-    p4.add_run("Aceleración de la Deuda: ").bold = True
-    p4.add_run("La mora faculta de forma inmediata a exigir el cobro íntegro del saldo total que permanezca insoluto.\n")
-    p4.add_run("Suspensión Técnica: ").bold = True
-    p4.add_run("Un retraso superior a cinco días hábiles faculta la suspensión inmediata de la tramitación de escritos en los tribunales.\n")
-    p4.add_run("Sanción Penal: ").bold = True
-    p4.add_run("Se devengará una multa compensatoria equivalente a 0,15 Unidades de Fomento (UF) por cada jornada de atraso hasta el pago efectivo.")
-
-    p5 = doc.add_paragraph()
-    p5.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p5.add_run("\nCLÁUSULA QUINTA: OBLIGACIONES RECÍPOCAS DE LAS PARTES.\n").bold = True
-    p5.add_run("Obligación del Profesional: ").bold = True
-    p5.add_run("El Abogado asume una obligación de medios diligentes, debiendo desplegar todo su conocimiento técnico, técnico-jurídico y ético para la tramitación de la causa.\n")
-    p5.add_run("Obligación del Contratante: ").bold = True
-    p5.add_run("El Cliente se obliga de manera estricta a proporcionar toda la documentación de respaldo requerida en los plazos fijados por el profesional.")
-
-    num_clausula = 6
-    if datos['tipo_servicio'] == "Liquidación voluntaria":
-        doc.add_paragraph()
-        p6 = doc.add_paragraph()
-        p6.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p6.add_run("\nCLÁUSULA SEXTA: ENTREGA DE DECLARACIONES JURADAS OBLIGATORIAS. ").bold = True
-        p6.add_run("Atendida la naturaleza específica del procedimiento de insolvencia y liquidación voluntaria, el Cliente asume la obligación ineludible de suscribir y entregar las siguientes declaraciones juradas reguladas por la ley:\n")
-        p6.add_run("- Declaración Jurada de Bienes Excluidos o de Terceros.\n- Declaración Jurada de Listado Completo de Acreedores.\n- Consentimiento Informado Expreso de Efectos de la Liquidación.")
-        num_clausula += 1
-
-    diccionario_numeros = {6: "SEXTA", 7: "SÉPTIMA", 8: "OCTAVA"}
+    # --- CLÁUSULA QUINTA: PAGO DE HONORARIOS A TODO EVENTO ---
+    clausula(doc, "QUINTA", "DEL PAGO DE LOS HONORARIOS A TODO EVENTO",
+        "Los honorarios establecidos en la cláusula tercera deberán ser pagados a todo evento, incluso en el caso de que El Cliente decida revocar anticipadamente el patrocinio y poder conferidos a El Abogado, sin perjuicio de la liquidación proporcional que corresponda conforme a lo dispuesto en la cláusula décimo tercera."
+    )
     
-    p7 = doc.add_paragraph()
-    p7.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p7.add_run(f"\nCLÁUSULA {diccionario_numeros[num_clausula]}: DESISTIMIENTO UNILATERAL. ").bold = True
-    p7.add_run("En caso de que el Cliente decida poner término unilateral o desistirse del procedimiento judicial ya iniciado, los montos enterados a la fecha pertenecerán a El Abogado a título de honorarios devengados por concepto de estudio y redacción jurídica.")
-    num_clausula += 1
+    # --- CLÁUSULA SEXTA: GASTOS NECESARIOS ---
+    clausula(doc, "SEXTA", "GASTOS NECESARIOS PARA LA PRESTACIÓN DEL SERVICIO",
+        "Todos los gastos y tasas que resulten necesarios para la ejecución del encargo, tales como honorarios de Receptores Judiciales, peritos, Notarios Públicos, Conservadores de Bienes Raíces, inscripciones, publicaciones y notificaciones, serán de cargo exclusivo de El Cliente.\n",
+        "El Abogado informará oportunamente a El Cliente sobre los gastos en que deberá incurrirse, detallando su concepto y monto, y en caso de que dichos gastos hayan sido solventados directamente por El Abogado, El Cliente deberá reembolsarlos dentro de los cinco días hábiles siguientes a que le sea así informado, debiendo El Abogado conservar los respaldos respectivos para su exhibición cuando El Cliente así lo solicite."
+    )
+    
+    # --- CLÁUSULA SÉPTIMA: EFECTOS DEL INCUMPLIMIENTO Y MOROSIDAD ---
+    clausula(doc, "SÉPTIMA", "EFECTOS DEL INCUMPLIMIENTO Y MOROSIDAD",
+        "El cumplimiento exacto de los plazos de pago constituye un elemento esencial del presente contrato. Ante la ocurrencia de morosidad o retardo en el pago de cualquiera de las cuotas devengadas, operarán los siguientes efectos:\n",
+    )
+    doc.paragraphs[-1].add_run("Aceleración de la deuda: ").bold = True
+    doc.paragraphs[-1].add_run("la mora en el pago de una cuota faculta a El Abogado para exigir de forma inmediata el cobro íntegro del saldo total que permanezca insoluto.\n")
+    doc.paragraphs[-1].add_run("Suspensión de la tramitación: ").bold = True
+    doc.paragraphs[-1].add_run("un atraso superior a cinco días hábiles faculta a El Abogado para suspender la presentación de escritos y diligencias ante los tribunales respectivos, hasta la regularización del pago.\n")
+    doc.paragraphs[-1].add_run("Multa por atraso: ").bold = True
+    doc.paragraphs[-1].add_run("se devengará una multa compensatoria equivalente a 0,15 Unidades de Fomento (UF) por cada día de atraso, hasta el pago efectivo de lo adeudado.")
 
-    p8 = doc.add_paragraph()
-    p8.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p8.add_run(f"\nCLÁUSULA {diccionario_numeros[num_clausula]}: DOMICILIO CONVENCIONAL Y COMPETENCIA. ").bold = True
-    p8.add_run("Para todos los efectos legales y derivados del presente instrumento, las partes fijan su domicilio común en la comuna de Santiago y se someten a la prórroga de competencia de sus Tribunales Ordinarios de Justicia.\n\nEn señal de plena conformidad, se extiende el presente contrato en dos ejemplares idénticos.")
+    # --- CLÁUSULA OCTAVA: OBLIGACIONES RECÍPROCAS ---
+    p8 = clausula(doc, "OCTAVA", "OBLIGACIONES RECÍPROCAS DE LAS PARTES")
+    p8.add_run("\n")
+    p8.add_run("Obligaciones de El Abogado: ").bold = True
+    p8.add_run("El Abogado asume una obligación de medios, comprometiéndose a desplegar toda su diligencia, conocimiento técnico y ético en la tramitación del asunto encomendado, sin que ello implique en caso alguno una obligación de resultado ni la garantía de un desenlace favorable, atendida la naturaleza incierta de todo proceso judicial o administrativo.\n")
+    p8.add_run("Obligaciones de El Cliente: ").bold = True
+    p8.add_run("El Cliente se obliga a proporcionar de forma oportuna, veraz y completa toda la información y documentación que resulte necesaria para el correcto desarrollo del encargo, dentro de los plazos que El Abogado le indique, siendo el incumplimiento de esta obligación causal suficiente para la resciliación del presente contrato.\n")
+    p8.add_run("En caso de que la naturaleza del encargo requiera el uso de la Clave Única de El Cliente para gestiones ante la Oficina Judicial Virtual del Poder Judicial u otros organismos del Estado, El Cliente autoriza expresamente su uso por parte de El Abogado, exclusivamente para los fines del presente contrato, comprometiéndose este último a resguardar su confidencialidad e integridad y a no utilizarla para ningún otro propósito.")
+
+    # --- CLÁUSULA NOVENA: AUSENCIA DE RELACIÓN LABORAL ---
+    clausula(doc, "NOVENA", "AUSENCIA DE RELACIÓN LABORAL",
+        "Las partes dejan constancia que el vínculo que las une mediante el presente contrato es de naturaleza estrictamente civil, no existiendo entre ellas subordinación ni dependencia de ningún tipo, por lo que no se genera relación laboral alguna ni las obligaciones propias de dicho régimen."
+    )
+    
+    # --- CLÁUSULA DÉCIMA: CONFIDENCIALIDAD ---
+    clausula(doc, "DÉCIMA", "CONFIDENCIALIDAD",
+        "Toda la información y documentación que las partes intercambien con motivo de la celebración y ejecución del presente contrato tiene el carácter de confidencial, no pudiendo ser divulgada a terceros ajenos a la relación contractual sin el consentimiento previo y por escrito de la otra parte, salvo que su revelación sea exigida por ley o por orden de autoridad competente.\n",
+        "Esta obligación de confidencialidad subsistirá aun después de terminado el presente contrato, cualquiera sea la causa de su término."
+    )
+    
+    # --- CLÁUSULA DÉCIMO PRIMERA: PROTECCIÓN DE DATOS PERSONALES ---
+    clausula(doc, "DÉCIMO PRIMERA", "PROTECCIÓN DE DATOS PERSONALES",
+        "El Abogado tratará los datos personales que El Cliente le proporcione con motivo de la celebración y ejecución del presente contrato conforme a la normativa vigente sobre protección de la vida privada y de datos personales, utilizándolos exclusivamente para los fines del encargo profesional descrito en la cláusula primera.\n",
+        "El Cliente podrá, en cualquier momento, ejercer sus derechos de acceso, rectificación, cancelación, oposición y portabilidad respecto de sus datos personales, dirigiendo su solicitud al correo electrónico de El Abogado individualizado en la comparecencia."
+    )
+    
+    # --- CLÁUSULA DÉCIMO SEGUNDA: BUEN TRATO Y RESPETO MUTUO ---
+    clausula(doc, "DÉCIMO SEGUNDA", "DEL COMPROMISO DE BUEN TRATO Y RESPETO MUTUO",
+        "Las partes declaran que la relación contractual deberá fundarse en el respeto mutuo y en un trato digno y adecuado, libre de violencia, discriminación o agresión de cualquier naturaleza, en cumplimiento de la Ley N° 21.643 y su reglamento sobre prevención y sanción del acoso laboral, sexual y la violencia en el trabajo.\n",
+        "Esta obligación no obsta en caso alguno al derecho de El Cliente de formular consultas, expresar disconformidad o presentar reclamos respecto del servicio contratado, los que serán siempre recibidos y atendidos en un marco de respeto recíproco."
+    )
+    
+    # --- CLÁUSULA DÉCIMO TERCERA: TÉRMINO ANTICIPADO ---
+    clausula(doc, "DÉCIMO TERCERA", "DEL DESISTIMIENTO O TÉRMINO ANTICIPADO DEL CONTRATO",
+        "El presente contrato podrá terminar anticipadamente por mutuo acuerdo de las partes, por voluntad unilateral de cualquiera de ellas, o por incumplimiento grave de las obligaciones aquí pactadas.\n",
+        "La parte que decida poner término unilateral al contrato deberá comunicarlo a la otra por escrito, mediante carta certificada o correo electrónico, con a lo menos 15 días de anticipación. En caso de que el desistimiento provenga de El Cliente, los honorarios devengados hasta esa fecha por los servicios ya prestados o iniciados le pertenecerán a El Abogado a título de honorarios causados, sin derecho a devolución alguna, sin perjuicio del deber de este último de rendir cuenta de las gestiones realizadas y facilitar los antecedentes necesarios para que El Cliente pueda continuar la tramitación del asunto con otro profesional."
+    )
+    
+    # --- CLÁUSULA DÉCIMO CUARTA: CLÁUSULA PENAL ---
+    clausula(doc, "DÉCIMO CUARTA", "CLÁUSULA PENAL",
+        "En caso de incumplimiento de las obligaciones pactadas en este contrato por cualquiera de las partes, la parte incumplidora deberá pagar a la otra, a título de indemnización de perjuicios de avaluación anticipada, una suma equivalente a $500.000 (quinientos mil pesos), sin perjuicio del derecho de la parte afectada de exigir el cumplimiento forzado de lo pactado o la indemnización de los perjuicios efectivamente sufridos, si estos fueren mayores."
+    )
+    
+    # --- CLÁUSULA DÉCIMO QUINTA: DURACIÓN ---
+    clausula(doc, "DÉCIMO QUINTA", "DURACIÓN DEL SERVICIO",
+        "La duración del presente contrato se extenderá hasta la completa ejecución del encargo profesional descrito en la cláusula primera, dependiendo su plazo efectivo de las circunstancias procesales propias del asunto encomendado y de los tiempos de tramitación de los tribunales u organismos competentes, los que escapan al control de El Abogado."
+    )
+    
+    num_clausula_extra = 16
+    diccionario_numeros_extra = {16: "DÉCIMO SEXTA", 17: "DÉCIMO SÉPTIMA"}
+    
+    if datos['tipo_servicio'] == "Liquidación voluntaria":
+        p_extra = doc.add_paragraph()
+        p_extra.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_extra.add_run(f"\nCLÁUSULA {diccionario_numeros_extra[num_clausula_extra]}: ENTREGA DE DECLARACIONES JURADAS OBLIGATORIAS. ").bold = True
+        p_extra.add_run("Atendida la naturaleza específica del procedimiento de insolvencia y liquidación voluntaria, El Cliente asume la obligación ineludible de suscribir y entregar las siguientes declaraciones juradas exigidas por la normativa aplicable:\n")
+        p_extra.add_run("- Declaración Jurada de Bienes Excluidos o de Terceros.\n- Declaración Jurada de Listado Completo de Acreedores.\n- Consentimiento Informado Expreso de los Efectos de la Liquidación.")
+        num_clausula_extra += 1
+
+    diccionario_numeros_finales = {16: "DÉCIMO SEXTA", 17: "DÉCIMO SÉPTIMA", 18: "DÉCIMO OCTAVA"}
+    
+    clausula(doc, diccionario_numeros_finales[num_clausula_extra], "DOMICILIO CONVENCIONAL Y COMPETENCIA",
+        "Para todos los efectos legales derivados del presente instrumento, las partes fijan su domicilio en la comuna y ciudad de Santiago, y se someten a la competencia de sus Tribunales Ordinarios de Justicia."
+    )
+    num_clausula_extra += 1
+    
+    clausula(doc, diccionario_numeros_finales[num_clausula_extra], "COMUNICACIONES ENTRE LAS PARTES",
+        f"Para todos los efectos del presente contrato, se tendrán por válidas las comunicaciones dirigidas a los siguientes correos electrónicos y números de contacto: de El Cliente, {datos['cliente_correo']} / {datos['cliente_tel']}; y de El Abogado, {datos['abogado_correo']} / {datos['abogado_tel']}.\n\n",
+        "En señal de plena conformidad con todas y cada una de las cláusulas precedentes, se extiende el presente contrato en dos ejemplares de idéntico tenor, quedando uno en poder de cada parte."
+    )
 
     doc.add_paragraph("\n\n\n")
     table_firmas = doc.add_table(rows=1, cols=2)
@@ -849,6 +1013,13 @@ if "cliente_id" in query_params:
         
     df_docs = leer_csv_local(ARCHIVO_DOCS)
     mis_docs = df_docs[df_docs['Cliente_Token'] == token_cliente]
+    if mis_docs.empty and not df_docs.empty:
+        # Respaldo: si el token no calzó exacto (por ejemplo, un enlace generado antes
+        # de sanitizar tildes/comas), reintenta comparando solo letras/números/guion bajo
+        # de ambos lados, para que los enlaces antiguos no queden rotos.
+        token_normalizado = re.sub(r'[^A-Za-z0-9_]', '', token_cliente)
+        mascara_respaldo = df_docs['Cliente_Token'].astype(str).apply(lambda x: re.sub(r'[^A-Za-z0-9_]', '', x) == token_normalizado)
+        mis_docs = df_docs[mascara_respaldo]
     
     if mis_docs.empty:
         st.info("No registra solicitudes de documentos pendientes en este momento.")
@@ -1104,7 +1275,8 @@ else:
 if not os.path.exists(ARCHIVO_MENSAJES):
     pd.DataFrame(columns=['ID', 'Fecha', 'De', 'Para', 'Mensaje']).to_csv(ARCHIVO_MENSAJES, index=False)
 
-# --- NOTIFICADOR ESTILO OUTLOOK (TOAST) ---
+# --- NOTIFICADOR ESTILO OUTLOOK (TOAST + INSIGNIA PERSISTENTE EN EL MENÚ) ---
+BADGE_MENSAJES_NO_LEIDOS = 0
 if st.session_state['logged_in']:
     if os.path.exists(ARCHIVO_MENSAJES):
         df_msgs_alerta = leer_csv_local(ARCHIVO_MENSAJES)
@@ -1115,7 +1287,12 @@ if st.session_state['logged_in']:
         elif len(mis_mensajes) > st.session_state['ultimo_mensaje_leido']:
             mensajes_nuevos = len(mis_mensajes) - st.session_state['ultimo_mensaje_leido']
             st.toast(f"🔔 ¡Tienes {mensajes_nuevos} mensaje(s) nuevo(s) en tu buzón!", icon="📩")
-            st.session_state['ultimo_mensaje_leido'] = len(mis_mensajes)
+        
+        # A diferencia del toast (que se ve una sola vez y desaparece), esta insignia
+        # se recalcula en cada rerun y queda pegada al botón de Mensajería del menú
+        # lateral hasta que el usuario entre efectivamente a leer sus mensajes.
+        BADGE_MENSAJES_NO_LEIDOS = max(0, len(mis_mensajes) - st.session_state['ultimo_mensaje_leido'])
+        st.session_state['_total_mensajes_para_mi'] = len(mis_mensajes)
 
 # --- FUNCIÓN DE AUTOLIMPIEZA SISTEMA (15 DÍAS EXACTOS) ---
 def limpiar_documentos_estado_diario():
@@ -1298,9 +1475,15 @@ with st.sidebar:
         opciones_flujo.append("👑 Panel Admin")
 
     for i, opcion in enumerate(opciones_flujo):
-        if st.button(opcion, use_container_width=True, key=f"btn_nav_{i}"):
+        etiqueta_boton = opcion
+        if opcion == "✈️ Mensajería" and BADGE_MENSAJES_NO_LEIDOS > 0:
+            etiqueta_boton = f"✈️ Mensajería 🔴 {BADGE_MENSAJES_NO_LEIDOS}"
+        if st.button(etiqueta_boton, use_container_width=True, key=f"btn_nav_{i}"):
             st.session_state['menu_radio'] = opcion
             resetear_vistas()
+            if opcion == "✈️ Mensajería":
+                # Al entrar de verdad a leer el buzón, se marca todo como leído.
+                st.session_state['ultimo_mensaje_leido'] = st.session_state.get('_total_mensajes_para_mi', st.session_state.get('ultimo_mensaje_leido', 0))
             st.rerun()
 
     st.markdown("<br><br>", unsafe_allow_html=True)
@@ -2274,7 +2457,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 with st.form("form_crear_causa"):
                     c_nuevo1, c_nuevo2 = st.columns(2)
                     n_rol = c_nuevo1.text_input("ROL / RIT", placeholder="Ej: C-123-2024")
-                    n_trib = c_nuevo2.text_input("Tribunal", placeholder="Ej: 1° Juzgado Civil de Santiago")
+                    n_trib = selector_tribunal(key_prefix="nuevo_causa")
                     n_carat = st.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
                     
                     st.markdown("#### Asociar a un Cliente Existente")
@@ -2398,7 +2581,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         
         c_head1, c_head2 = st.columns([4, 1])
         with c_head1:
-            st.markdown(f"<h2>Expediente Causa: {c_data.get('CARATULADO','')}</h2>", unsafe_allow_html=True)
+            st.markdown(f"<h2>{c_data.get('CARATULADO','')}</h2>", unsafe_allow_html=True)
             if ES_ADMIN_NARRATIA and _propietario_vista and _propietario_vista != usuario_actual:
                 nombre_dueno_exp = NOMBRES_REALES.get(_propietario_vista, _propietario_vista)
                 st.markdown(f"<span style='background:#fff0e0; color:#ff8b00; font-size:12px; font-weight:700; padding:3px 10px; border-radius:10px;'>👤 Causa de {nombre_dueno_exp} — estás viendo/editando el expediente real de su cartera</span>", unsafe_allow_html=True)
@@ -2429,7 +2612,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             if st.session_state['modo_edicion']:
                 with st.form("form_edicion_causa"):
                     st.markdown("#### Datos de Litigación")
-                    n_tribunal = st.text_input("Tribunal", str(c_data.get('TRIBUNAL','')))
+                    n_tribunal = selector_tribunal(str(c_data.get('TRIBUNAL','')), key_prefix="editar_causa")
                     n_serv = st.text_input("Servicio Contratado", str(c_data.get('Servicio','')))
                     n_negocio = st.selectbox("Origen de Cartera", ["Externo", "Propio"], index=0 if c_data.get('Tipo_Negocio') == "Externo" else 1)
                     
@@ -2504,7 +2687,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 """, unsafe_allow_html=True)
                 
         with col_izq:
-            tab_movs, tab_tareas_internas, tab_legacy, tab_docs_solicitados = st.tabs(["Movimientos", "Tareas Operativas", "Movimientos legacy", "📥 Docs Cliente"])
+            tab_tareas_internas, tab_docs_solicitados = st.tabs(["Tareas Operativas", "📥 Docs Cliente"])
             
             with tab_tareas_internas:
                 if st.button("+ Asignar Nueva Tarea Operativa", type="primary"):
@@ -2649,9 +2832,19 @@ elif st.session_state['menu_radio'] == "💼 Causas":
 
             with tab_docs_solicitados:
                 st.subheader("📋 Gestión de Requisitos del Cliente")
-                token_para_link = str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_")
-                link_portal_final = f"https://narratia-app.streamlit.app/?cliente_id={token_para_link}"
+                # El nombre del cliente puede traer tildes, comas u otros caracteres que
+                # rompen la URL al compartirla por WhatsApp/correo. Se deja solo
+                # letras, números y guion bajo, para que el enlace nunca falle por esto.
+                token_para_link = re.sub(r'[^A-Za-z0-9_]', '', str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_"))
+                # IMPORTANTE: esta URL base es la de TU app en Streamlit Cloud. Si Streamlit
+                # te asignó una URL distinta a "narratia-app.streamlit.app" (a veces pasa si
+                # ese nombre corto ya estaba tomado), el enlace de abajo no va a funcionar
+                # para el cliente. Puedes fijar la URL real en Streamlit Cloud -> Settings ->
+                # Secrets con: APP_BASE_URL = "https://tu-url-real.streamlit.app"
+                APP_BASE_URL = st.secrets.get("APP_BASE_URL", "https://narratia-app.streamlit.app").rstrip("/")
+                link_portal_final = f"{APP_BASE_URL}/?cliente_id={token_para_link}"
                 st.info(f"🔗 **Enlace del Portal para el Cliente:**\n`{link_portal_final}`")
+                st.caption("⚠️ Si el cliente te dice que el enlace no abre, copia la URL exacta que te muestra tu navegador cuando entras a JuriSync y compárala con la de arriba. Si son distintas, avísale a Nicolás para fijar la URL correcta en la configuración.")
                 
                 with st.form(key=f"form_agregar_requisito_{rol_actual}", clear_on_submit=True):
                     st.markdown("#### Solicitar Nuevo Documento")
@@ -2751,7 +2944,28 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
     st.title("✈️ Mensajería Interna del Equipo")
     st.markdown("Plataforma de comunicación rápida para la oficina.")
     
+    ES_ADMIN_MENSAJES = usuario_actual == "Narratia"
+    
+    c_tit_msj, c_refresh_msj = st.columns([4, 1])
+    with c_refresh_msj:
+        if st.button("🔄 Actualizar", key="refresh_mensajes", use_container_width=True):
+            if "_csv_cache_" + ARCHIVO_MENSAJES in st.session_state:
+                del st.session_state["_csv_cache_" + ARCHIVO_MENSAJES]
+            st.rerun()
+    
     df_msgs = leer_csv_local(ARCHIVO_MENSAJES)
+    
+    # PRIVACIDAD: solo el administrador (Narratia) ve absolutamente todos los
+    # mensajes del equipo. El resto de los usuarios solo ve las conversaciones
+    # en las que participa directamente (las envió, se las enviaron a él/ella
+    # de forma directa, o fueron enviadas a "Todos"). No pueden ver mensajes
+    # privados entre otros dos compañeros.
+    if not ES_ADMIN_MENSAJES and not df_msgs.empty:
+        df_msgs = df_msgs[
+            (df_msgs['De'] == nombre_real_usuario) |
+            (df_msgs['Para'] == nombre_real_usuario) |
+            (df_msgs['Para'] == 'Todos')
+        ]
     
     with st.container(height=500):
         if df_msgs.empty:
@@ -2780,6 +2994,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
         texto_mensaje = c_texto.text_input("Escribe tu mensaje...", label_visibility="collapsed", placeholder="Escribe un mensaje aquí...")
         if c_btn.form_submit_button("Enviar 🚀", type="primary", use_container_width=True):
             if texto_mensaje.strip() != "":
+                df_msgs_todos = leer_csv_local(ARCHIVO_MENSAJES)
                 nuevo_msj = {
                     'ID': str(uuid.uuid4())[:8],
                     'Fecha': datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -2787,8 +3002,8 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                     'Para': destinatario,
                     'Mensaje': texto_mensaje.strip()
                 }
-                df_msgs = pd.concat([df_msgs, pd.DataFrame([nuevo_msj])], ignore_index=True)
-                df_msgs.to_csv(ARCHIVO_MENSAJES, index=False)
+                df_msgs_todos = pd.concat([df_msgs_todos, pd.DataFrame([nuevo_msj])], ignore_index=True)
+                df_msgs_todos.to_csv(ARCHIVO_MENSAJES, index=False)
                 st.rerun()
 
 # 10. CLIENTES DIRECTOS (FICHA COMPLETA Y RELACIONAL)
@@ -2980,9 +3195,8 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                 # --- NUEVA FUNCIÓN: CREAR CAUSA DESDE EL CLIENTE ---
                 with st.expander("➕ Asociar Nueva Causa a este Cliente"):
                     with st.form("form_asociar_causa"):
-                        c_n1, c_n2 = st.columns(2)
-                        rol_n = c_n1.text_input("Nuevo ROL / RIT", placeholder="Ej: C-123-2026")
-                        trib_n = c_n2.text_input("Tribunal", placeholder="Ej: 1° Juzgado Civil")
+                        rol_n = st.text_input("Nuevo ROL / RIT", placeholder="Ej: C-123-2026")
+                        trib_n = selector_tribunal(key_prefix="asociar_causa_cliente")
                         carat_n = st.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
                         neg_n = st.selectbox("Origen de Cartera", ["Propio", "Externo"])
                         
