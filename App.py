@@ -2330,7 +2330,18 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     fecha_pago = st.date_input("Primera Mensualidad", key="gen_con_fecha")
                 with c_p2:
                     valor_cuota_sugerido = hon_num_int // cuotas_c if cuotas_c > 0 else 0
-                    cuotas_m_texto = st.text_input("Valor por Cuota ($)", value=formatear_clp(valor_cuota_sugerido), key="gen_con_cuotasm", help="Se sugiere automático (total ÷ cuotas). Puedes cambiarlo si las cuotas no son parejas.")
+                    # Streamlit ignora el "value=" de un widget en los reruns siguientes
+                    # si ya existe algo guardado bajo su misma key (así fallaba antes: el
+                    # campo se llenaba una vez y quedaba "pegado"). Para que se recalcule
+                    # de verdad cada vez que cambian el total o la cantidad de cuotas,
+                    # se sobreescribe el session_state ANTES de crear el widget, solo
+                    # cuando esos dos valores base cambiaron (así no se pisa una edición
+                    # manual tuya si no tocaste ni el total ni la cantidad de cuotas).
+                    _clave_base_cuota = f"{hon_num_int}|{cuotas_c}"
+                    if st.session_state.get('_ultima_base_cuota') != _clave_base_cuota:
+                        st.session_state['gen_con_cuotasm'] = formatear_clp(valor_cuota_sugerido)
+                        st.session_state['_ultima_base_cuota'] = _clave_base_cuota
+                    cuotas_m_texto = st.text_input("Valor por Cuota ($)", key="gen_con_cuotasm", help="Se recalcula automático (total ÷ cuotas) cada vez que cambias el monto total o la cantidad de cuotas. Puedes editarlo a mano si las cuotas no son parejas.")
                     cuotas_m_int = parsear_monto_clp(cuotas_m_texto)
                     st.caption(f"💰 {formatear_clp(cuotas_m_int)} por cuota")
                     banco = st.text_input("Banco", key="gen_con_banco")
@@ -2764,6 +2775,12 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 st.session_state['causa_seleccionada'] = None
                 st.session_state['causa_propietario_vista'] = None
                 st.rerun()
+            if st.button("✍️ Redactar Escrito", help="Abre el Redactor IA con el Rol, Tribunal y Caratulado de esta causa ya cargados."):
+                st.session_state['redactor_prefill'] = {
+                    'rol': c_data.get('ROL', ''), 'tribunal': c_data.get('TRIBUNAL', ''), 'caratulado': c_data.get('CARATULADO', '')
+                }
+                st.session_state['menu_radio'] = "📝 Redactor IA"
+                st.rerun()
                 
         col_izq, col_der = st.columns([2.5, 1.2])
         
@@ -3186,6 +3203,38 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
     st.markdown("<span style='color:#6b778c;'>Gestione y organice la información de sus clientes de manera eficiente.</span>", unsafe_allow_html=True)
     
     df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
+
+    with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
+        rut_conflicto = st.text_input("RUT a verificar", placeholder="Ej: 12.345.678-9", key="buscar_conflicto_rut")
+        if rut_conflicto.strip():
+            rut_normalizado = re.sub(r'[^0-9kK]', '', rut_conflicto).upper()
+            
+            # Se revisa en TODAS las causas que existan en el disco (de todos los
+            # abogados, no solo las tuyas), porque un conflicto de interés hay que
+            # detectarlo aunque el caso lo haya llevado otro compañero del estudio.
+            piezas_conflicto = []
+            for arch_conf in glob.glob("base_causas_*.csv"):
+                t_conf = leer_csv_local(arch_conf)
+                if not t_conf.empty and 'RUT' in t_conf.columns:
+                    propietario_conf = arch_conf.replace("base_causas_", "").replace(".csv", "")
+                    t_conf = t_conf.copy()
+                    t_conf['Propietario_Vista'] = propietario_conf
+                    piezas_conflicto.append(t_conf)
+            df_todas_causas_conf = pd.concat(piezas_conflicto, ignore_index=True) if piezas_conflicto else pd.DataFrame()
+            
+            resultados_conflicto = pd.DataFrame()
+            if not df_todas_causas_conf.empty:
+                mascara_rut = df_todas_causas_conf['RUT'].astype(str).apply(lambda x: re.sub(r'[^0-9kK]', '', x).upper() == rut_normalizado)
+                resultados_conflicto = df_todas_causas_conf[mascara_rut]
+            
+            if resultados_conflicto.empty:
+                st.success("✅ No se encontraron causas asociadas a este RUT en todo el estudio. No hay conflicto de interés detectado.")
+            else:
+                st.warning(f"⚠️ Este RUT aparece en {len(resultados_conflicto)} causa(s) del estudio — revisa antes de aceptar un caso nuevo:")
+                for _, fila_conf in resultados_conflicto.iterrows():
+                    nombre_resp = NOMBRES_REALES.get(fila_conf.get('Propietario_Vista'), fila_conf.get('Propietario_Vista'))
+                    st.markdown(f"- **{fila_conf.get('ROL','--')}** — {fila_conf.get('CARATULADO','--')} · Cliente: {fila_conf.get('Cliente','--')} · Responsable: {nombre_resp}")
+            st.caption("Este buscador revisa por coincidencia exacta de RUT en las causas registradas. No reemplaza el criterio profesional del abogado.")
 
     if st.session_state['cliente_seleccionado'] is None:
         if st.button("➕ Crear Nuevo Cliente", type="primary"):
@@ -3799,6 +3848,16 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
     st.title("📝 Redactor Automático de Escritos")
     st.markdown("La IA redactará el borrador del escrito judicial con el formato y lenguaje formal de los tribunales chilenos, listo para revisar y presentar.")
     
+    # AUTOCOMPLETADO CONTEXTUAL: si llegaste aquí desde el botón "Redactar Escrito"
+    # de una causa, se precargan el Rol/Tribunal/Caratulado de esa causa, para no
+    # tener que volver a escribirlos. Se usa una sola vez y luego se limpia.
+    _prefill_redactor = st.session_state.pop('redactor_prefill', None)
+    if _prefill_redactor:
+        st.session_state['redactor_rol_key'] = _prefill_redactor.get('rol', '')
+        st.session_state['redactor_trib_key'] = _prefill_redactor.get('tribunal', '')
+        st.session_state['redactor_carat_key'] = _prefill_redactor.get('caratulado', '')
+        st.info(f"✅ Datos de la causa **{_prefill_redactor.get('rol','')}** cargados automáticamente.")
+    
     with st.container(border=True):
         col_r1, col_r2 = st.columns(2)
         tipo_escrito = col_r1.selectbox("Tipo de Escrito", [
@@ -3809,10 +3868,10 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
             "Solicitud de Abandono del Procedimiento",
             "Otro (Especificar en instrucciones)"
         ])
-        tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)")
+        tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)", key="redactor_trib_key")
         
-        rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026")
-        caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO")
+        rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026", key="redactor_rol_key")
+        caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO", key="redactor_carat_key")
         
         instrucciones_red = st.text_area("Instrucciones específicas para el escrito:", height=150, placeholder="Ej: Redactar excepción N° 17 de prescripción. La deuda se hizo exigible en marzo de 2024 y notificaron recién ayer. Alega también costas.")
         
