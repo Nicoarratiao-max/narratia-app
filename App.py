@@ -1385,21 +1385,29 @@ if not os.path.exists(ARCHIVO_MENSAJES):
 # --- NOTIFICADOR ESTILO OUTLOOK (TOAST + INSIGNIA PERSISTENTE EN EL MENÚ) ---
 BADGE_MENSAJES_NO_LEIDOS = 0
 if st.session_state['logged_in']:
-    if os.path.exists(ARCHIVO_MENSAJES):
-        df_msgs_alerta = leer_csv_local(ARCHIVO_MENSAJES)
-        mis_mensajes = df_msgs_alerta[(df_msgs_alerta['Para'] == nombre_real_usuario) | (df_msgs_alerta['Para'] == 'Todos')]
-        
-        if 'ultimo_mensaje_leido' not in st.session_state:
-            st.session_state['ultimo_mensaje_leido'] = len(mis_mensajes)
-        elif len(mis_mensajes) > st.session_state['ultimo_mensaje_leido']:
-            mensajes_nuevos = len(mis_mensajes) - st.session_state['ultimo_mensaje_leido']
-            st.toast(f"🔔 ¡Tienes {mensajes_nuevos} mensaje(s) nuevo(s) en tu buzón!", icon="📩")
-        
-        # A diferencia del toast (que se ve una sola vez y desaparece), esta insignia
-        # se recalcula en cada rerun y queda pegada al botón de Mensajería del menú
-        # lateral hasta que el usuario entre efectivamente a leer sus mensajes.
-        BADGE_MENSAJES_NO_LEIDOS = max(0, len(mis_mensajes) - st.session_state['ultimo_mensaje_leido'])
-        st.session_state['_total_mensajes_para_mi'] = len(mis_mensajes)
+    try:
+        if os.path.exists(ARCHIVO_MENSAJES):
+            df_msgs_alerta = leer_csv_local(ARCHIVO_MENSAJES, ['ID', 'Fecha', 'De', 'Para', 'Mensaje'])
+            if not df_msgs_alerta.empty and 'Para' in df_msgs_alerta.columns:
+                mis_mensajes = df_msgs_alerta[(df_msgs_alerta['Para'] == nombre_real_usuario) | (df_msgs_alerta['Para'] == 'Todos')]
+                
+                if 'ultimo_mensaje_leido' not in st.session_state:
+                    st.session_state['ultimo_mensaje_leido'] = len(mis_mensajes)
+                elif len(mis_mensajes) > st.session_state['ultimo_mensaje_leido']:
+                    mensajes_nuevos = len(mis_mensajes) - st.session_state['ultimo_mensaje_leido']
+                    st.toast(f"🔔 ¡Tienes {mensajes_nuevos} mensaje(s) nuevo(s) en tu buzón!", icon="📩")
+                
+                # A diferencia del toast (que se ve una sola vez y desaparece), esta insignia
+                # se recalcula en cada rerun y queda pegada al botón de Mensajería del menú
+                # lateral hasta que el usuario entre efectivamente a leer sus mensajes.
+                BADGE_MENSAJES_NO_LEIDOS = max(0, len(mis_mensajes) - st.session_state['ultimo_mensaje_leido'])
+                st.session_state['_total_mensajes_para_mi'] = len(mis_mensajes)
+    except Exception:
+        # Este bloque corre en CADA carga de página para CUALQUIER usuario logueado.
+        # Si algo falla aquí (archivo dañado, columna faltante, etc.), jamás debe
+        # tumbar toda la app — en el peor caso, simplemente no se muestra la
+        # insignia de mensajes no leídos por esta vez.
+        BADGE_MENSAJES_NO_LEIDOS = 0
 
 # --- FUNCIÓN DE AUTOLIMPIEZA SISTEMA (15 DÍAS EXACTOS) ---
 def limpiar_documentos_estado_diario():
