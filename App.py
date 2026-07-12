@@ -195,6 +195,96 @@ def _corregir_dtypes_texto(df):
             df[col] = df[col].astype(object)
     return df
 
+def parsear_monto_clp(texto) -> int:
+    """
+    Interpreta un monto en formato chileno. En Chile el punto se usa como
+    separador de miles, NUNCA de decimales (el peso chileno no usa centavos
+    en el uso corriente). Por eso "500.000" debe leerse como 500 mil, no
+    como 500 con tres decimales. La forma más segura de lograr esto es
+    quedarse solo con los dígitos y descartar cualquier punto, coma o símbolo.
+    """
+    if texto is None:
+        return 0
+    solo_digitos = re.sub(r'[^0-9]', '', str(texto))
+    return int(solo_digitos) if solo_digitos else 0
+
+def formatear_clp(monto) -> str:
+    """Formatea un entero como moneda chilena: 500000 -> '$500.000'."""
+    try:
+        return f"${int(monto):,.0f}".replace(",", ".")
+    except (ValueError, TypeError):
+        return "$0"
+
+def numero_a_letras_clp(monto: int) -> str:
+    """
+    Convierte un monto entero a su forma escrita en español, para no tener
+    que redactar 'Valor en Letras' a mano cada vez (ej: 500000 ->
+    'quinientos mil pesos'). Cubre montos hasta 999.999.999, más que
+    suficiente para honorarios profesionales.
+    """
+    monto = int(monto)
+    if monto == 0:
+        return "cero pesos"
+    if monto == 1:
+        return "un peso"
+    
+    UNIDADES = ["", "uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"]
+    DIECIS = ["diez", "once", "doce", "trece", "catorce", "quince", "dieciséis", "diecisiete", "dieciocho", "diecinueve"]
+    DECENAS = ["", "", "veinte", "treinta", "cuarenta", "cincuenta", "sesenta", "setenta", "ochenta", "noventa"]
+    CENTENAS = ["", "ciento", "doscientos", "trescientos", "cuatrocientos", "quinientos", "seiscientos", "setecientos", "ochocientos", "novecientos"]
+    
+    def _tres_digitos(n, femenino=False, apocope_uno=False):
+        if n == 0:
+            return ""
+        if n == 100:
+            return "cien"
+        c, resto = divmod(n, 100)
+        partes = []
+        if c > 0:
+            partes.append(CENTENAS[c])
+        if resto > 0:
+            if resto < 10:
+                u = "una" if (femenino and resto == 1) else UNIDADES[resto]
+                partes.append(u)
+            elif resto < 20:
+                partes.append(DIECIS[resto - 10])
+            else:
+                d, u = divmod(resto, 10)
+                if u == 0:
+                    partes.append(DECENAS[d])
+                elif d == 2:
+                    partes.append(f"veinti{UNIDADES[u] if u != 1 else 'uno' if not femenino else 'una'}")
+                else:
+                    u_txt = ("una" if femenino else "uno") if u == 1 else UNIDADES[u]
+                    partes.append(f"{DECENAS[d]} y {u_txt}")
+        texto = " ".join(partes)
+        # Apócope: "veintiuno mil" -> "veintiún mil", "treinta y uno mil" -> "treinta y un mil"
+        if apocope_uno and texto.endswith("uno"):
+            texto = texto[:-3] + "ún" if texto.endswith("veintiuno") else texto[:-3] + "un"
+        return texto
+    
+    millones, resto_m = divmod(monto, 1_000_000)
+    miles, unidades_finales = divmod(resto_m, 1_000)
+    
+    trozos = []
+    if millones > 0:
+        if millones == 1:
+            trozos.append("un millón")
+        else:
+            trozos.append(f"{_tres_digitos(millones, apocope_uno=True)} millones")
+    if miles > 0:
+        if miles == 1:
+            trozos.append("mil")
+        else:
+            trozos.append(f"{_tres_digitos(miles, apocope_uno=True)} mil")
+    if unidades_finales > 0:
+        trozos.append(_tres_digitos(unidades_finales))
+    
+    # Regla gramatical: "un millón DE pesos" cuando no hay nada más entre
+    # medio, pero "un millón doscientos mil pesos" (sin "de") cuando sí lo hay.
+    sufijo = " de pesos" if (millones > 0 and miles == 0 and unidades_finales == 0) else " pesos"
+    return " ".join(trozos).strip().capitalize() + sufijo
+
 def boton_refrescar_equipo(key):
     """Fuerza una relectura desde disco de todos los archivos base_causas_*/base_tareas_*
     del equipo, por si un cambio reciente de otro usuario no se refleja aún."""
@@ -678,8 +768,13 @@ def crear_contrato_word(datos):
     doc = Document()
     style = doc.styles['Normal']
     font = style.font
-    font.name = 'Arial'
+    font.name = 'Calibri'
     font.size = Pt(11)
+    # Interlineado 1.5 aplicado a nivel de estilo 'Normal': como todos los
+    # párrafos del documento usan ese estilo por defecto, esto alcanza a todo
+    # el contrato de una vez, sin tener que tocar párrafo por párrafo.
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(6)
     
     def clausula(doc, numero_texto, titulo_texto, *runs_de_texto):
         """Helper para no repetir el mismo bloque de formato en cada cláusula."""
@@ -753,6 +848,7 @@ def crear_contrato_word(datos):
         row_cells[3].text = "PENDIENTE"
         
     p4_bis = doc.add_paragraph()
+    p4_bis.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     p4_bis.add_run("\nInformación Bancaria para Transferencias Electrónicas:\n").bold = True
     p4_bis.add_run(f"Titular de la Cuenta: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nInstitución Bancaria: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nNúmero de Cuenta: {datos['num_cuenta']}\n")
     p4_bis.add_run("El Cliente deberá remitir el comprobante de cada pago al correo electrónico de El Abogado individualizado en la comparecencia, dentro de las 24 horas siguientes a su realización.")
@@ -828,7 +924,9 @@ def crear_contrato_word(datos):
     )
     
     num_clausula_extra = 16
-    diccionario_numeros_extra = {16: "DÉCIMO SEXTA", 17: "DÉCIMO SÉPTIMA"}
+    diccionario_numeros_extra = {
+        16: "DÉCIMO SEXTA", 17: "DÉCIMO SÉPTIMA", 18: "DÉCIMO OCTAVA", 19: "DÉCIMO NOVENA", 20: "VIGÉSIMA"
+    }
     
     if datos['tipo_servicio'] == "Liquidación voluntaria":
         p_extra = doc.add_paragraph()
@@ -838,14 +936,23 @@ def crear_contrato_word(datos):
         p_extra.add_run("- Declaración Jurada de Bienes Excluidos o de Terceros.\n- Declaración Jurada de Listado Completo de Acreedores.\n- Consentimiento Informado Expreso de los Efectos de la Liquidación.")
         num_clausula_extra += 1
 
-    diccionario_numeros_finales = {16: "DÉCIMO SEXTA", 17: "DÉCIMO SÉPTIMA", 18: "DÉCIMO OCTAVA"}
-    
-    clausula(doc, diccionario_numeros_finales[num_clausula_extra], "DOMICILIO CONVENCIONAL Y COMPETENCIA",
+    # --- CLÁUSULA CONDICIONAL: DOCUMENTOS QUE EL CLIENTE DEBE REUNIR ---
+    if datos.get('documentos_requeridos', '').strip():
+        lineas_docs = [l.strip() for l in datos['documentos_requeridos'].strip().split("\n") if l.strip()]
+        p_docs = doc.add_paragraph()
+        p_docs.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_docs.add_run(f"\nCLÁUSULA {diccionario_numeros_extra[num_clausula_extra]}: DOCUMENTACIÓN A REUNIR POR EL CLIENTE. ").bold = True
+        p_docs.add_run("Para dar inicio a la redacción de la gestión encomendada en la cláusula primera, El Cliente se obliga a reunir y hacer entrega a El Abogado, a la brevedad posible, de los siguientes documentos y antecedentes:\n")
+        p_docs.add_run("\n".join([f"- {linea}" for linea in lineas_docs]))
+        p_docs.add_run("\n\nLa demora injustificada en la entrega de estos antecedentes podrá afectar los plazos de tramitación del asunto encomendado, sin que ello sea imputable a El Abogado.")
+        num_clausula_extra += 1
+
+    clausula(doc, diccionario_numeros_extra[num_clausula_extra], "DOMICILIO CONVENCIONAL Y COMPETENCIA",
         "Para todos los efectos legales derivados del presente instrumento, las partes fijan su domicilio en la comuna y ciudad de Santiago, y se someten a la competencia de sus Tribunales Ordinarios de Justicia."
     )
     num_clausula_extra += 1
     
-    clausula(doc, diccionario_numeros_finales[num_clausula_extra], "COMUNICACIONES ENTRE LAS PARTES",
+    clausula(doc, diccionario_numeros_extra[num_clausula_extra], "COMUNICACIONES ENTRE LAS PARTES",
         f"Para todos los efectos del presente contrato, se tendrán por válidas las comunicaciones dirigidas a los siguientes correos electrónicos y números de contacto: de El Cliente, {datos['cliente_correo']} / {datos['cliente_tel']}; y de El Abogado, {datos['abogado_correo']} / {datos['abogado_tel']}.\n\n",
         "En señal de plena conformidad con todas y cada una de las cláusulas precedentes, se extiende el presente contrato en dos ejemplares de idéntico tenor, quedando uno en poder de cada parte."
     )
@@ -2209,6 +2316,36 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     st.session_state['gen_con_detalle'] = finalidad_auto
                     st.session_state['_ultima_seleccion_clausula'] = _clave_seleccion_actual
 
+            # --- Honorarios y vínculo con causa: FUERA del form, para que el
+            # "Valor en Letras" y el "Valor por Cuota" se calculen solos apenas
+            # escribes el monto, sin tener que enviarlo primero. ---
+            with st.container(border=True):
+                st.markdown("#### Módulo 4: Honorarios y Cuotas (se calculan solas)")
+                c_p1, c_p2 = st.columns(2)
+                with c_p1:
+                    hon_num_texto = st.text_input("Valor Total ($)", "2.500.000", key="gen_con_honnum", help="Escríbelo como quieras: 500000, 500.000 o $500.000 — el sistema lo entiende igual.")
+                    hon_num_int = parsear_monto_clp(hon_num_texto)
+                    st.caption(f"💰 {formatear_clp(hon_num_int)} → *{numero_a_letras_clp(hon_num_int)}*")
+                    cuotas_c = st.number_input("Cantidad de Cuotas", min_value=1, max_value=360, value=2, step=1, key="gen_con_cuotasc", help="La cantidad de cuotas la defines tú libremente.")
+                    fecha_pago = st.date_input("Primera Mensualidad", key="gen_con_fecha")
+                with c_p2:
+                    valor_cuota_sugerido = hon_num_int // cuotas_c if cuotas_c > 0 else 0
+                    cuotas_m_texto = st.text_input("Valor por Cuota ($)", value=formatear_clp(valor_cuota_sugerido), key="gen_con_cuotasm", help="Se sugiere automático (total ÷ cuotas). Puedes cambiarlo si las cuotas no son parejas.")
+                    cuotas_m_int = parsear_monto_clp(cuotas_m_texto)
+                    st.caption(f"💰 {formatear_clp(cuotas_m_int)} por cuota")
+                    banco = st.text_input("Banco", key="gen_con_banco")
+                    tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"], key="gen_con_tipocta")
+                    num_cta = st.text_input("Número de Cuenta", key="gen_con_numcta")
+            
+            with st.container(border=True):
+                st.markdown("#### Módulo 5: Vincular a una Causa (opcional, pero recomendado)")
+                st.caption("Si eliges una causa, la Contabilidad de esa causa se completa sola con estos honorarios y cuotas — no tienes que volver a escribirlo ahí.")
+                df_causas_para_vincular = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                opciones_causa_vinculo = ["➕ Ninguna (crear después / sin causa aún)"]
+                if not df_causas_para_vincular.empty:
+                    opciones_causa_vinculo += [f"{r['ROL']} — {r.get('CARATULADO','')}" for _, r in df_causas_para_vincular.iterrows()]
+                causa_vinculo_sel = st.selectbox("Causa a la que corresponden estos honorarios", opciones_causa_vinculo, key="gen_con_causa_vinculo")
+
             with st.form("form_generador_contratos", clear_on_submit=False):
                 detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100, key="gen_con_detalle", help="Se autocompleta según la acción elegida arriba. Puedes editarla libremente antes de generar el contrato.")
                 
@@ -2229,28 +2366,23 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         cli_dom = st.text_input("Domicilio", key="gen_con_clidom")
                         cli_tel = st.text_input("Teléfono Particular", key="gen_con_clitel")
                         cli_correo = st.text_input("Correo Particular", key="gen_con_clicor")
-                        
+                
                 with st.container(border=True):
-                    st.markdown("#### Módulo 4: Honorarios y Cuenta")
-                    c_p1, c_p2 = st.columns(2)
-                    with c_p1: 
-                        hon_num = st.text_input("Valor Total ($)", "2500000", key="gen_con_honnum") 
-                        hon_let = st.text_input("Valor en Letras", key="gen_con_honlet")
-                        cuotas_c = st.number_input("Cuotas", 12, key="gen_con_cuotasc")
-                        cuotas_m = st.text_input("Valor Cuota ($)", key="gen_con_cuotasm")
-                        fecha_pago = st.date_input("Primera Mensualidad", key="gen_con_fecha")
-                    with c_p2: 
-                        banco = st.text_input("Banco", key="gen_con_banco")
-                        tipo_cta = st.selectbox("Tipo de Cuenta", ["Cuenta Corriente", "Cuenta Vista", "Cuenta RUT", "Chequera Electrónica"], key="gen_con_tipocta")
-                        num_cta = st.text_input("Número de Cuenta", key="gen_con_numcta")
+                    st.markdown("#### Módulo 6: Documentos que el Cliente debe reunir (opcional)")
+                    st.caption("Si escribes algo aquí, se agrega como una cláusula especial en el contrato detallando lo que el cliente debe entregar para iniciar la redacción de la demanda/gestión.")
+                    docs_requeridos = st.text_area("Un documento por línea", height=100, key="gen_con_docs_req",
+                        placeholder="Ej:\nCédula de identidad por ambos lados\nÚltimas 3 liquidaciones de sueldo\nContrato de trabajo\nFiniquito (si ya fue despedido)")
                         
                 if st.form_submit_button("📄 Estructurar Contrato en Formato Word", type="primary", use_container_width=True):
+                    hon_num_final = formatear_clp(hon_num_int)
+                    cuotas_m_final = formatear_clp(cuotas_m_int)
                     datos_c = {
                         'tipo_servicio': tipo_servicio_final, 'detalle_servicio': detalle_servicio,
                         'abogado_nombre': abog_nom, 'abogado_rut': abog_rut, 'abogado_domicilio': abog_dom, 'abogado_tel': abog_tel, 'abogado_correo': abog_correo,
                         'cliente_nombre': cli_nom, 'cliente_rut': cli_rut, 'cliente_domicilio': cli_dom, 'cliente_tel': cli_tel, 'cliente_correo': cli_correo,
-                        'honorarios_num': hon_num, 'honorarios_letras': hon_let, 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m, 'fecha_inicio': fecha_pago,
-                        'banco': banco, 'tipo_cuenta': tipo_cta, 'num_cuenta': num_cta
+                        'honorarios_num': hon_num_final, 'honorarios_letras': numero_a_letras_clp(hon_num_int), 'cuotas_cant': cuotas_c, 'cuotas_monto': cuotas_m_final, 'fecha_inicio': fecha_pago,
+                        'banco': banco, 'tipo_cuenta': tipo_cta, 'num_cuenta': num_cta,
+                        'documentos_requeridos': docs_requeridos.strip()
                     }
                     doc_final = crear_contrato_word(datos_c)
                     if doc_final:
@@ -2269,7 +2401,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         df_con = leer_csv_local(ARCHIVO_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 
-                            'Cliente': cli_nom, 'Servicio': accion_final, 'Honorarios': hon_num, 'Archivo_B64': b64_docx,
+                            'Cliente': cli_nom, 'Servicio': accion_final, 'Honorarios': hon_num_final, 'Archivo_B64': b64_docx,
                             'Archivo_Drive_ID': drive_id_con, 'Usuario_Propietario': usuario_actual
                         }
                         df_con = pd.concat([df_con, pd.DataFrame([nuevo_con])], ignore_index=True)
@@ -2277,6 +2409,48 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         
                         dn_co = safe_read_sheet("base_contratos", COLS_CONTRATOS)
                         safe_update_sheet("base_contratos", pd.concat([dn_co, pd.DataFrame([nuevo_con])], ignore_index=True))
+                        
+                        # --- AUTOMATIZACIÓN 1: crear o actualizar el CLIENTE de inmediato ---
+                        if cli_rut.strip():
+                            df_clientes_auto = safe_read_sheet("base_clientes", COLS_CLIENTES)
+                            rut_limpio = cli_rut.strip().upper()
+                            if not df_clientes_auto.empty and rut_limpio in df_clientes_auto['RUT'].astype(str).str.upper().values:
+                                idx_cli_auto = df_clientes_auto[df_clientes_auto['RUT'].astype(str).str.upper() == rut_limpio].index[0]
+                                df_clientes_auto.at[idx_cli_auto, 'Nombre'] = cli_nom
+                                df_clientes_auto.at[idx_cli_auto, 'Telefono'] = cli_tel
+                                df_clientes_auto.at[idx_cli_auto, 'Correo'] = cli_correo
+                                df_clientes_auto.at[idx_cli_auto, 'Direccion'] = cli_dom
+                            else:
+                                nuevo_cliente_auto = {'RUT': rut_limpio, 'Nombre': cli_nom, 'Telefono': cli_tel, 'Correo': cli_correo, 'Clave_unica': '', 'Direccion': cli_dom}
+                                df_clientes_auto = pd.concat([df_clientes_auto, pd.DataFrame([nuevo_cliente_auto])], ignore_index=True)
+                            safe_update_sheet("base_clientes", df_clientes_auto)
+                        
+                        # --- AUTOMATIZACIÓN 2: si se vinculó una causa, completar su Contabilidad sola ---
+                        if causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
+                            rol_vinculado = causa_vinculo_sel.split(" — ")[0].strip()
+                            df_causas_auto = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                            if not df_causas_auto.empty and rol_vinculado in df_causas_auto['ROL'].values:
+                                idx_causa_auto = df_causas_auto[df_causas_auto['ROL'] == rol_vinculado].index[0]
+                                df_causas_auto.at[idx_causa_auto, 'Estado_Honorarios'] = 'Pendientes'
+                                df_causas_auto.at[idx_causa_auto, 'Total_Honorarios'] = hon_num_int
+                                df_causas_auto.at[idx_causa_auto, 'Cuotas_Totales'] = cuotas_c
+                                df_causas_auto.at[idx_causa_auto, 'Cuotas_Pagadas'] = 0
+                                df_causas_auto.at[idx_causa_auto, 'Fecha_Inicio'] = fecha_pago.strftime("%Y-%m-%d")
+                                df_causas_auto.to_csv(ARCHIVO_BD, index=False)
+                                dn_causa_auto = safe_read_sheet("base_causas", COLS_CAUSAS)
+                                if not dn_causa_auto.empty and rol_vinculado in dn_causa_auto['ROL'].values:
+                                    idx_nube = dn_causa_auto[dn_causa_auto['ROL'] == rol_vinculado].index[0]
+                                    dn_causa_auto.at[idx_nube, 'Estado_Honorarios'] = 'Pendientes'
+                                    dn_causa_auto.at[idx_nube, 'Total_Honorarios'] = hon_num_int
+                                    dn_causa_auto.at[idx_nube, 'Cuotas_Totales'] = cuotas_c
+                                    dn_causa_auto.at[idx_nube, 'Cuotas_Pagadas'] = 0
+                                    safe_update_sheet("base_causas", dn_causa_auto)
+                                st.success(f"✅ Contrato generado. Cliente y Contabilidad de la causa {rol_vinculado} actualizados automáticamente.")
+                            else:
+                                st.warning("⚠️ Contrato generado y cliente actualizado, pero no se encontró la causa seleccionada para actualizar su contabilidad.")
+                        else:
+                            st.success("✅ Contrato generado y cliente actualizado automáticamente. Cuando exista el ROL de la causa, vincúlalo desde 'Editar Ficha' para completar su Contabilidad.")
+                        
                         st.rerun()
                         
         if st.session_state.get('contrato_generado'):
