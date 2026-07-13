@@ -13,7 +13,7 @@ import requests
 import glob
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from bs4 import BeautifulSoup
 from streamlit_calendar import calendar
 from streamlit_gsheets import GSheetsConnection
@@ -71,7 +71,7 @@ def _cookie_secret() -> str:
 
 def generar_token_sesion(usuario: str, dias_validez: int = 7) -> str:
     """Genera una cookie firmada (usuario|expiración|firma) para evitar suplantación."""
-    expira = int((datetime.utcnow() + timedelta(days=dias_validez)).timestamp())
+    expira = int((datetime.now(timezone.utc) + timedelta(days=dias_validez)).timestamp())
     payload = f"{usuario}|{expira}"
     firma = hmac.new(_cookie_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{payload}|{firma}"
@@ -84,7 +84,7 @@ def validar_token_sesion(token: str):
         firma_esperada = hmac.new(_cookie_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(firma, firma_esperada):
             return None
-        if int(expira) < int(datetime.utcnow().timestamp()):
+        if int(expira) < int(datetime.now(timezone.utc).timestamp()):
             return None
         return usuario
     except Exception:
@@ -633,7 +633,7 @@ st.markdown("""
 
 # --- FUNCIONES DE SALUDO Y LOGO CUSTOM JURISYNC ---
 def obtener_saludo():
-    hora_chile = (datetime.utcnow() - timedelta(hours=4)).hour
+    hora_chile = (datetime.now(timezone.utc) - timedelta(hours=4)).hour
     if 0 <= hora_chile < 12:
         return "Buenos días"
     elif 12 <= hora_chile < 19:
@@ -776,14 +776,26 @@ def crear_contrato_word(datos):
     style.paragraph_format.line_spacing = 1.5
     style.paragraph_format.space_after = Pt(6)
     
-    def clausula(doc, numero_texto, titulo_texto, *runs_de_texto):
-        """Helper para no repetir el mismo bloque de formato en cada cláusula."""
-        p = doc.add_paragraph()
-        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p.add_run(f"\nCLÁUSULA {numero_texto}: {titulo_texto}. ").bold = True
-        for texto in runs_de_texto:
-            p.add_run(texto)
-        return p
+    def clausula(doc, numero_texto, titulo_texto, *bloques_texto):
+        """
+        Helper para no repetir el mismo bloque de formato en cada cláusula.
+        IMPORTANTE: cada bloque de texto se pone en su PROPIO párrafo real
+        (no separados con "\\n" dentro de un mismo párrafo). Word justifica
+        estirando cualquier línea que no sea el final REAL de un párrafo, así
+        que un salto de línea manual en medio de un párrafo justificado deja
+        esos huecos raros entre palabras que se ven mal. Con párrafos
+        separados, cada uno se justifica de forma normal y prolija.
+        """
+        p_titulo = doc.add_paragraph()
+        p_titulo.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_titulo.add_run(f"CLÁUSULA {numero_texto}: {titulo_texto}. ").bold = True
+        if bloques_texto:
+            p_titulo.add_run(bloques_texto[0])
+        for bloque in bloques_texto[1:]:
+            p_extra = doc.add_paragraph()
+            p_extra.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_extra.add_run(bloque)
+        return p_titulo
     
     titulo = doc.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -796,37 +808,48 @@ def crear_contrato_word(datos):
     
     intro = doc.add_paragraph()
     intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    intro.add_run(f"En Santiago, República de Chile, a {fecha_str}, comparecen:\n\n")
-    intro.add_run(f"Por una parte, don/doña {datos['abogado_nombre']}, de nacionalidad chilena, abogado/a, cédula nacional de identidad número {datos['abogado_rut']}, con domicilio profesional en {datos['abogado_domicilio']}, correo electrónico {datos['abogado_correo']}, en adelante e indistintamente \"EL ABOGADO\" o \"el mandatario\"; y,\n\n")
-    intro.add_run(f"Por otra parte, don/doña {datos['cliente_nombre']}, cédula nacional de identidad número {datos['cliente_rut']}, con domicilio en {datos['cliente_domicilio']}, número telefónico de contacto {datos['cliente_tel']}, correo electrónico {datos['cliente_correo']}, en adelante \"EL CLIENTE\" o \"el mandante\".\n\n")
-    intro.add_run("Ambas partes, compareciendo como mayores de edad, exponen que han convenido celebrar el siguiente contrato de prestación de servicios profesionales, el que se regirá por las cláusulas que a continuación se singularizan:")
+    intro.add_run(f"En Santiago, República de Chile, a {fecha_str}, comparecen:")
+    
+    p_intro2 = doc.add_paragraph()
+    p_intro2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_intro2.add_run(f"Por una parte, don/doña {datos['abogado_nombre']}, de nacionalidad chilena, abogado/a, cédula nacional de identidad número {datos['abogado_rut']}, con domicilio profesional en {datos['abogado_domicilio']}, correo electrónico {datos['abogado_correo']}, en adelante e indistintamente \"EL ABOGADO\" o \"el mandatario\"; y,")
+    
+    p_intro3 = doc.add_paragraph()
+    p_intro3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_intro3.add_run(f"Por otra parte, don/doña {datos['cliente_nombre']}, cédula nacional de identidad número {datos['cliente_rut']}, con domicilio en {datos['cliente_domicilio']}, número telefónico de contacto {datos['cliente_tel']}, correo electrónico {datos['cliente_correo']}, en adelante \"EL CLIENTE\" o \"el mandante\".")
+    
+    p_intro4 = doc.add_paragraph()
+    p_intro4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_intro4.add_run("Ambas partes, compareciendo como mayores de edad, exponen que han convenido celebrar el siguiente contrato de prestación de servicios profesionales, el que se regirá por las cláusulas que a continuación se singularizan:")
     
     # --- CLÁUSULA PRIMERA: OBJETO ---
     p1 = doc.add_paragraph()
     p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p1.add_run("\nCLÁUSULA PRIMERA: OBJETO DEL CONTRATO. ").bold = True
-    p1.add_run(f"Por medio del presente instrumento, El Cliente confiere patrocinio y poder a El Abogado para que asuma la representación, tramitación y defensa de sus intereses en un procedimiento de {datos['tipo_servicio'].upper()}.\n")
-    p1.add_run("Los servicios profesionales comprometidos comprenden, de forma específica, lo siguiente:\n")
-    p1.add_run(datos['detalle_servicio'])
+    p1.add_run("CLÁUSULA PRIMERA: OBJETO DEL CONTRATO. ").bold = True
+    p1.add_run(f"Por medio del presente instrumento, El Cliente confiere patrocinio y poder a El Abogado para que asuma la representación, tramitación y defensa de sus intereses en un procedimiento de {datos['tipo_servicio'].upper()}. Los servicios profesionales comprometidos comprenden, de forma específica, lo siguiente:")
+    
+    p1_bis = doc.add_paragraph()
+    p1_bis.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p1_bis.add_run(datos['detalle_servicio'])
     
     # --- CLÁUSULA SEGUNDA: ALCANCE Y EXCLUSIONES DEL SERVICIO ---
     clausula(doc, "SEGUNDA", "ALCANCE Y EXCLUSIONES DEL SERVICIO",
-        "El encargo referido en la cláusula precedente será desarrollado personalmente por El Abogado, o por los profesionales que este último destine al efecto dentro de su mismo estudio jurídico, quienes se sujetarán íntegramente a los términos de este contrato.\n",
-        "El servicio contratado comprende únicamente la tramitación en primera instancia del asunto encomendado. Quedan expresamente excluidos, salvo pacto escrito adicional entre las partes, la presentación, defensa y tramitación de recursos procesales de segunda instancia o extraordinarios, tales como recursos de apelación, casación en la forma, casación en el fondo, nulidad, queja o unificación de jurisprudencia, cuyo eventual encargo dará lugar a honorarios adicionales que se acordarán separadamente.\n",
+        "El encargo referido en la cláusula precedente será desarrollado personalmente por El Abogado, o por los profesionales que este último destine al efecto dentro de su mismo estudio jurídico, quienes se sujetarán íntegramente a los términos de este contrato.",
+        "El servicio contratado comprende únicamente la tramitación en primera instancia del asunto encomendado. Quedan expresamente excluidos, salvo pacto escrito adicional entre las partes, la presentación, defensa y tramitación de recursos procesales de segunda instancia o extraordinarios, tales como recursos de apelación, casación en la forma, casación en el fondo, nulidad, queja o unificación de jurisprudencia, cuyo eventual encargo dará lugar a honorarios adicionales que se acordarán separadamente.",
         "En caso de que durante la tramitación del asunto encomendado surjan materias distintas de las descritas en la cláusula primera, las partes podrán suscribir un anexo al presente contrato en el que se individualicen los nuevos servicios y los honorarios correspondientes."
     )
     
     # --- CLÁUSULA TERCERA: HONORARIOS ---
     clausula(doc, "TERCERA", "HONORARIOS PROFESIONALES",
-        f"Los honorarios totales convenidos por la prestación de los servicios profesionales descritos ascienden a la suma de {datos['honorarios_num']} ({datos['honorarios_letras']}).\n",
+        f"Los honorarios totales convenidos por la prestación de los servicios profesionales descritos ascienden a la suma de {datos['honorarios_num']} ({datos['honorarios_letras']}).",
         "Esta suma corresponde a la tramitación completa del asunto encomendado en primera instancia, conforme a lo señalado en la cláusula segunda, sin perjuicio de los honorarios adicionales que puedan devengarse por servicios excluidos o complementarios que las partes acuerden por separado."
     )
     
     # --- CLÁUSULA CUARTA: FORMA DE PAGO ---
     p4 = doc.add_paragraph()
     p4.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p4.add_run("\nCLÁUSULA CUARTA: CONDICIONES Y FORMA DE PAGO. ").bold = True
-    p4.add_run(f"La suma total de los honorarios fijados en la cláusula precedente será pagada en un total de {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas, por un valor individual de {datos['cuotas_monto']} cada una, conforme al siguiente plan de pago:\n")
+    p4.add_run("CLÁUSULA CUARTA: CONDICIONES Y FORMA DE PAGO. ").bold = True
+    p4.add_run(f"La suma total de los honorarios fijados en la cláusula precedente será pagada en un total de {datos['cuotas_cant']} cuotas mensuales, fijas y sucesivas, por un valor individual de {datos['cuotas_monto']} cada una, conforme al siguiente plan de pago:")
     
     table = doc.add_table(rows=1, cols=4)
     table.style = 'Table Grid'
@@ -846,12 +869,22 @@ def crear_contrato_word(datos):
         row_cells[1].text = f"{fecha_base.day:02d} de {meses[mes_final-1]} de {anno_calculado}"
         row_cells[2].text = str(datos['cuotas_monto'])
         row_cells[3].text = "PENDIENTE"
-        
+    
+    # Los datos bancarios son una ficha de campos cortos (Titular / RUT / Banco...),
+    # no prosa corrida. Justificar líneas tan cortas se ve mal (huecos enormes entre
+    # palabras), así que este bloque va alineado a la izquierda, como corresponde
+    # tipográficamente a una lista de datos.
+    p4_titulo_banco = doc.add_paragraph()
+    p4_titulo_banco.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p4_titulo_banco.add_run("Información Bancaria para Transferencias Electrónicas:").bold = True
+    
     p4_bis = doc.add_paragraph()
-    p4_bis.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    p4_bis.add_run("\nInformación Bancaria para Transferencias Electrónicas:\n").bold = True
-    p4_bis.add_run(f"Titular de la Cuenta: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nInstitución Bancaria: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nNúmero de Cuenta: {datos['num_cuenta']}\n")
-    p4_bis.add_run("El Cliente deberá remitir el comprobante de cada pago al correo electrónico de El Abogado individualizado en la comparecencia, dentro de las 24 horas siguientes a su realización.")
+    p4_bis.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p4_bis.add_run(f"Titular de la Cuenta: {datos['abogado_nombre']}\nRUT: {datos['abogado_rut']}\nInstitución Bancaria: {datos['banco']}\nTipo de Cuenta: {datos['tipo_cuenta']}\nNúmero de Cuenta: {datos['num_cuenta']}")
+    
+    p4_ter = doc.add_paragraph()
+    p4_ter.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p4_ter.add_run("El Cliente deberá remitir el comprobante de cada pago al correo electrónico de El Abogado individualizado en la comparecencia, dentro de las 24 horas siguientes a su realización.")
 
     # --- CLÁUSULA QUINTA: PAGO DE HONORARIOS A TODO EVENTO ---
     clausula(doc, "QUINTA", "DEL PAGO DE LOS HONORARIOS A TODO EVENTO",
@@ -860,29 +893,45 @@ def crear_contrato_word(datos):
     
     # --- CLÁUSULA SEXTA: GASTOS NECESARIOS ---
     clausula(doc, "SEXTA", "GASTOS NECESARIOS PARA LA PRESTACIÓN DEL SERVICIO",
-        "Todos los gastos y tasas que resulten necesarios para la ejecución del encargo, tales como honorarios de Receptores Judiciales, peritos, Notarios Públicos, Conservadores de Bienes Raíces, inscripciones, publicaciones y notificaciones, serán de cargo exclusivo de El Cliente.\n",
+        "Todos los gastos y tasas que resulten necesarios para la ejecución del encargo, tales como honorarios de Receptores Judiciales, peritos, Notarios Públicos, Conservadores de Bienes Raíces, inscripciones, publicaciones y notificaciones, serán de cargo exclusivo de El Cliente.",
         "El Abogado informará oportunamente a El Cliente sobre los gastos en que deberá incurrirse, detallando su concepto y monto, y en caso de que dichos gastos hayan sido solventados directamente por El Abogado, El Cliente deberá reembolsarlos dentro de los cinco días hábiles siguientes a que le sea así informado, debiendo El Abogado conservar los respaldos respectivos para su exhibición cuando El Cliente así lo solicite."
     )
     
     # --- CLÁUSULA SÉPTIMA: EFECTOS DEL INCUMPLIMIENTO Y MOROSIDAD ---
     clausula(doc, "SÉPTIMA", "EFECTOS DEL INCUMPLIMIENTO Y MOROSIDAD",
-        "El cumplimiento exacto de los plazos de pago constituye un elemento esencial del presente contrato. Ante la ocurrencia de morosidad o retardo en el pago de cualquiera de las cuotas devengadas, operarán los siguientes efectos:\n",
+        "El cumplimiento exacto de los plazos de pago constituye un elemento esencial del presente contrato. Ante la ocurrencia de morosidad o retardo en el pago de cualquiera de las cuotas devengadas, operarán los siguientes efectos:"
     )
-    doc.paragraphs[-1].add_run("Aceleración de la deuda: ").bold = True
-    doc.paragraphs[-1].add_run("la mora en el pago de una cuota faculta a El Abogado para exigir de forma inmediata el cobro íntegro del saldo total que permanezca insoluto.\n")
-    doc.paragraphs[-1].add_run("Suspensión de la tramitación: ").bold = True
-    doc.paragraphs[-1].add_run("un atraso superior a cinco días hábiles faculta a El Abogado para suspender la presentación de escritos y diligencias ante los tribunales respectivos, hasta la regularización del pago.\n")
-    doc.paragraphs[-1].add_run("Multa por atraso: ").bold = True
-    doc.paragraphs[-1].add_run("se devengará una multa compensatoria equivalente a 0,15 Unidades de Fomento (UF) por cada día de atraso, hasta el pago efectivo de lo adeudado.")
+    p7_item1 = doc.add_paragraph()
+    p7_item1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p7_item1.add_run("Aceleración de la deuda: ").bold = True
+    p7_item1.add_run("la mora en el pago de una cuota faculta a El Abogado para exigir de forma inmediata el cobro íntegro del saldo total que permanezca insoluto.")
+    
+    p7_item2 = doc.add_paragraph()
+    p7_item2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p7_item2.add_run("Suspensión de la tramitación: ").bold = True
+    p7_item2.add_run("un atraso superior a cinco días hábiles faculta a El Abogado para suspender la presentación de escritos y diligencias ante los tribunales respectivos, hasta la regularización del pago.")
+    
+    p7_item3 = doc.add_paragraph()
+    p7_item3.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p7_item3.add_run("Multa por atraso: ").bold = True
+    p7_item3.add_run("se devengará una multa compensatoria equivalente a 0,15 Unidades de Fomento (UF) por cada día de atraso, hasta el pago efectivo de lo adeudado.")
 
     # --- CLÁUSULA OCTAVA: OBLIGACIONES RECÍPROCAS ---
-    p8 = clausula(doc, "OCTAVA", "OBLIGACIONES RECÍPROCAS DE LAS PARTES")
-    p8.add_run("\n")
-    p8.add_run("Obligaciones de El Abogado: ").bold = True
-    p8.add_run("El Abogado asume una obligación de medios, comprometiéndose a desplegar toda su diligencia, conocimiento técnico y ético en la tramitación del asunto encomendado, sin que ello implique en caso alguno una obligación de resultado ni la garantía de un desenlace favorable, atendida la naturaleza incierta de todo proceso judicial o administrativo.\n")
-    p8.add_run("Obligaciones de El Cliente: ").bold = True
-    p8.add_run("El Cliente se obliga a proporcionar de forma oportuna, veraz y completa toda la información y documentación que resulte necesaria para el correcto desarrollo del encargo, dentro de los plazos que El Abogado le indique, siendo el incumplimiento de esta obligación causal suficiente para la resciliación del presente contrato.\n")
-    p8.add_run("En caso de que la naturaleza del encargo requiera el uso de la Clave Única de El Cliente para gestiones ante la Oficina Judicial Virtual del Poder Judicial u otros organismos del Estado, El Cliente autoriza expresamente su uso por parte de El Abogado, exclusivamente para los fines del presente contrato, comprometiéndose este último a resguardar su confidencialidad e integridad y a no utilizarla para ningún otro propósito.")
+    clausula(doc, "OCTAVA", "OBLIGACIONES RECÍPROCAS DE LAS PARTES")
+    
+    p8_abogado = doc.add_paragraph()
+    p8_abogado.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p8_abogado.add_run("Obligaciones de El Abogado: ").bold = True
+    p8_abogado.add_run("El Abogado asume una obligación de medios, comprometiéndose a desplegar toda su diligencia, conocimiento técnico y ético en la tramitación del asunto encomendado, sin que ello implique en caso alguno una obligación de resultado ni la garantía de un desenlace favorable, atendida la naturaleza incierta de todo proceso judicial o administrativo.")
+    
+    p8_cliente = doc.add_paragraph()
+    p8_cliente.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p8_cliente.add_run("Obligaciones de El Cliente: ").bold = True
+    p8_cliente.add_run("El Cliente se obliga a proporcionar de forma oportuna, veraz y completa toda la información y documentación que resulte necesaria para el correcto desarrollo del encargo, dentro de los plazos que El Abogado le indique, siendo el incumplimiento de esta obligación causal suficiente para la resciliación del presente contrato.")
+    
+    p8_clave = doc.add_paragraph()
+    p8_clave.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p8_clave.add_run("En caso de que la naturaleza del encargo requiera el uso de la Clave Única de El Cliente para gestiones ante la Oficina Judicial Virtual del Poder Judicial u otros organismos del Estado, El Cliente autoriza expresamente su uso por parte de El Abogado, exclusivamente para los fines del presente contrato, comprometiéndose este último a resguardar su confidencialidad e integridad y a no utilizarla para ningún otro propósito.")
 
     # --- CLÁUSULA NOVENA: AUSENCIA DE RELACIÓN LABORAL ---
     clausula(doc, "NOVENA", "AUSENCIA DE RELACIÓN LABORAL",
@@ -891,25 +940,25 @@ def crear_contrato_word(datos):
     
     # --- CLÁUSULA DÉCIMA: CONFIDENCIALIDAD ---
     clausula(doc, "DÉCIMA", "CONFIDENCIALIDAD",
-        "Toda la información y documentación que las partes intercambien con motivo de la celebración y ejecución del presente contrato tiene el carácter de confidencial, no pudiendo ser divulgada a terceros ajenos a la relación contractual sin el consentimiento previo y por escrito de la otra parte, salvo que su revelación sea exigida por ley o por orden de autoridad competente.\n",
+        "Toda la información y documentación que las partes intercambien con motivo de la celebración y ejecución del presente contrato tiene el carácter de confidencial, no pudiendo ser divulgada a terceros ajenos a la relación contractual sin el consentimiento previo y por escrito de la otra parte, salvo que su revelación sea exigida por ley o por orden de autoridad competente.",
         "Esta obligación de confidencialidad subsistirá aun después de terminado el presente contrato, cualquiera sea la causa de su término."
     )
     
     # --- CLÁUSULA DÉCIMO PRIMERA: PROTECCIÓN DE DATOS PERSONALES ---
     clausula(doc, "DÉCIMO PRIMERA", "PROTECCIÓN DE DATOS PERSONALES",
-        "El Abogado tratará los datos personales que El Cliente le proporcione con motivo de la celebración y ejecución del presente contrato conforme a la normativa vigente sobre protección de la vida privada y de datos personales, utilizándolos exclusivamente para los fines del encargo profesional descrito en la cláusula primera.\n",
+        "El Abogado tratará los datos personales que El Cliente le proporcione con motivo de la celebración y ejecución del presente contrato conforme a la normativa vigente sobre protección de la vida privada y de datos personales, utilizándolos exclusivamente para los fines del encargo profesional descrito en la cláusula primera.",
         "El Cliente podrá, en cualquier momento, ejercer sus derechos de acceso, rectificación, cancelación, oposición y portabilidad respecto de sus datos personales, dirigiendo su solicitud al correo electrónico de El Abogado individualizado en la comparecencia."
     )
     
     # --- CLÁUSULA DÉCIMO SEGUNDA: BUEN TRATO Y RESPETO MUTUO ---
     clausula(doc, "DÉCIMO SEGUNDA", "DEL COMPROMISO DE BUEN TRATO Y RESPETO MUTUO",
-        "Las partes declaran que la relación contractual deberá fundarse en el respeto mutuo y en un trato digno y adecuado, libre de violencia, discriminación o agresión de cualquier naturaleza, en cumplimiento de la Ley N° 21.643 y su reglamento sobre prevención y sanción del acoso laboral, sexual y la violencia en el trabajo.\n",
+        "Las partes declaran que la relación contractual deberá fundarse en el respeto mutuo y en un trato digno y adecuado, libre de violencia, discriminación o agresión de cualquier naturaleza, en cumplimiento de la Ley N° 21.643 y su reglamento sobre prevención y sanción del acoso laboral, sexual y la violencia en el trabajo.",
         "Esta obligación no obsta en caso alguno al derecho de El Cliente de formular consultas, expresar disconformidad o presentar reclamos respecto del servicio contratado, los que serán siempre recibidos y atendidos en un marco de respeto recíproco."
     )
     
     # --- CLÁUSULA DÉCIMO TERCERA: TÉRMINO ANTICIPADO ---
     clausula(doc, "DÉCIMO TERCERA", "DEL DESISTIMIENTO O TÉRMINO ANTICIPADO DEL CONTRATO",
-        "El presente contrato podrá terminar anticipadamente por mutuo acuerdo de las partes, por voluntad unilateral de cualquiera de ellas, o por incumplimiento grave de las obligaciones aquí pactadas.\n",
+        "El presente contrato podrá terminar anticipadamente por mutuo acuerdo de las partes, por voluntad unilateral de cualquiera de ellas, o por incumplimiento grave de las obligaciones aquí pactadas.",
         "La parte que decida poner término unilateral al contrato deberá comunicarlo a la otra por escrito, mediante carta certificada o correo electrónico, con a lo menos 15 días de anticipación. En caso de que el desistimiento provenga de El Cliente, los honorarios devengados hasta esa fecha por los servicios ya prestados o iniciados le pertenecerán a El Abogado a título de honorarios causados, sin derecho a devolución alguna, sin perjuicio del deber de este último de rendir cuenta de las gestiones realizadas y facilitar los antecedentes necesarios para que El Cliente pueda continuar la tramitación del asunto con otro profesional."
     )
     
@@ -931,9 +980,12 @@ def crear_contrato_word(datos):
     if datos['tipo_servicio'] == "Liquidación voluntaria":
         p_extra = doc.add_paragraph()
         p_extra.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p_extra.add_run(f"\nCLÁUSULA {diccionario_numeros_extra[num_clausula_extra]}: ENTREGA DE DECLARACIONES JURADAS OBLIGATORIAS. ").bold = True
-        p_extra.add_run("Atendida la naturaleza específica del procedimiento de insolvencia y liquidación voluntaria, El Cliente asume la obligación ineludible de suscribir y entregar las siguientes declaraciones juradas exigidas por la normativa aplicable:\n")
-        p_extra.add_run("- Declaración Jurada de Bienes Excluidos o de Terceros.\n- Declaración Jurada de Listado Completo de Acreedores.\n- Consentimiento Informado Expreso de los Efectos de la Liquidación.")
+        p_extra.add_run(f"CLÁUSULA {diccionario_numeros_extra[num_clausula_extra]}: ENTREGA DE DECLARACIONES JURADAS OBLIGATORIAS. ").bold = True
+        p_extra.add_run("Atendida la naturaleza específica del procedimiento de insolvencia y liquidación voluntaria, El Cliente asume la obligación ineludible de suscribir y entregar las siguientes declaraciones juradas exigidas por la normativa aplicable:")
+        
+        p_extra_lista = doc.add_paragraph()
+        p_extra_lista.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p_extra_lista.add_run("- Declaración Jurada de Bienes Excluidos o de Terceros.\n- Declaración Jurada de Listado Completo de Acreedores.\n- Consentimiento Informado Expreso de los Efectos de la Liquidación.")
         num_clausula_extra += 1
 
     # --- CLÁUSULA CONDICIONAL: DOCUMENTOS QUE EL CLIENTE DEBE REUNIR ---
@@ -941,10 +993,16 @@ def crear_contrato_word(datos):
         lineas_docs = [l.strip() for l in datos['documentos_requeridos'].strip().split("\n") if l.strip()]
         p_docs = doc.add_paragraph()
         p_docs.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        p_docs.add_run(f"\nCLÁUSULA {diccionario_numeros_extra[num_clausula_extra]}: DOCUMENTACIÓN A REUNIR POR EL CLIENTE. ").bold = True
-        p_docs.add_run("Para dar inicio a la redacción de la gestión encomendada en la cláusula primera, El Cliente se obliga a reunir y hacer entrega a El Abogado, a la brevedad posible, de los siguientes documentos y antecedentes:\n")
-        p_docs.add_run("\n".join([f"- {linea}" for linea in lineas_docs]))
-        p_docs.add_run("\n\nLa demora injustificada en la entrega de estos antecedentes podrá afectar los plazos de tramitación del asunto encomendado, sin que ello sea imputable a El Abogado.")
+        p_docs.add_run(f"CLÁUSULA {diccionario_numeros_extra[num_clausula_extra]}: DOCUMENTACIÓN A REUNIR POR EL CLIENTE. ").bold = True
+        p_docs.add_run("Para dar inicio a la redacción de la gestión encomendada en la cláusula primera, El Cliente se obliga a reunir y hacer entrega a El Abogado, a la brevedad posible, de los siguientes documentos y antecedentes:")
+        
+        p_docs_lista = doc.add_paragraph()
+        p_docs_lista.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        p_docs_lista.add_run("\n".join([f"- {linea}" for linea in lineas_docs]))
+        
+        p_docs_final = doc.add_paragraph()
+        p_docs_final.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_docs_final.add_run("La demora injustificada en la entrega de estos antecedentes podrá afectar los plazos de tramitación del asunto encomendado, sin que ello sea imputable a El Abogado.")
         num_clausula_extra += 1
 
     clausula(doc, diccionario_numeros_extra[num_clausula_extra], "DOMICILIO CONVENCIONAL Y COMPETENCIA",
@@ -953,7 +1011,7 @@ def crear_contrato_word(datos):
     num_clausula_extra += 1
     
     clausula(doc, diccionario_numeros_extra[num_clausula_extra], "COMUNICACIONES ENTRE LAS PARTES",
-        f"Para todos los efectos del presente contrato, se tendrán por válidas las comunicaciones dirigidas a los siguientes correos electrónicos y números de contacto: de El Cliente, {datos['cliente_correo']} / {datos['cliente_tel']}; y de El Abogado, {datos['abogado_correo']} / {datos['abogado_tel']}.\n\n",
+        f"Para todos los efectos del presente contrato, se tendrán por válidas las comunicaciones dirigidas a los siguientes correos electrónicos y números de contacto: de El Cliente, {datos['cliente_correo']} / {datos['cliente_tel']}; y de El Abogado, {datos['abogado_correo']} / {datos['abogado_tel']}.",
         "En señal de plena conformidad con todas y cada una de las cláusulas precedentes, se extiende el presente contrato en dos ejemplares de idéntico tenor, quedando uno en poder de cada parte."
     )
 
@@ -2444,31 +2502,57 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                                 df_clientes_auto = pd.concat([df_clientes_auto, pd.DataFrame([nuevo_cliente_auto])], ignore_index=True)
                             safe_update_sheet("base_clientes", df_clientes_auto)
                         
-                        # --- AUTOMATIZACIÓN 2: si se vinculó una causa, completar su Contabilidad sola ---
+                        # --- AUTOMATIZACIÓN 2: completar la Contabilidad SIEMPRE, aunque todavía no exista el ROL ---
+                        # Antes esto solo pasaba si elegías una causa ya creada. El problema real es que un
+                        # contrato normalmente se firma ANTES de que exista el ROL (el juicio ni se ha
+                        # presentado todavía), así que en la práctica esa lista casi siempre estaba vacía y
+                        # la Contabilidad nunca se llenaba sola. Ahora, si no eliges una causa existente, se
+                        # crea automáticamente una causa "placeholder" con estos honorarios y cuotas, para que
+                        # la Contabilidad quede lista de inmediato. Cuando presentes la demanda y tengas el
+                        # ROL real, solo entras a "Editar Ficha" de esa causa y reemplazas el ROL provisorio.
                         if causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
                             rol_vinculado = causa_vinculo_sel.split(" — ")[0].strip()
-                            df_causas_auto = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
-                            if not df_causas_auto.empty and rol_vinculado in df_causas_auto['ROL'].values:
-                                idx_causa_auto = df_causas_auto[df_causas_auto['ROL'] == rol_vinculado].index[0]
-                                df_causas_auto.at[idx_causa_auto, 'Estado_Honorarios'] = 'Pendientes'
-                                df_causas_auto.at[idx_causa_auto, 'Total_Honorarios'] = hon_num_int
-                                df_causas_auto.at[idx_causa_auto, 'Cuotas_Totales'] = cuotas_c
-                                df_causas_auto.at[idx_causa_auto, 'Cuotas_Pagadas'] = 0
-                                df_causas_auto.at[idx_causa_auto, 'Fecha_Inicio'] = fecha_pago.strftime("%Y-%m-%d")
-                                df_causas_auto.to_csv(ARCHIVO_BD, index=False)
-                                dn_causa_auto = safe_read_sheet("base_causas", COLS_CAUSAS)
-                                if not dn_causa_auto.empty and rol_vinculado in dn_causa_auto['ROL'].values:
-                                    idx_nube = dn_causa_auto[dn_causa_auto['ROL'] == rol_vinculado].index[0]
-                                    dn_causa_auto.at[idx_nube, 'Estado_Honorarios'] = 'Pendientes'
-                                    dn_causa_auto.at[idx_nube, 'Total_Honorarios'] = hon_num_int
-                                    dn_causa_auto.at[idx_nube, 'Cuotas_Totales'] = cuotas_c
-                                    dn_causa_auto.at[idx_nube, 'Cuotas_Pagadas'] = 0
-                                    safe_update_sheet("base_causas", dn_causa_auto)
+                        else:
+                            rol_vinculado = f"PENDIENTE-{str(uuid.uuid4())[:6].upper()}"
+                            df_causas_nueva = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                            nueva_causa_placeholder = {
+                                'ROL': rol_vinculado, 'TRIBUNAL': '(Pendiente de asignar)',
+                                'CARATULADO': f"{cli_nom.upper()} / {tipo_servicio_final}",
+                                'Cliente': cli_nom, 'RUT': cli_rut, 'Tipo_Negocio': 'Propio',
+                                'Usuario_Propietario': usuario_actual, 'Estado_Honorarios': 'Pendientes',
+                                'Total_Honorarios': hon_num_int, 'Cuotas_Totales': cuotas_c, 'Cuotas_Pagadas': 0,
+                                'Clave_unica': '', 'SAC': '', 'Sucursal': '', 'Servicio': accion_final,
+                                'Fecha_Inicio': fecha_pago.strftime("%Y-%m-%d")
+                            }
+                            df_causas_nueva = pd.concat([df_causas_nueva, pd.DataFrame([nueva_causa_placeholder])], ignore_index=True)
+                            df_causas_nueva.to_csv(ARCHIVO_BD, index=False)
+                            dn_causa_nueva = safe_read_sheet("base_causas", COLS_CAUSAS)
+                            dn_causa_nueva = pd.concat([dn_causa_nueva, pd.DataFrame([nueva_causa_placeholder])], ignore_index=True)
+                            safe_update_sheet("base_causas", dn_causa_nueva)
+                        
+                        df_causas_auto = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                        if not df_causas_auto.empty and rol_vinculado in df_causas_auto['ROL'].values:
+                            idx_causa_auto = df_causas_auto[df_causas_auto['ROL'] == rol_vinculado].index[0]
+                            df_causas_auto.at[idx_causa_auto, 'Estado_Honorarios'] = 'Pendientes'
+                            df_causas_auto.at[idx_causa_auto, 'Total_Honorarios'] = hon_num_int
+                            df_causas_auto.at[idx_causa_auto, 'Cuotas_Totales'] = cuotas_c
+                            df_causas_auto.at[idx_causa_auto, 'Cuotas_Pagadas'] = 0
+                            df_causas_auto.at[idx_causa_auto, 'Fecha_Inicio'] = fecha_pago.strftime("%Y-%m-%d")
+                            df_causas_auto.to_csv(ARCHIVO_BD, index=False)
+                            dn_causa_auto = safe_read_sheet("base_causas", COLS_CAUSAS)
+                            if not dn_causa_auto.empty and rol_vinculado in dn_causa_auto['ROL'].values:
+                                idx_nube = dn_causa_auto[dn_causa_auto['ROL'] == rol_vinculado].index[0]
+                                dn_causa_auto.at[idx_nube, 'Estado_Honorarios'] = 'Pendientes'
+                                dn_causa_auto.at[idx_nube, 'Total_Honorarios'] = hon_num_int
+                                dn_causa_auto.at[idx_nube, 'Cuotas_Totales'] = cuotas_c
+                                dn_causa_auto.at[idx_nube, 'Cuotas_Pagadas'] = 0
+                                safe_update_sheet("base_causas", dn_causa_auto)
+                            if causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
                                 st.success(f"✅ Contrato generado. Cliente y Contabilidad de la causa {rol_vinculado} actualizados automáticamente.")
                             else:
-                                st.warning("⚠️ Contrato generado y cliente actualizado, pero no se encontró la causa seleccionada para actualizar su contabilidad.")
+                                st.success(f"✅ Contrato generado. Cliente creado y Contabilidad completada automáticamente bajo el ROL provisorio **{rol_vinculado}** — reemplázalo por el ROL real desde 'Editar Ficha' apenas presentes la demanda.")
                         else:
-                            st.success("✅ Contrato generado y cliente actualizado automáticamente. Cuando exista el ROL de la causa, vincúlalo desde 'Editar Ficha' para completar su Contabilidad.")
+                            st.warning("⚠️ Contrato generado y cliente actualizado, pero no se pudo completar la Contabilidad automáticamente. Hazlo manualmente desde Causas.")
                         
                         st.rerun()
                         
