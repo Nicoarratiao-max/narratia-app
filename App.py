@@ -621,6 +621,62 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# =====================================================================
+# 📱 PWA: hace que JuriSync se pueda "instalar" en el celular (ícono propio,
+# pantalla completa, sin la barra del navegador), sin pasar por ninguna
+# tienda de aplicaciones. Streamlit no da acceso directo al <head> de la
+# página, así que se inyecta con JavaScript. El manifest.json y los íconos
+# se sirven desde la carpeta static/ (requiere enableStaticServing=true en
+# .streamlit/config.toml); el service worker, en cambio, se genera como un
+# Blob directamente en el navegador, porque Streamlit no sirve archivos .js
+# con el tipo de contenido correcto desde esa carpeta.
+st.markdown("""
+<script>
+(function() {
+    const head = document.head;
+    if (!document.getElementById('jurisync-manifest')) {
+        const manifestLink = document.createElement('link');
+        manifestLink.id = 'jurisync-manifest';
+        manifestLink.rel = 'manifest';
+        manifestLink.href = './app/static/manifest.json';
+        head.appendChild(manifestLink);
+
+        const themeColor = document.createElement('meta');
+        themeColor.name = 'theme-color';
+        themeColor.content = '#0052cc';
+        head.appendChild(themeColor);
+
+        const appleIcon = document.createElement('link');
+        appleIcon.rel = 'apple-touch-icon';
+        appleIcon.href = './app/static/icon-192.png';
+        head.appendChild(appleIcon);
+
+        const appleCapable = document.createElement('meta');
+        appleCapable.name = 'apple-mobile-web-app-capable';
+        appleCapable.content = 'yes';
+        head.appendChild(appleCapable);
+
+        const appleTitle = document.createElement('meta');
+        appleTitle.name = 'apple-mobile-web-app-title';
+        appleTitle.content = 'JuriSync';
+        head.appendChild(appleTitle);
+    }
+
+    if ('serviceWorker' in navigator && !window._juriSyncSWRegistrado) {
+        window._juriSyncSWRegistrado = true;
+        const codigoSW = `
+            self.addEventListener('install', () => self.skipWaiting());
+            self.addEventListener('activate', () => self.clients.claim());
+            self.addEventListener('fetch', (event) => { event.respondWith(fetch(event.request)); });
+        `;
+        const blob = new Blob([codigoSW], { type: 'application/javascript' });
+        const swUrl = URL.createObjectURL(blob);
+        navigator.serviceWorker.register(swUrl).catch(() => {});
+    }
+})();
+</script>
+""", unsafe_allow_html=True)
+
 # --- SISTEMA ANTI-CIERRE DE SESIÓN (KEEP-ALIVE AGRESIVO) ---
 st.markdown("""
 <iframe src="javascript:void(0);" style="display:none;" onload="
@@ -3119,12 +3175,14 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 # rompen la URL al compartirla por WhatsApp/correo. Se deja solo
                 # letras, números y guion bajo, para que el enlace nunca falle por esto.
                 token_para_link = re.sub(r'[^A-Za-z0-9_]', '', str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_"))
-                # IMPORTANTE: esta URL base es la de TU app en Streamlit Cloud. Si Streamlit
-                # te asignó una URL distinta a "narratia-app.streamlit.app" (a veces pasa si
-                # ese nombre corto ya estaba tomado), el enlace de abajo no va a funcionar
-                # para el cliente. Puedes fijar la URL real en Streamlit Cloud -> Settings ->
-                # Secrets con: APP_BASE_URL = "https://tu-url-real.streamlit.app"
-                APP_BASE_URL = st.secrets.get("APP_BASE_URL", "https://narratia-app.streamlit.app").rstrip("/")
+                # IMPORTANTE: esta URL base es la de TU app en Streamlit Cloud (confirmada
+                # en tus logs: seguimientodecausasjudicial.streamlit.app — el nombre del
+                # repositorio de GitHub "narratia-app" NO es lo mismo que el nombre de la
+                # URL pública de la app, por eso el valor anterior generaba enlaces rotos).
+                # Si alguna vez vuelves a eliminar y recrear la app y Streamlit le asigna
+                # otra URL, fija la real en Streamlit Cloud -> Settings -> Secrets con:
+                # APP_BASE_URL = "https://tu-url-real.streamlit.app"
+                APP_BASE_URL = st.secrets.get("APP_BASE_URL", "https://seguimientodecausasjudicial.streamlit.app").rstrip("/")
                 link_portal_final = f"{APP_BASE_URL}/?cliente_id={token_para_link}"
                 st.info(f"🔗 **Enlace del Portal para el Cliente:**\n`{link_portal_final}`")
                 st.caption("⚠️ Si el cliente te dice que el enlace no abre, copia la URL exacta que te muestra tu navegador cuando entras a JuriSync y compárala con la de arriba. Si son distintas, avísale a Nicolás para fijar la URL correcta en la configuración.")
