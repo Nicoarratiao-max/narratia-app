@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 import os
 import json
@@ -3179,21 +3180,22 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 # La URL de la app ya cambió más de una vez (narratia-app ->
                 # seguimientodecausasjudicial -> jurisyncs), así que en vez de dejar un
                 # valor fijo en el código que hay que andar corrigiendo cada vez, el
-                # enlace se arma SOLO leyendo la URL real desde el navegador
-                # (window.location.origin) en el momento que se muestra. Así nunca más
-                # se rompe, sin importar si Streamlit vuelve a cambiar la URL.
-                id_contenedor_link = f"portal-link-{token_para_link}"
-                st.markdown(f"""
-                <div class="dash-card">
-                    <strong>🔗 Enlace del Portal para el Cliente:</strong><br>
-                    <code id="{id_contenedor_link}" style="word-break: break-all;">Generando enlace...</code>
+                # enlace se arma SOLO leyendo la URL real desde el navegador. El truco
+                # anterior (imagen invisible con onload) no se ejecutaba de forma
+                # confiable; components.v1.html es la forma oficial de Streamlit para
+                # correr JavaScript de verdad, así que se cambió a esa.
+                st.markdown("**🔗 Enlace del Portal para el Cliente:**")
+                components.html(f"""
+                <div id="linkbox" style="font-family: monospace; background:#f4f5f7; border:1px solid #cbd2d9;
+                     border-radius:8px; padding:10px 14px; word-break: break-all; font-size:14px; color:#172b4d;">
+                    Generando enlace...
                 </div>
-                <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" style="display:none" onload="
-                    var el = document.getElementById('{id_contenedor_link}');
-                    if (el) {{ el.innerText = window.location.origin + '/?cliente_id={token_para_link}'; }}
-                ">
-                """, unsafe_allow_html=True)
-                st.caption("👆 Copia y pega ese enlace tal cual para enviárselo al cliente (por WhatsApp, correo, etc.). Si no se alcanza a generar, refresca la página una vez.")
+                <script>
+                    document.getElementById('linkbox').innerText =
+                        window.parent.location.origin + '/?cliente_id={token_para_link}';
+                </script>
+                """, height=60)
+                st.caption("👆 Copia y pega ese enlace tal cual para enviárselo al cliente (por WhatsApp, correo, etc.).")
                 
                 with st.form(key=f"form_agregar_requisito_{rol_actual}", clear_on_submit=True):
                     st.markdown("#### Solicitar Nuevo Documento")
