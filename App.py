@@ -3175,17 +3175,25 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 # rompen la URL al compartirla por WhatsApp/correo. Se deja solo
                 # letras, números y guion bajo, para que el enlace nunca falle por esto.
                 token_para_link = re.sub(r'[^A-Za-z0-9_]', '', str(c_data.get('Cliente', 'Cliente')).strip().replace(" ", "_"))
-                # IMPORTANTE: esta URL base es la de TU app en Streamlit Cloud (confirmada
-                # en tus logs: seguimientodecausasjudicial.streamlit.app — el nombre del
-                # repositorio de GitHub "narratia-app" NO es lo mismo que el nombre de la
-                # URL pública de la app, por eso el valor anterior generaba enlaces rotos).
-                # Si alguna vez vuelves a eliminar y recrear la app y Streamlit le asigna
-                # otra URL, fija la real en Streamlit Cloud -> Settings -> Secrets con:
-                # APP_BASE_URL = "https://tu-url-real.streamlit.app"
-                APP_BASE_URL = st.secrets.get("APP_BASE_URL", "https://seguimientodecausasjudicial.streamlit.app").rstrip("/")
-                link_portal_final = f"{APP_BASE_URL}/?cliente_id={token_para_link}"
-                st.info(f"🔗 **Enlace del Portal para el Cliente:**\n`{link_portal_final}`")
-                st.caption("⚠️ Si el cliente te dice que el enlace no abre, copia la URL exacta que te muestra tu navegador cuando entras a JuriSync y compárala con la de arriba. Si son distintas, avísale a Nicolás para fijar la URL correcta en la configuración.")
+                
+                # La URL de la app ya cambió más de una vez (narratia-app ->
+                # seguimientodecausasjudicial -> jurisyncs), así que en vez de dejar un
+                # valor fijo en el código que hay que andar corrigiendo cada vez, el
+                # enlace se arma SOLO leyendo la URL real desde el navegador
+                # (window.location.origin) en el momento que se muestra. Así nunca más
+                # se rompe, sin importar si Streamlit vuelve a cambiar la URL.
+                id_contenedor_link = f"portal-link-{token_para_link}"
+                st.markdown(f"""
+                <div class="dash-card">
+                    <strong>🔗 Enlace del Portal para el Cliente:</strong><br>
+                    <code id="{id_contenedor_link}" style="word-break: break-all;">Generando enlace...</code>
+                </div>
+                <img src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==" style="display:none" onload="
+                    var el = document.getElementById('{id_contenedor_link}');
+                    if (el) {{ el.innerText = window.location.origin + '/?cliente_id={token_para_link}'; }}
+                ">
+                """, unsafe_allow_html=True)
+                st.caption("👆 Copia y pega ese enlace tal cual para enviárselo al cliente (por WhatsApp, correo, etc.). Si no se alcanza a generar, refresca la página una vez.")
                 
                 with st.form(key=f"form_agregar_requisito_{rol_actual}", clear_on_submit=True):
                     st.markdown("#### Solicitar Nuevo Documento")
