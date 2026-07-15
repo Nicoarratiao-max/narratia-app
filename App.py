@@ -216,6 +216,141 @@ def formatear_clp(monto) -> str:
     except (ValueError, TypeError):
         return "$0"
 
+# =====================================================================
+# 📋 MOTOR DE CÁLCULO: POSESIÓN EFECTIVA INTESTADA (Formulario 4423 SII)
+# =====================================================================
+# Tomado directamente de las instrucciones del Formulario 4423 del SII
+# (Declaración y Pago de Impuesto a las Herencias Intestadas) que Nicolás
+# adjuntó. Estas tablas y fórmulas son las oficiales para calcular las
+# asignaciones de cada heredero y el impuesto a la herencia que le
+# corresponde, según el orden de sucesión intestada chileno.
+
+TABLA1_EXENCION_UTM = {
+    "Hijo": 600, "Cónyuge": 600, "Ascendiente": 600,
+    "Hermano": 60, "Medio Hermano": 60,
+    "Colateral 3° o 4° grado": 60, "Colateral 5° o 6° grado": 0
+}
+
+TABLA3_RECARGO_PCT = {
+    "Hijo": 0, "Cónyuge": 0, "Ascendiente": 0,
+    "Hermano": 20, "Medio Hermano": 20,
+    "Colateral 3° o 4° grado": 20, "Colateral 5° o 6° grado": 40
+}
+
+# (desde UTM, hasta UTM, tasa, deducción en UTM)
+TABLA2_TRAMOS_IMPUESTO = [
+    (0.01, 960, 0.01, 0.0),
+    (960.01, 1920, 0.025, 14.4),
+    (1920.01, 3840, 0.05, 62.4),
+    (3840.01, 5760, 0.075, 158.4),
+    (5760.01, 7680, 0.10, 302.4),
+    (7680.01, 9600, 0.15, 686.4),
+    (9600.01, 14400, 0.20, 1166.4),
+    (14400.01, float('inf'), 0.25, 1886.4),
+]
+
+def calcular_impuesto_tabla2(base_imponible_utm: float) -> float:
+    """Aplica la Tabla N°2 del Formulario 4423: tasa progresiva por tramo de UTM."""
+    if base_imponible_utm <= 0:
+        return 0.0
+    for desde, hasta, tasa, deduccion in TABLA2_TRAMOS_IMPUESTO:
+        if desde <= base_imponible_utm <= hasta:
+            return max(0.0, base_imponible_utm * tasa - deduccion)
+    return 0.0
+
+def calcular_asignaciones_intestadas(conteo_herederos: dict, masa_hereditaria: float) -> dict:
+    """
+    Calcula la asignación (en pesos) que le corresponde a CADA TIPO de
+    heredero, siguiendo exactamente el orden de sucesión intestada y las
+    fórmulas de las instrucciones del Formulario 4423 del SII.
+    conteo_herederos: dict tipo_heredero -> cantidad de personas de ese tipo.
+    Devuelve: dict tipo_heredero -> asignación individual en pesos (por persona).
+    """
+    M = masa_hereditaria
+    h = conteo_herederos.get("Hijo", 0)
+    conyuge = conteo_herederos.get("Cónyuge", 0)
+    asc = conteo_herederos.get("Ascendiente", 0)
+    herm = conteo_herederos.get("Hermano", 0)
+    mherm = conteo_herederos.get("Medio Hermano", 0)
+    col34 = conteo_herederos.get("Colateral 3° o 4° grado", 0)
+    col56 = conteo_herederos.get("Colateral 5° o 6° grado", 0)
+    
+    resultado = {}
+    
+    if h > 0:
+        # a) Los hijos excluyen a los demás salvo cónyuge sobreviviente.
+        if conyuge > 0:
+            if h == 1:
+                resultado["Hijo"] = M / 2
+                resultado["Cónyuge"] = M / 2
+            elif h < 7:
+                resultado["Hijo"] = M / (h + 2)
+                resultado["Cónyuge"] = 2 * M / (h + 2)
+            else:
+                resultado["Cónyuge"] = M / 4
+                resultado["Hijo"] = 3 * M / (4 * h)
+        else:
+            resultado["Hijo"] = M / h
+    elif conyuge > 0 or asc > 0:
+        # b) Sin hijos: cónyuge y/o ascendientes.
+        if conyuge > 0 and asc > 0:
+            resultado["Cónyuge"] = 2 * M / 3
+            resultado["Ascendiente"] = M / (3 * asc)
+        elif conyuge > 0:
+            resultado["Cónyuge"] = M
+        else:
+            resultado["Ascendiente"] = M / asc
+    elif herm > 0 or mherm > 0:
+        # c) Sin los anteriores: hermanos y medio hermanos.
+        if herm > 0 and mherm > 0:
+            resultado["Hermano"] = 2 * (M / (2 * herm + mherm))
+            resultado["Medio Hermano"] = M / (2 * herm + mherm)
+        elif herm > 0:
+            resultado["Hermano"] = M / herm
+        else:
+            resultado["Medio Hermano"] = M / mherm
+    elif col34 > 0:
+        # d) Colaterales de grado más próximo excluyen a los demás.
+        resultado["Colateral 3° o 4° grado"] = M / col34
+    elif col56 > 0:
+        resultado["Colateral 5° o 6° grado"] = M / col56
+    
+    return resultado
+
+def calcular_posesion_efectiva_completa(df_herederos: pd.DataFrame, masa_hereditaria: float, valor_utm: float) -> pd.DataFrame:
+    """
+    Toma la tabla de herederos (Nombre, RUT, Tipo) y la masa hereditaria ya
+    calculada, y devuelve una tabla con la asignación e impuesto de CADA
+    heredero individual, aplicando las Tablas 1, 2 y 3 del Formulario 4423.
+    """
+    if df_herederos.empty or valor_utm <= 0:
+        return pd.DataFrame()
+    
+    conteo_por_tipo = df_herederos['Tipo de Heredero'].value_counts().to_dict()
+    asignacion_por_tipo = calcular_asignaciones_intestadas(conteo_por_tipo, masa_hereditaria)
+    
+    filas_resultado = []
+    for _, heredero in df_herederos.iterrows():
+        tipo = heredero['Tipo de Heredero']
+        asignacion_pesos = asignacion_por_tipo.get(tipo, 0)
+        asignacion_utm = asignacion_pesos / valor_utm if valor_utm > 0 else 0
+        exencion_utm = TABLA1_EXENCION_UTM.get(tipo, 0)
+        base_imponible_utm = max(0, asignacion_utm - exencion_utm)
+        impuesto_utm = calcular_impuesto_tabla2(base_imponible_utm)
+        recargo_pct = TABLA3_RECARGO_PCT.get(tipo, 0)
+        impuesto_total_utm = impuesto_utm * (1 + recargo_pct / 100)
+        impuesto_total_pesos = impuesto_total_utm * valor_utm
+        
+        filas_resultado.append({
+            "Heredero": heredero.get('Nombre', ''), "RUT": heredero.get('RUT', ''), "Tipo": tipo,
+            "Asignación ($)": round(asignacion_pesos), "Asignación (UTM)": round(asignacion_utm, 2),
+            "Exención (UTM)": exencion_utm, "Base Imponible (UTM)": round(base_imponible_utm, 2),
+            "Recargo (%)": recargo_pct, "Impuesto Total (UTM)": round(impuesto_total_utm, 2),
+            "Impuesto Total ($)": round(impuesto_total_pesos)
+        })
+    
+    return pd.DataFrame(filas_resultado)
+
 def numero_a_letras_clp(monto: int) -> str:
     """
     Convierte un monto entero a su forma escrita en español, para no tener
@@ -532,7 +667,7 @@ COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimient
 COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ESCRITURAS = ['ID', 'Fecha', 'Tipo_Escritura', 'Cliente', 'RUT_Cliente', 'Detalle', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ANALISIS_ESCRITURAS = ['ID', 'Fecha', 'Nombre_Archivo_Original', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
-COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
 def fetch_sheet_cached(worksheet_name):
@@ -1149,6 +1284,70 @@ def crear_informe_analisis_escritura_word(nombre_escritura_original, texto_anali
             p = doc.add_paragraph()
             p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
             p.add_run(bloque.strip())
+    
+    return doc
+
+def crear_informe_posesion_efectiva_word(datos_causante, df_herederos_calc, masa_hereditaria, valor_utm, total_impuesto):
+    """
+    Genera el resumen de la determinación de asignaciones e impuesto a la
+    herencia en Word, con los mismos datos que hay que trasladar al
+    Formulario 4423 del SII y al Formulario de Solicitud de Posesión
+    Efectiva del Registro Civil.
+    """
+    if not DOCX_READY:
+        return None
+    
+    doc = Document()
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(6)
+    
+    titulo = doc.add_paragraph()
+    titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = titulo.add_run("DETERMINACIÓN DE ASIGNACIONES E IMPUESTO A LA HERENCIA")
+    r.bold = True
+    r.font.size = Pt(14)
+    
+    sub = doc.add_paragraph()
+    sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    sub.add_run("(Base para completar el Formulario 4423 del SII y la Solicitud de Posesión Efectiva ante el Registro Civil)").italic = True
+    
+    meta = doc.add_paragraph()
+    meta.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    meta.add_run("Causante: ").bold = True
+    meta.add_run(f"{datos_causante.get('nombre','')} — RUT: {datos_causante.get('rut','')}\n")
+    meta.add_run("Fecha de defunción: ").bold = True
+    meta.add_run(f"{datos_causante.get('fecha_defuncion','')}\n")
+    meta.add_run("Valor UTM utilizado: ").bold = True
+    meta.add_run(f"{formatear_clp(valor_utm)}\n")
+    meta.add_run("Masa Hereditaria (Total Activos - Total Pasivos): ").bold = True
+    meta.add_run(f"{formatear_clp(masa_hereditaria)}\n")
+    meta.add_run("Impuesto Total a Pagar: ").bold = True
+    meta.add_run(f"{formatear_clp(total_impuesto)}")
+    
+    doc.add_paragraph("\nDetalle de Asignaciones e Impuesto por Heredero:").runs[0].bold = True
+    
+    if not df_herederos_calc.empty:
+        tabla = doc.add_table(rows=1, cols=7)
+        tabla.style = 'Table Grid'
+        encabezados = ['Heredero', 'RUT', 'Tipo', 'Asignación ($)', 'Base Imponible (UTM)', 'Impuesto Total (UTM)', 'Impuesto Total ($)']
+        for i, enc in enumerate(encabezados):
+            tabla.rows[0].cells[i].text = enc
+        for _, fila in df_herederos_calc.iterrows():
+            fila_celdas = tabla.add_row().cells
+            fila_celdas[0].text = str(fila['Heredero'])
+            fila_celdas[1].text = str(fila['RUT'])
+            fila_celdas[2].text = str(fila['Tipo'])
+            fila_celdas[3].text = formatear_clp(fila['Asignación ($)'])
+            fila_celdas[4].text = str(fila['Base Imponible (UTM)'])
+            fila_celdas[5].text = str(fila['Impuesto Total (UTM)'])
+            fila_celdas[6].text = formatear_clp(fila['Impuesto Total ($)'])
+    
+    p_nota = doc.add_paragraph()
+    p_nota.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_nota.add_run("\nEste cálculo se realizó conforme a las reglas de sucesión intestada y a las Tablas N°1, N°2 y N°3 de las instrucciones del Formulario 4423 del Servicio de Impuestos Internos. Corresponde verificar los valores finales contra la masa hereditaria efectivamente inventariada y tasada antes de presentar la declaración oficial.").italic = True
     
     return doc
 
@@ -4790,43 +4989,127 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
 # =====================================================================
 elif st.session_state['menu_radio'] == "📋 Posesión Efectiva":
     st.title("📋 Posesión Efectiva")
-    st.info("ℹ️ **Versión inicial.** Nicolás mencionó que enviará el formulario oficial de Posesión Efectiva y el del SII para ajustar este módulo exactamente a esos formatos. Mientras tanto, este es un módulo funcional basado en los datos generales que exige la tramitación (Registro Civil para posesión efectiva intestada, o vía judicial para la testada), que se irá completando apenas se reciban los documentos.")
+    st.markdown("Calcula automáticamente las asignaciones y el impuesto a la herencia de cada heredero, siguiendo las reglas de sucesión intestada y las Tablas 1, 2 y 3 del Formulario 4423 del SII.")
+    st.caption("⚠️ Este calculador cubre la sucesión intestada (sin testamento). El resultado es la base para completar los formularios oficiales del SII y del Registro Civil — siempre debe revisarse antes de presentar la declaración.")
     
     df_pe = leer_csv_local(ARCHIVO_POSESION_EFECTIVA, COLS_POSESION_EFECTIVA)
     
-    with st.form("form_posesion_efectiva", clear_on_submit=True):
-        st.markdown("#### Datos del Causante (persona fallecida)")
+    with st.container(border=True):
+        st.markdown("#### 1. Datos del Causante y del Solicitante")
         c_pe1, c_pe2 = st.columns(2)
-        causante_nombre = c_pe1.text_input("Nombre completo del causante")
-        causante_rut = c_pe2.text_input("RUT del causante")
-        fecha_defuncion = c_pe1.date_input("Fecha de defunción")
-        tipo_posesion = c_pe2.selectbox("Tipo de Posesión Efectiva", ["Intestada (sin testamento)", "Testada (con testamento)"])
-        
-        st.markdown("#### Herederos")
-        herederos_pe = st.text_area("Nombre completo y RUT de cada heredero (uno por línea)", height=100, placeholder="Ej:\nJuan Pérez Soto - 12.345.678-9\nMaría Pérez Soto - 13.456.789-0")
-        
-        st.markdown("#### Cliente que solicita la gestión")
-        c_pe3, c_pe4 = st.columns(2)
-        cliente_solicitante_pe = c_pe3.text_input("Nombre del cliente solicitante")
-        rut_cliente_pe = c_pe4.text_input("RUT del cliente solicitante")
-        
-        if st.form_submit_button("➕ Registrar Trámite de Posesión Efectiva", type="primary", use_container_width=True):
-            if not causante_nombre.strip() or not causante_rut.strip():
-                st.error("⚠️ Debes completar al menos el nombre y RUT del causante.")
-            else:
+        causante_nombre = c_pe1.text_input("Nombre completo del causante", key="pe_causante_nombre")
+        causante_rut = c_pe2.text_input("RUT del causante", key="pe_causante_rut")
+        fecha_defuncion = c_pe1.date_input("Fecha de defunción", key="pe_fecha_defuncion")
+        valor_utm_pe = c_pe2.number_input("Valor UTM a la fecha de fallecimiento ($)", min_value=1, value=65000, step=100, key="pe_valor_utm")
+        cliente_solicitante_pe = c_pe1.text_input("Nombre del cliente solicitante", key="pe_solicitante_nombre")
+        rut_cliente_pe = c_pe2.text_input("RUT del cliente solicitante", key="pe_solicitante_rut")
+    
+    with st.container(border=True):
+        st.markdown("#### 2. Herederos")
+        st.caption("Agrega una fila por cada heredero. El tipo de parentesco determina la fórmula de asignación y la exención de impuesto que le corresponde.")
+        if 'pe_df_herederos' not in st.session_state:
+            st.session_state['pe_df_herederos'] = pd.DataFrame(columns=["Nombre", "RUT", "Tipo de Heredero"])
+        df_herederos_editado = st.data_editor(
+            st.session_state['pe_df_herederos'],
+            num_rows="dynamic",
+            column_config={
+                "Tipo de Heredero": st.column_config.SelectboxColumn(
+                    options=["Hijo", "Cónyuge", "Ascendiente", "Hermano", "Medio Hermano", "Colateral 3° o 4° grado", "Colateral 5° o 6° grado"],
+                    required=True
+                )
+            },
+            use_container_width=True, key="pe_editor_herederos"
+        )
+        st.session_state['pe_df_herederos'] = df_herederos_editado
+    
+    with st.container(border=True):
+        st.markdown("#### 3. Inventario de Bienes")
+        st.caption("Agrega cada bien con su valorización y exención (si aplica). La masa hereditaria se calcula sola: suma de (Valorización − Exención) de los Activos, menos los Pasivos.")
+        if 'pe_df_bienes' not in st.session_state:
+            st.session_state['pe_df_bienes'] = pd.DataFrame(columns=["Categoría", "Descripción", "Valorización ($)", "Exención ($)"])
+        df_bienes_editado = st.data_editor(
+            st.session_state['pe_df_bienes'],
+            num_rows="dynamic",
+            column_config={
+                "Categoría": st.column_config.SelectboxColumn(
+                    options=["Bienes Raíces", "Vehículos", "Menaje", "Bienes Inmuebles Excluidos de Avalúo Fiscal",
+                             "Otros Bienes Muebles (negocios, empresas, derechos)", "Otros Bienes (acciones, valores, depósitos, bonos)",
+                             "Pasivo (Deuda Acreditada)"],
+                    required=True
+                ),
+                "Valorización ($)": st.column_config.NumberColumn(min_value=0, step=1000),
+                "Exención ($)": st.column_config.NumberColumn(min_value=0, step=1000),
+            },
+            use_container_width=True, key="pe_editor_bienes"
+        )
+        st.session_state['pe_df_bienes'] = df_bienes_editado
+    
+    if st.button("🧮 Calcular Posesión Efectiva y Determinación del Impuesto", type="primary", use_container_width=True):
+        if not causante_nombre.strip() or not causante_rut.strip():
+            st.error("⚠️ Debes completar al menos el nombre y RUT del causante.")
+        elif df_herederos_editado.empty:
+            st.error("⚠️ Debes agregar al menos un heredero.")
+        else:
+            # Masa hereditaria = suma de (Valorización - Exención) de los activos, menos los pasivos
+            df_bienes_limpio = df_bienes_editado.copy()
+            df_bienes_limpio["Valorización ($)"] = pd.to_numeric(df_bienes_limpio["Valorización ($)"], errors='coerce').fillna(0)
+            df_bienes_limpio["Exención ($)"] = pd.to_numeric(df_bienes_limpio["Exención ($)"], errors='coerce').fillna(0)
+            
+            mascara_pasivo = df_bienes_limpio["Categoría"] == "Pasivo (Deuda Acreditada)"
+            total_activos = (df_bienes_limpio.loc[~mascara_pasivo, "Valorización ($)"] - df_bienes_limpio.loc[~mascara_pasivo, "Exención ($)"]).sum()
+            total_pasivos = df_bienes_limpio.loc[mascara_pasivo, "Valorización ($)"].sum()
+            masa_hereditaria = max(0, total_activos - total_pasivos)
+            
+            resultado_calculo = calcular_posesion_efectiva_completa(df_herederos_editado, masa_hereditaria, valor_utm_pe)
+            
+            st.markdown("---")
+            st.markdown("### 📊 Resultado del Cálculo")
+            c_res1, c_res2, c_res3 = st.columns(3)
+            c_res1.metric("Total Activos", formatear_clp(total_activos))
+            c_res2.metric("Total Pasivos", formatear_clp(total_pasivos))
+            c_res3.metric("Masa Hereditaria", formatear_clp(masa_hereditaria))
+            
+            st.markdown("#### Asignaciones e Impuesto por Heredero")
+            st.dataframe(resultado_calculo, use_container_width=True, hide_index=True)
+            
+            total_impuesto_pe = resultado_calculo["Impuesto Total ($)"].sum() if not resultado_calculo.empty else 0
+            st.metric("💰 Impuesto Total a Pagar (todos los herederos)", formatear_clp(total_impuesto_pe))
+            
+            # Generar y guardar el informe en Word, en el historial (igual que contratos y escrituras)
+            datos_causante_doc = {'nombre': causante_nombre, 'rut': causante_rut, 'fecha_defuncion': fecha_defuncion.strftime("%d/%m/%Y")}
+            doc_pe = crear_informe_posesion_efectiva_word(datos_causante_doc, resultado_calculo, masa_hereditaria, valor_utm_pe, total_impuesto_pe)
+            
+            bytes_pe = b""
+            if doc_pe:
+                buffer_pe = io.BytesIO()
+                doc_pe.save(buffer_pe)
+                bytes_pe = buffer_pe.getvalue()
+                nombre_archivo_pe = f"Posesion_Efectiva_{causante_nombre.replace(' ', '_')}.docx"
+                
+                drive_id_pe, b64_pe = guardar_archivo_adjunto(
+                    nombre_archivo_pe, bytes_pe,
+                    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                )
+                
                 nuevo_pe = {
                     'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"),
                     'Causante': causante_nombre, 'RUT_Causante': causante_rut,
-                    'Fecha_Defuncion': fecha_defuncion.strftime("%d/%m/%Y"), 'Herederos': herederos_pe,
+                    'Fecha_Defuncion': fecha_defuncion.strftime("%d/%m/%Y"),
+                    'Herederos_JSON': df_herederos_editado.to_json(orient='records', force_ascii=False),
+                    'Bienes_JSON': df_bienes_editado.to_json(orient='records', force_ascii=False),
                     'Cliente_Solicitante': cliente_solicitante_pe, 'RUT_Cliente': rut_cliente_pe,
-                    'Estado': tipo_posesion, 'Archivo_B64': '', 'Archivo_Drive_ID': '', 'Usuario_Propietario': usuario_actual
+                    'Estado': 'Intestada (calculada)', 'Valor_UTM': valor_utm_pe, 'Masa_Hereditaria': masa_hereditaria,
+                    'Impuesto_Total': total_impuesto_pe, 'Archivo_B64': b64_pe, 'Archivo_Drive_ID': drive_id_pe,
+                    'Usuario_Propietario': usuario_actual
                 }
                 df_pe = pd.concat([df_pe, pd.DataFrame([nuevo_pe])], ignore_index=True)
                 df_pe.to_csv(ARCHIVO_POSESION_EFECTIVA, index=False)
                 dn_pe = safe_read_sheet("base_posesion_efectiva", COLS_POSESION_EFECTIVA)
                 safe_update_sheet("base_posesion_efectiva", pd.concat([dn_pe, pd.DataFrame([nuevo_pe])], ignore_index=True))
-                st.success("✅ Trámite de posesión efectiva registrado.")
-                st.rerun()
+                
+                st.success("✅ Cálculo guardado en el historial.")
+                st.download_button("📥 Descargar Informe de Cálculo (.docx)", data=bytes_pe, file_name=nombre_archivo_pe,
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="dl_pe_nuevo")
     
     st.markdown("---")
     st.markdown("### 🗄️ Trámites de Posesión Efectiva Registrados")
@@ -4835,7 +5118,22 @@ elif st.session_state['menu_radio'] == "📋 Posesión Efectiva":
     else:
         for _, fila_pe in df_pe.iloc[::-1].iterrows():
             with st.container(border=True):
-                st.markdown(f"**Causante:** {fila_pe['Causante']} ({fila_pe['RUT_Causante']}) — **{fila_pe['Estado']}**")
-                st.caption(f"Fecha defunción: {fila_pe['Fecha_Defuncion']} · Solicitante: {fila_pe['Cliente_Solicitante']} · Registrado: {fila_pe['Fecha']}")
-                with st.expander("Ver herederos"):
-                    st.text(fila_pe['Herederos'])
+                c1, c2 = st.columns([4, 1])
+                with c1:
+                    st.markdown(f"**Causante:** {fila_pe['Causante']} ({fila_pe['RUT_Causante']}) — **{fila_pe.get('Estado','')}**")
+                    st.caption(f"Fecha defunción: {fila_pe['Fecha_Defuncion']} · Solicitante: {fila_pe.get('Cliente_Solicitante','')} · Registrado: {fila_pe['Fecha']}")
+                    if pd.notna(fila_pe.get('Masa_Hereditaria')) and str(fila_pe.get('Masa_Hereditaria', '')).strip():
+                        st.caption(f"Masa Hereditaria: {formatear_clp(fila_pe.get('Masa_Hereditaria', 0))} · Impuesto Total: {formatear_clp(fila_pe.get('Impuesto_Total', 0))}")
+                with c2:
+                    bytes_desc_pe = obtener_bytes_adjunto(fila_pe, 'Archivo_Drive_ID', 'Archivo_B64')
+                    if bytes_desc_pe is not None:
+                        st.download_button("📥 Descargar", data=bytes_desc_pe, file_name=f"PosesionEfectiva_{fila_pe['ID']}.docx", key=f"dl_pe_{fila_pe['ID']}")
+                if pd.notna(fila_pe.get('Herederos_JSON')) and str(fila_pe.get('Herederos_JSON', '')).strip():
+                    with st.expander("Ver herederos y bienes"):
+                        try:
+                            st.markdown("**Herederos:**")
+                            st.dataframe(pd.read_json(io.StringIO(fila_pe['Herederos_JSON'])), use_container_width=True, hide_index=True)
+                            st.markdown("**Bienes:**")
+                            st.dataframe(pd.read_json(io.StringIO(fila_pe['Bienes_JSON'])), use_container_width=True, hide_index=True)
+                        except Exception:
+                            st.caption("No se pudo mostrar el detalle de este registro antiguo.")
