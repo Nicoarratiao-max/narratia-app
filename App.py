@@ -1271,7 +1271,113 @@ CATALOGO_ESCRITURAS = {
             "TERCERO: La presente servidumbre deberá inscribirse en el Registro de Hipotecas y Gravámenes del Conservador de Bienes Raíces respectivo para su plena oponibilidad a terceros, conforme al artículo 698 del Código Civil."
         )
     },
+    "Liquidación de Sociedad Conyugal": {
+        "roles": ("Cónyuge 1", "Cónyuge 2"),
+        "campos": [
+            ("causal_disolucion", "Causal de disolución de la sociedad conyugal (divorcio, cambio de régimen, etc.)", "text"),
+            ("inventario_bienes", "Inventario de bienes sociales (descripción y valor de cada uno)", "textarea"),
+            ("adjudicacion", "Forma de adjudicación acordada (qué bien y a quién se adjudica)", "textarea"),
+            ("recompensas", "Recompensas entre cónyuges y sociedad, si existen", "textarea"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: La sociedad conyugal habida entre los comparecientes se disolvió por {d.get('causal_disolucion','')}, formándose desde esa fecha una comunidad de bienes entre ambos, la que se procede a liquidar por el presente instrumento conforme a las reglas de la partición de bienes hereditarios (artículo 1776 del Código Civil).\n\n"
+            f"SEGUNDO: El inventario y tasación de los bienes que componen el haber social es el siguiente: {d.get('inventario_bienes','')}.\n\n"
+            f"TERCERO: Las partes acuerdan la siguiente adjudicación de los bienes inventariados: {d.get('adjudicacion','')}.\n\n"
+            f"CUARTO: {('Se reconocen y regulan las siguientes recompensas entre los cónyuges y la sociedad conyugal: ' + d.get('recompensas','')) if d.get('recompensas','').strip() else 'Las partes declaran que no existen recompensas pendientes entre los cónyuges y la sociedad conyugal.'}\n\n"
+            "QUINTO: Con el pago y adjudicación antes referidos, las partes se declaran mutuamente pagadas de sus derechos en la sociedad conyugal, sin que quede cargo ni saldo pendiente entre ellas por este concepto, otorgándose el más amplio y recíproco finiquito.\n\n"
+            "SEXTO: Si dentro de los bienes adjudicados existen inmuebles u otros bienes sujetos a registro, la presente escritura deberá inscribirse en el registro respectivo del Conservador de Bienes Raíces o repartición que corresponda para su plena oponibilidad a terceros."
+        )
+    },
+    "Separación de Bienes con Liquidación de Sociedad Conyugal": {
+        "roles": ("Cónyuge 1", "Cónyuge 2"),
+        "campos": [
+            ("fecha_matrimonio", "Fecha y lugar de celebración del matrimonio", "text"),
+            ("inventario_bienes", "Inventario de bienes sociales (descripción y valor de cada uno)", "textarea"),
+            ("adjudicacion", "Forma de adjudicación acordada (qué bien y a quién se adjudica)", "textarea"),
+            ("renuncia_gananciales", "¿Alguno de los cónyuges renuncia a los gananciales? (indicar quién, o dejar en blanco si no aplica)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: Los comparecientes, casados bajo el régimen de sociedad conyugal con fecha {d.get('fecha_matrimonio','')}, vienen en pactar la sustitución de dicho régimen patrimonial por el de separación total de bienes, en conformidad con el artículo 1723 del Código Civil.\n\n"
+            "SEGUNDO: Por efecto del pacto precedente, queda disuelta la sociedad conyugal habida entre las partes, formándose una comunidad de bienes que en este mismo acto se procede a liquidar.\n\n"
+            f"TERCERO: El inventario y tasación de los bienes que componen el haber social es el siguiente: {d.get('inventario_bienes','')}.\n\n"
+            f"CUARTO: Las partes acuerdan la siguiente adjudicación de los bienes inventariados: {d.get('adjudicacion','')}.\n\n"
+            f"QUINTO: {('Se deja constancia de la renuncia a los gananciales por parte de ' + d.get('renuncia_gananciales','')) if d.get('renuncia_gananciales','').strip() else 'No existe renuncia a los gananciales por ninguna de las partes.'}\n\n"
+            "SEXTO: A partir de la fecha de este instrumento, cada cónyuge tendrá la libre administración y disposición de sus bienes propios y de los que en lo sucesivo adquiera, sin injerencia del otro.\n\n"
+            "SÉPTIMO: El presente pacto deberá subinscribirse al margen de la respectiva inscripción matrimonial dentro del plazo de treinta días contados desde la fecha de esta escritura, sin lo cual no producirá efecto alguno entre las partes ni respecto de terceros, conforme al artículo 1723 del Código Civil."
+        )
+    },
+    "Testamento Cerrado": {
+        "roles": ("Testador(a)", "(sin segunda parte - requiere 3 testigos)"),
+        "campos": [
+            ("declaracion_general", "Declaración general que el testador desea consignar (opcional, sin revelar el contenido del sobre)", "textarea"),
+        ],
+        "clausula": lambda d: (
+            "PRIMERO: El Testador comparece ante el Notario y los testigos indicados en esta escritura, y hace entrega al Notario de un sobre cerrado, declarando de viva voz que en su interior se contiene su testamento.\n\n"
+            f"SEGUNDO: {('El Testador deja constancia de la siguiente declaración general: ' + d.get('declaracion_general','')) if d.get('declaracion_general','').strip() else 'El contenido del testamento es conocido únicamente por el Testador, conforme a la naturaleza de esta forma testamentaria.'}\n\n"
+            "TERCERO: El Notario levanta la presente acta en la cubierta del sobre, dejando constancia del lugar, fecha y circunstancias del otorgamiento, la que es firmada por el Testador, los tres testigos y el Notario autorizante, en un solo acto, sin interrupción.\n\n"
+            "CUARTO: El sobre conteniendo el testamento queda en custodia del oficio notarial, sin perjuicio del derecho del Testador de retirarlo personalmente. Fallecido el Testador, el testamento deberá ser abierto mediante la gestión judicial correspondiente."
+        )
+    },
+    "Usufructo": {
+        "roles": ("Nudo(a) Propietario(a)", "Usufructuario(a)"),
+        "campos": [
+            ("bien_usufructo", "Descripción del bien sobre el que se constituye el usufructo", "textarea"),
+            ("duracion_usufructo", "Duración del usufructo (plazo, o de por vida)", "text"),
+            ("condiciones_usufructo", "Condiciones de uso, goce y conservación del bien", "textarea"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Nudo Propietario constituye derecho real de usufructo en favor de El Usufructuario, sobre el siguiente bien: {d.get('bien_usufructo','')}.\n\n"
+            f"SEGUNDO: El usufructo tendrá una duración de {d.get('duracion_usufructo','')}.\n\n"
+            f"TERCERO: El Usufructuario tendrá derecho a gozar del bien y percibir sus frutos, sujeto a las siguientes condiciones: {d.get('condiciones_usufructo','')}, quedando obligado a conservar la forma y sustancia del bien y a restituirlo al Nudo Propietario a la extinción del usufructo.\n\n"
+            "CUARTO: El presente usufructo deberá inscribirse en el Registro de Propiedad del Conservador de Bienes Raíces respectivo cuando recaiga sobre inmuebles, conforme al artículo 697 del Código Civil."
+        )
+    },
+    "Declaración de Bien Familiar": {
+        "roles": ("Cónyuge Solicitante", "Cónyuge Titular del Bien"),
+        "campos": [
+            ("bien_afectado", "Descripción del bien que se afecta como familiar", "textarea"),
+            ("fundamento", "Fundamento de la afectación (residencia principal de la familia, etc.)", "textarea"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: Los comparecientes dejan constancia de su acuerdo para afectar como bien familiar el siguiente bien: {d.get('bien_afectado','')}, de propiedad de uno de los cónyuges, en conformidad con los artículos 141 y siguientes del Código Civil.\n\n"
+            f"SEGUNDO: La afectación se funda en lo siguiente: {d.get('fundamento','')}.\n\n"
+            "TERCERO: Las partes declaran conocer que la declaración de bien familiar limita las facultades de disposición del cónyuge propietario, quien no podrá enajenar ni gravar voluntariamente el bien, ni prometer hacerlo, sin la voluntad del cónyuge no propietario.\n\n"
+            "CUARTO: Se deja constancia de que, para su plena oponibilidad a terceros, la presente declaración debe anotarse al margen de la inscripción de dominio del inmueble en el Conservador de Bienes Raíces respectivo, sin perjuicio de que la vía ordinaria para constituir esta afectación es la declaración judicial ante el Tribunal de Familia competente cuando no exista acuerdo entre los cónyuges."
+        )
+    },
+    "Cesión de Derechos": {
+        "roles": ("Cedente", "Cesionario(a)"),
+        "campos": [
+            ("derecho_cedido", "Descripción del derecho cedido (crédito, derecho litigioso, etc.)", "textarea"),
+            ("precio_cesion", "Precio de la cesión ($, o indicar si es gratuita)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Cedente cede y transfiere a El Cesionario, quien acepta, el siguiente derecho: {d.get('derecho_cedido','')}.\n\n"
+            f"SEGUNDO: La presente cesión se efectúa por la suma de {d.get('precio_cesion','')}.\n\n"
+            "TERCERO: El Cedente declara que el derecho cedido existe y le pertenece legítimamente, sin perjuicio de que, salvo pacto expreso en contrario, no responde de la solvencia del deudor sino únicamente de la existencia del derecho al tiempo de la cesión, conforme a las reglas generales del Código Civil.\n\n"
+            "CUARTO: Para que la presente cesión produzca efectos respecto del deudor y de terceros, deberá notificarse al deudor cedido o ser aceptada por este, conforme al artículo 1902 del Código Civil."
+        )
+    },
+    "Cesión de Derechos Hereditarios": {
+        "roles": ("Cedente (Heredero/a)", "Cesionario(a)"),
+        "campos": [
+            ("causante_datos", "Nombre completo y RUT del causante", "text"),
+            ("fecha_defuncion_causante", "Fecha de defunción del causante", "text"),
+            ("cuota_cedida", "Cuota o derechos cedidos (ej: la totalidad de sus derechos, o un porcentaje)", "text"),
+            ("precio_cesion_hereditaria", "Precio de la cesión ($, o indicar si es gratuita)", "text"),
+            ("posesion_efectiva_estado", "Estado de la posesión efectiva (tramitada, en trámite, pendiente)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Cedente, en su calidad de heredero de don/doña {d.get('causante_datos','')}, fallecido(a) con fecha {d.get('fecha_defuncion_causante','')}, cede y transfiere a El Cesionario, quien acepta, {d.get('cuota_cedida','')} que le corresponden o pudieren corresponderle en dicha herencia.\n\n"
+            f"SEGUNDO: La presente cesión se efectúa por la suma de {d.get('precio_cesion_hereditaria','')}.\n\n"
+            f"TERCERO: Se deja constancia de que la posesión efectiva de la herencia se encuentra: {d.get('posesion_efectiva_estado','')}.\n\n"
+            "CUARTO: El Cedente declara que es heredero del causante individualizado y que ha aceptado la herencia, cediendo por este acto el derecho real de herencia que le corresponde, sin que ello confiera al Cesionario la calidad de heredero, la cual permanece en el Cedente conforme a la ley.\n\n"
+            "QUINTO: El Cedente no responde de la existencia de bienes determinados dentro de la herencia ni de su valor, sino únicamente de su calidad de heredero, salvo pacto expreso en contrario entre las partes.\n\n"
+            "SEXTO: Si la herencia comprende bienes raíces, la presente cesión deberá inscribirse en el Registro de Propiedad del Conservador de Bienes Raíces del territorio en que estos se encuentren ubicados, para su mayor seguridad jurídica y oponibilidad a terceros."
+        )
+    },
 }
+
 
 def crear_escritura_word(tipo_escritura, datos):
     """
