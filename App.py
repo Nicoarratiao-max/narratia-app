@@ -514,6 +514,8 @@ def selector_tribunal(valor_actual="", key_prefix="trib"):
     return trib_sel
 COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']
 COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_ESCRITURAS = ['ID', 'Fecha', 'Tipo_Escritura', 'Cliente', 'RUT_Cliente', 'Detalle', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
 def fetch_sheet_cached(worksheet_name):
@@ -1089,6 +1091,265 @@ def crear_contrato_word(datos):
     
     return doc
 
+# =====================================================================
+# 📜 CATÁLOGO DE ESCRITURAS PÚBLICAS DE CHILE
+# =====================================================================
+# Basado en los tipos de escritura pública reconocidos y de uso más frecuente
+# en las notarías chilenas (compraventa de inmuebles, sociedades, hipotecas,
+# mandatos, testamentos, etc., conforme al Código Orgánico de Tribunales y
+# al Código Civil). No pretende ser exhaustivo: cualquier acto jurídico puede
+# reducirse a escritura pública, pero estos son los que un estudio jurídico
+# de práctica general redacta con más frecuencia. Si necesitas un tipo que no
+# está aquí, dímelo y lo agrego.
+CATALOGO_ESCRITURAS = {
+    "Compraventa de Bien Raíz": {
+        "roles": ("Vendedor(a)", "Comprador(a)"),
+        "campos": [
+            ("direccion_inmueble", "Dirección del inmueble", "text"),
+            ("comuna_inmueble", "Comuna", "text"),
+            ("rol_avaluo", "Rol de Avalúo (SII)", "text"),
+            ("fojas_inscripcion", "Fojas / Número / Año de inscripción vigente (CBR)", "text"),
+            ("precio", "Precio de venta ($)", "text"),
+            ("forma_pago", "Forma de pago", "textarea"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: Por el presente instrumento, El Vendedor vende, cede y transfiere a El Comprador, quien compra y adquiere para sí, el inmueble ubicado en {d.get('direccion_inmueble','')}, comuna de {d.get('comuna_inmueble','')}, individualizado con Rol de Avalúo N° {d.get('rol_avaluo','')}, inscrito a fojas {d.get('fojas_inscripcion','')} del Registro de Propiedad del Conservador de Bienes Raíces respectivo.\n\n"
+            f"SEGUNDO: El precio de la compraventa es la suma de {d.get('precio','')}, que las partes declaran pagadera de la siguiente forma: {d.get('forma_pago','')}.\n\n"
+            "TERCERO: El Vendedor se obliga al saneamiento de la evicción y de los vicios redhibitorios conforme a las reglas generales, declarando que el inmueble se encuentra libre de gravámenes, prohibiciones, embargos y litigios pendientes, salvo que se exprese lo contrario.\n\n"
+            "CUARTO: La presente escritura servirá de título suficiente para que El Comprador practique la inscripción del dominio a su nombre en el Registro de Propiedad del Conservador de Bienes Raíces competente."
+        )
+    },
+    "Constitución de Sociedad de Responsabilidad Limitada": {
+        "roles": ("Socio(a) 1", "Socio(a) 2"),
+        "campos": [
+            ("razon_social", "Razón Social de la sociedad", "text"),
+            ("giro", "Giro u objeto social", "textarea"),
+            ("capital", "Capital social ($)", "text"),
+            ("aporte_socio1", "Aporte Socio 1 (% o monto)", "text"),
+            ("aporte_socio2", "Aporte Socio 2 (% o monto)", "text"),
+            ("domicilio_social", "Domicilio de la sociedad", "text"),
+            ("duracion", "Duración de la sociedad", "text"),
+            ("administracion", "Administración (quién administra)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: Los comparecientes vienen en constituir una sociedad de responsabilidad limitada, que girará bajo la razón social de \"{d.get('razon_social','')}\", en adelante \"la Sociedad\".\n\n"
+            f"SEGUNDO: El objeto de la Sociedad será: {d.get('giro','')}.\n\n"
+            f"TERCERO: El capital social se fija en la suma de {d.get('capital','')}, que los socios aportan de la siguiente forma: el Socio 1 aporta {d.get('aporte_socio1','')} y el Socio 2 aporta {d.get('aporte_socio2','')}.\n\n"
+            f"CUARTO: El domicilio social será {d.get('domicilio_social','')}, sin perjuicio de las agencias o sucursales que la Sociedad establezca en el futuro.\n\n"
+            f"QUINTO: La duración de la Sociedad será de {d.get('duracion','')}, contada desde la fecha de la presente escritura.\n\n"
+            f"SEXTO: La administración de la Sociedad corresponderá a {d.get('administracion','')}, quien usará la razón social y ejercerá la representación judicial y extrajudicial de la misma, con las más amplias facultades de administración."
+        )
+    },
+    "Mandato / Poder General": {
+        "roles": ("Mandante", "Mandatario(a)"),
+        "campos": [
+            ("facultades", "Facultades que se otorgan", "textarea"),
+            ("plazo_vigencia", "Plazo de vigencia (si aplica)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Mandante confiere poder general amplio a El Mandatario para que, actuando en su nombre y representación, ejerza las siguientes facultades: {d.get('facultades','')}.\n\n"
+            "SEGUNDO: En el ejercicio de este mandato, El Mandatario queda facultado con todas las atribuciones de un mandatario general en los términos del artículo 2132 y siguientes del Código Civil, así como con las facultades especiales de ambos incisos del artículo 7° del Código de Procedimiento Civil, cuando corresponda.\n\n"
+            f"TERCERO: El presente mandato tendrá vigencia {d.get('plazo_vigencia', 'indefinida, mientras no sea revocado por El Mandante')}, sin perjuicio de las causales legales de extinción del mandato."
+        )
+    },
+    "Mandato / Poder Especial": {
+        "roles": ("Mandante", "Mandatario(a)"),
+        "campos": [
+            ("acto_especifico", "Acto o gestión específica encomendada", "textarea"),
+            ("plazo_vigencia", "Plazo de vigencia (si aplica)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Mandante confiere poder especial a El Mandatario, para que, exclusivamente para el siguiente acto o gestión, actúe en su nombre y representación: {d.get('acto_especifico','')}.\n\n"
+            "SEGUNDO: Las facultades conferidas por este mandato se limitan estrictamente al acto o gestión especificado en la cláusula precedente, sin que puedan extenderse a otros actos no comprendidos expresamente en él.\n\n"
+            f"TERCERO: El presente mandato tendrá vigencia {d.get('plazo_vigencia', 'hasta el cumplimiento del encargo o su revocación')}."
+        )
+    },
+    "Hipoteca": {
+        "roles": ("Deudor(a) Hipotecario(a)", "Acreedor(a) Hipotecario(a)"),
+        "campos": [
+            ("direccion_inmueble", "Dirección del inmueble hipotecado", "text"),
+            ("rol_avaluo", "Rol de Avalúo (SII)", "text"),
+            ("monto_garantizado", "Monto de la obligación garantizada ($)", "text"),
+            ("plazo_obligacion", "Plazo de la obligación garantizada", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Deudor Hipotecario constituye hipoteca de primer grado sobre el inmueble ubicado en {d.get('direccion_inmueble','')}, Rol de Avalúo N° {d.get('rol_avaluo','')}, en favor de El Acreedor Hipotecario, para garantizar el cumplimiento de la obligación que se individualiza en la cláusula siguiente.\n\n"
+            f"SEGUNDO: La obligación garantizada asciende a la suma de {d.get('monto_garantizado','')}, con un plazo de {d.get('plazo_obligacion','')}.\n\n"
+            "TERCERO: La presente hipoteca se extiende a todas las ampliaciones, renovaciones o prórrogas de la obligación principal, así como a los intereses, costas y demás accesorios legales.\n\n"
+            "CUARTO: Esta hipoteca deberá inscribirse en el Registro de Hipotecas y Gravámenes del Conservador de Bienes Raíces respectivo para producir efectos respecto de terceros, conforme al artículo 2410 del Código Civil."
+        )
+    },
+    "Contrato de Arrendamiento (reducido a escritura pública)": {
+        "roles": ("Arrendador(a)", "Arrendatario(a)"),
+        "campos": [
+            ("direccion_inmueble", "Dirección del inmueble arrendado", "text"),
+            ("renta_mensual", "Renta mensual ($)", "text"),
+            ("plazo_contrato", "Plazo del contrato", "text"),
+            ("garantia", "Garantía / mes de depósito", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Arrendador da en arrendamiento a El Arrendatario, quien acepta, el inmueble ubicado en {d.get('direccion_inmueble','')}.\n\n"
+            f"SEGUNDO: La renta de arrendamiento será de {d.get('renta_mensual','')} mensuales, pagaderos dentro de los primeros cinco días de cada mes.\n\n"
+            f"TERCERO: El plazo del contrato será de {d.get('plazo_contrato','')}, renovable por períodos iguales y sucesivos si ninguna de las partes manifiesta su voluntad en contrario con la anticipación legal correspondiente.\n\n"
+            f"CUARTO: El Arrendatario entrega en este acto la suma de {d.get('garantia','')} a título de garantía por el fiel cumplimiento de las obligaciones del presente contrato, la que será restituida al término del arrendamiento previa constatación del estado del inmueble."
+        )
+    },
+    "Mutuo (Préstamo de Dinero)": {
+        "roles": ("Mutuante (Acreedor)", "Mutuario (Deudor)"),
+        "campos": [
+            ("monto_mutuo", "Monto del préstamo ($)", "text"),
+            ("interes", "Interés pactado", "text"),
+            ("plazo_restitucion", "Plazo de restitución", "text"),
+            ("garantia_mutuo", "Garantía (si existe)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Mutuante entrega en este acto a El Mutuario, a título de mutuo o préstamo de consumo, la suma de {d.get('monto_mutuo','')}, cantidad que El Mutuario declara recibir a su entera satisfacción.\n\n"
+            f"SEGUNDO: El Mutuario se obliga a restituir la suma mutuada dentro del plazo de {d.get('plazo_restitucion','')}, con un interés de {d.get('interes','')}.\n\n"
+            f"TERCERO: {('Para garantizar el cumplimiento de esta obligación, se constituye la siguiente garantía: ' + d.get('garantia_mutuo','')) if d.get('garantia_mutuo','').strip() else 'Las partes declaran que la presente obligación no cuenta con garantía real adicional.'}\n\n"
+            "CUARTO: El retardo en la restitución del capital o de los intereses hará exigible de inmediato la totalidad de la obligación, sin necesidad de requerimiento judicial o extrajudicial previo."
+        )
+    },
+    "Donación entre Vivos": {
+        "roles": ("Donante", "Donatario(a)"),
+        "campos": [
+            ("bien_donado", "Descripción del bien donado", "textarea"),
+            ("valor_bien", "Valor referencial del bien ($)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Donante dona, cede y transfiere gratuitamente a El Donatario, quien acepta, el siguiente bien: {d.get('bien_donado','')}, cuyo valor referencial es de {d.get('valor_bien','')}.\n\n"
+            "SEGUNDO: El Donatario declara aceptar la presente donación, agradeciendo la liberalidad de El Donante.\n\n"
+            "TERCERO: Las partes declaran conocer las obligaciones tributarias que pudieren derivarse de la presente donación conforme a la Ley N° 16.271 sobre Impuesto a las Herencias, Asignaciones y Donaciones."
+        )
+    },
+    "Finiquito / Cancelación de Deuda": {
+        "roles": ("Acreedor(a)", "Deudor(a)"),
+        "campos": [
+            ("obligacion_cancelada", "Obligación que se cancela (descripción)", "textarea"),
+            ("monto_pagado", "Monto pagado ($)", "text"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El Acreedor deja constancia de haber recibido de El Deudor la suma de {d.get('monto_pagado','')}, en pago total y definitivo de la siguiente obligación: {d.get('obligacion_cancelada','')}.\n\n"
+            "SEGUNDO: En consecuencia, El Acreedor otorga a El Deudor el más amplio, total y definitivo finiquito respecto de la obligación individualizada precedentemente, declarando no tener nada más que reclamar por dicho concepto.\n\n"
+            "TERCERO: Se deja constancia de que las garantías constituidas para caucionar la obligación referida, si las hubiere, quedan igualmente canceladas y sin efecto por el presente instrumento."
+        )
+    },
+    "Transacción": {
+        "roles": ("Parte 1", "Parte 2"),
+        "campos": [
+            ("conflicto_pendiente", "Conflicto o diferencia que se transa", "textarea"),
+            ("concesiones_reciprocas", "Concesiones recíprocas de las partes", "textarea"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: Las partes dejan constancia de la existencia de la siguiente diferencia o conflicto pendiente entre ellas: {d.get('conflicto_pendiente','')}.\n\n"
+            f"SEGUNDO: Con el objeto de precaver un litigio eventual o poner término a uno existente, las partes acuerdan las siguientes concesiones recíprocas: {d.get('concesiones_reciprocas','')}.\n\n"
+            "TERCERO: Las partes declaran que la presente transacción produce el efecto de cosa juzgada en última instancia respecto de las materias en ella comprendidas, conforme al artículo 2460 del Código Civil, y se obligan a no promover acción judicial alguna relacionada con lo aquí transigido."
+        )
+    },
+    "Testamento Abierto": {
+        "roles": ("Testador(a)", "(sin segunda parte - requiere 3 testigos)"),
+        "campos": [
+            ("herederos_asignatarios", "Herederos y/o legatarios designados, con sus asignaciones", "textarea"),
+            ("albacea", "Albacea designado (si aplica)", "text"),
+        ],
+        "clausula": lambda d: (
+            "PRIMERO: El Testador, hallándose en su sano juicio, declara ser su última voluntad la que se consigna en la presente escritura, revocando cualquier testamento anterior que hubiere otorgado.\n\n"
+            f"SEGUNDO: El Testador instituye como herederos y/o legatarios a las siguientes personas, con las asignaciones que se indican: {d.get('herederos_asignatarios','')}.\n\n"
+            f"TERCERO: {('El Testador designa como albacea, con tenencia de bienes, a ' + d.get('albacea','')) if d.get('albacea','').strip() else 'El Testador no designa albacea, rigiendo las reglas generales sobre partición de la herencia.'}\n\n"
+            "CUARTO: El presente testamento se otorga ante tres testigos hábiles, quienes firman la presente escritura junto con el Testador y el Notario autorizante, conforme a las solemnidades del testamento abierto establecidas en el Código Civil."
+        )
+    },
+    "Servidumbre": {
+        "roles": ("Predio Sirviente (Propietario/a)", "Predio Dominante (Propietario/a)"),
+        "campos": [
+            ("tipo_servidumbre", "Tipo de servidumbre (tránsito, acueducto, etc.)", "text"),
+            ("descripcion_predios", "Descripción de ambos predios", "textarea"),
+            ("condiciones_ejercicio", "Condiciones de ejercicio de la servidumbre", "textarea"),
+        ],
+        "clausula": lambda d: (
+            f"PRIMERO: El propietario del predio sirviente constituye, en favor del predio dominante, una servidumbre de {d.get('tipo_servidumbre','')}, sobre los predios que se describen a continuación: {d.get('descripcion_predios','')}.\n\n"
+            f"SEGUNDO: La servidumbre se ejercerá bajo las siguientes condiciones: {d.get('condiciones_ejercicio','')}.\n\n"
+            "TERCERO: La presente servidumbre deberá inscribirse en el Registro de Hipotecas y Gravámenes del Conservador de Bienes Raíces respectivo para su plena oponibilidad a terceros, conforme al artículo 698 del Código Civil."
+        )
+    },
+}
+
+def crear_escritura_word(tipo_escritura, datos):
+    """
+    Genera la escritura pública en Word con el mismo formato profesional que
+    el generador de contratos (Calibri 11, interlineado 1.5, justificado con
+    títulos centrados, párrafos reales para evitar el problema de huecos al
+    justificar).
+    """
+    if not DOCX_READY:
+        return None
+    
+    doc = Document()
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(6)
+    
+    titulo = doc.add_paragraph()
+    titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    titulo.add_run(f"ESCRITURA PÚBLICA DE {tipo_escritura.upper()}").bold = True
+    
+    hoy = datetime.now()
+    meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+    fecha_str = f"{hoy.day} de {meses[hoy.month-1]} del año {hoy.year}"
+    
+    rol1_label, rol2_label = CATALOGO_ESCRITURAS[tipo_escritura]["roles"]
+    
+    intro = doc.add_paragraph()
+    intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    intro.add_run(f"En Santiago, República de Chile, a {fecha_str}, ante mí, {datos.get('notario_nombre','') or '[NOMBRE DEL NOTARIO]'}, Notario(a) Público(a) de {datos.get('notaria_ciudad','') or '[CIUDAD]'}, comparecen:")
+    
+    p_p1 = doc.add_paragraph()
+    p_p1.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_p1.add_run(f"Por una parte, don/doña {datos.get('parte1_nombre','')}, {datos.get('parte1_nacionalidad','chileno/a')}, {datos.get('parte1_estado_civil','')}, {datos.get('parte1_profesion','')}, cédula nacional de identidad número {datos.get('parte1_rut','')}, con domicilio en {datos.get('parte1_domicilio','')}, en adelante \"{rol1_label.upper()}\"; y,")
+    
+    if "sin segunda parte" not in rol2_label:
+        p_p2 = doc.add_paragraph()
+        p_p2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_p2.add_run(f"Por otra parte, don/doña {datos.get('parte2_nombre','')}, {datos.get('parte2_nacionalidad','chileno/a')}, {datos.get('parte2_estado_civil','')}, {datos.get('parte2_profesion','')}, cédula nacional de identidad número {datos.get('parte2_rut','')}, con domicilio en {datos.get('parte2_domicilio','')}, en adelante \"{rol2_label.upper()}\".")
+    
+    p_mayores = doc.add_paragraph()
+    p_mayores.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_mayores.add_run("Los comparecientes, mayores de edad, quienes acreditan su identidad con las cédulas antes citadas, exponen que han convenido el siguiente acto jurídico, que se contiene en las cláusulas que a continuación se singularizan:")
+    
+    # Cláusulas específicas del tipo de escritura (cada "\n\n" del texto se
+    # convierte en un párrafo real, no un salto interno, para que se vea bien
+    # justificado en Word)
+    texto_clausulas = CATALOGO_ESCRITURAS[tipo_escritura]["clausula"](datos)
+    for bloque in texto_clausulas.split("\n\n"):
+        if bloque.strip():
+            p_c = doc.add_paragraph()
+            p_c.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_c.add_run(bloque.strip())
+    
+    p_domicilio = doc.add_paragraph()
+    p_domicilio.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_domicilio.add_run("Para todos los efectos legales derivados del presente instrumento, los comparecientes fijan domicilio en la ciudad de Santiago y se someten a la competencia de sus Tribunales Ordinarios de Justicia. Se deja constancia de que los comparecientes fueron informados por el Notario autorizante del contenido y alcance jurídico del presente instrumento, prestando su consentimiento libre y expresamente.")
+    
+    doc.add_paragraph("\n\n")
+    table_firmas = doc.add_table(rows=1, cols=2)
+    p_f1 = table_firmas.cell(0, 0).paragraphs[0]
+    p_f1.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_f1.add_run("___________________________________\n")
+    p_f1.add_run(f"{datos.get('parte1_nombre','').upper()}\n")
+    p_f1.add_run(f"R.U.T.: {datos.get('parte1_rut','')}\n")
+    p_f1.add_run(rol1_label)
+    
+    if "sin segunda parte" not in rol2_label:
+        p_f2 = table_firmas.cell(0, 1).paragraphs[0]
+        p_f2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        p_f2.add_run("___________________________________\n")
+        p_f2.add_run(f"{datos.get('parte2_nombre','').upper()}\n")
+        p_f2.add_run(f"R.U.T.: {datos.get('parte2_rut','')}\n")
+        p_f2.add_run(rol2_label)
+    
+    return doc
+
 # --- MOTOR DE CREACIÓN DE INFORME IA EN WORD ---
 def crear_informe_ia_word(rol, cliente, texto_informe):
     if not DOCX_READY: 
@@ -1427,6 +1688,8 @@ nombre_real_usuario = NOMBRES_REALES.get(usuario_actual, usuario_actual.capitali
 ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
+ARCHIVO_ESCRITURAS = f"base_escrituras_{usuario_actual}.csv"
+ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
 ARCHIVO_MENSAJES = "base_mensajes_global.csv"
@@ -1698,7 +1961,8 @@ with st.sidebar:
     else: 
         opciones_flujo = opciones_basicas + [
             "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
-            "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📝 Redactor IA"
+            "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📝 Redactor IA",
+            "📜 Escrituras Públicas", "📋 Posesión Efectiva"
         ]
         
     if usuario_actual == "Narratia":
@@ -4082,3 +4346,281 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         
                     except Exception as e:
                         st.error(f"❌ Hubo un error de conexión: {e}")
+
+# =====================================================================
+# 📜 MÓDULO: ESCRITURAS PÚBLICAS (3 pestañas)
+# =====================================================================
+elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
+    st.title("📜 Escrituras Públicas")
+    st.markdown("Redacción, análisis y gestión de documentos para escrituras públicas.")
+    
+    tab_esc_redaccion, tab_esc_analisis, tab_esc_docs = st.tabs([
+        "✍️ Redacción de Escritura", "🔍 Análisis de Escritura (IA)", "📥 Docs Cliente"
+    ])
+    
+    # --- PESTAÑA 1: REDACCIÓN DE ESCRITURA ---
+    with tab_esc_redaccion:
+        st.markdown("#### Paso 1: Elige el tipo de escritura")
+        tipo_esc_sel = st.selectbox("Tipo de Escritura Pública", list(CATALOGO_ESCRITURAS.keys()), key="esc_tipo_sel")
+        rol1_lbl, rol2_lbl = CATALOGO_ESCRITURAS[tipo_esc_sel]["roles"]
+        tiene_segunda_parte = "sin segunda parte" not in rol2_lbl
+        
+        st.markdown("#### Paso 2: Completa los datos")
+        with st.form("form_generar_escritura", clear_on_submit=False):
+            with st.container(border=True):
+                st.markdown("**Datos del Notario**")
+                c_not1, c_not2 = st.columns(2)
+                notario_nombre = c_not1.text_input("Nombre del Notario(a)")
+                notaria_ciudad = c_not2.text_input("Ciudad de la Notaría", value="Santiago")
+            
+            with st.container(border=True):
+                st.markdown(f"**Compareciente 1 — {rol1_lbl}**")
+                c_p1a, c_p1b = st.columns(2)
+                parte1_nombre = c_p1a.text_input("Nombre completo", key="esc_p1_nom")
+                parte1_rut = c_p1b.text_input("RUT", key="esc_p1_rut")
+                parte1_domicilio = c_p1a.text_input("Domicilio", key="esc_p1_dom")
+                parte1_profesion = c_p1b.text_input("Profesión u oficio", key="esc_p1_prof")
+                parte1_estado_civil = c_p1a.selectbox("Estado civil", ["Soltero(a)", "Casado(a)", "Divorciado(a)", "Viudo(a)"], key="esc_p1_ec")
+                parte1_nacionalidad = c_p1b.text_input("Nacionalidad", value="Chilena", key="esc_p1_nac")
+            
+            if tiene_segunda_parte:
+                with st.container(border=True):
+                    st.markdown(f"**Compareciente 2 — {rol2_lbl}**")
+                    c_p2a, c_p2b = st.columns(2)
+                    parte2_nombre = c_p2a.text_input("Nombre completo", key="esc_p2_nom")
+                    parte2_rut = c_p2b.text_input("RUT", key="esc_p2_rut")
+                    parte2_domicilio = c_p2a.text_input("Domicilio", key="esc_p2_dom")
+                    parte2_profesion = c_p2b.text_input("Profesión u oficio", key="esc_p2_prof")
+                    parte2_estado_civil = c_p2a.selectbox("Estado civil", ["Soltero(a)", "Casado(a)", "Divorciado(a)", "Viudo(a)"], key="esc_p2_ec")
+                    parte2_nacionalidad = c_p2b.text_input("Nacionalidad", value="Chilena", key="esc_p2_nac")
+            else:
+                st.caption("ℹ️ Este tipo de escritura requiere 3 testigos hábiles presentes en la notaría; no se solicitan sus datos aquí, solo el compareciente principal.")
+                parte2_nombre = parte2_rut = parte2_domicilio = parte2_profesion = parte2_estado_civil = parte2_nacionalidad = ""
+            
+            with st.container(border=True):
+                st.markdown(f"**Datos específicos de: {tipo_esc_sel}**")
+                datos_especificos = {}
+                for campo_key, campo_label, campo_tipo in CATALOGO_ESCRITURAS[tipo_esc_sel]["campos"]:
+                    if campo_tipo == "textarea":
+                        datos_especificos[campo_key] = st.text_area(campo_label, key=f"esc_campo_{campo_key}")
+                    else:
+                        datos_especificos[campo_key] = st.text_input(campo_label, key=f"esc_campo_{campo_key}")
+            
+            if st.form_submit_button("📄 Generar Escritura en Word", type="primary", use_container_width=True):
+                if not parte1_nombre.strip() or not parte1_rut.strip():
+                    st.error("⚠️ Debes completar al menos el nombre y RUT del primer compareciente.")
+                else:
+                    datos_escritura = {
+                        'notario_nombre': notario_nombre, 'notaria_ciudad': notaria_ciudad,
+                        'parte1_nombre': parte1_nombre, 'parte1_rut': parte1_rut, 'parte1_domicilio': parte1_domicilio,
+                        'parte1_profesion': parte1_profesion, 'parte1_estado_civil': parte1_estado_civil, 'parte1_nacionalidad': parte1_nacionalidad,
+                        'parte2_nombre': parte2_nombre, 'parte2_rut': parte2_rut, 'parte2_domicilio': parte2_domicilio,
+                        'parte2_profesion': parte2_profesion, 'parte2_estado_civil': parte2_estado_civil, 'parte2_nacionalidad': parte2_nacionalidad,
+                        **datos_especificos
+                    }
+                    doc_escritura = crear_escritura_word(tipo_esc_sel, datos_escritura)
+                    if doc_escritura:
+                        buffer_esc = io.BytesIO()
+                        doc_escritura.save(buffer_esc)
+                        bytes_escritura = buffer_esc.getvalue()
+                        nombre_archivo_esc = f"Escritura_{tipo_esc_sel.replace(' ', '_')}_{parte1_nombre.replace(' ', '_')}.docx"
+                        
+                        drive_id_esc, b64_esc = guardar_archivo_adjunto(
+                            nombre_archivo_esc, bytes_escritura,
+                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                        )
+                        
+                        df_esc = leer_csv_local(ARCHIVO_ESCRITURAS, COLS_ESCRITURAS)
+                        nuevo_esc = {
+                            'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"),
+                            'Tipo_Escritura': tipo_esc_sel, 'Cliente': parte1_nombre, 'RUT_Cliente': parte1_rut,
+                            'Detalle': f"{rol1_lbl}: {parte1_nombre}" + (f" | {rol2_lbl}: {parte2_nombre}" if tiene_segunda_parte else ""),
+                            'Archivo_B64': b64_esc, 'Archivo_Drive_ID': drive_id_esc, 'Usuario_Propietario': usuario_actual
+                        }
+                        df_esc = pd.concat([df_esc, pd.DataFrame([nuevo_esc])], ignore_index=True)
+                        df_esc.to_csv(ARCHIVO_ESCRITURAS, index=False)
+                        
+                        dn_esc = safe_read_sheet("base_escrituras", COLS_ESCRITURAS)
+                        safe_update_sheet("base_escrituras", pd.concat([dn_esc, pd.DataFrame([nuevo_esc])], ignore_index=True))
+                        
+                        st.success("✅ Escritura generada y guardada correctamente.")
+                        st.download_button("📥 Descargar Escritura (.docx)", data=bytes_escritura, file_name=nombre_archivo_esc,
+                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        
+        st.markdown("---")
+        st.markdown("### 🗄️ Historial de Escrituras Generadas")
+        df_esc_hist = leer_csv_local(ARCHIVO_ESCRITURAS, COLS_ESCRITURAS)
+        if df_esc_hist.empty:
+            st.info("Todavía no has generado ninguna escritura.")
+        else:
+            for _, fila_esc in df_esc_hist.iloc[::-1].iterrows():
+                with st.container(border=True):
+                    c1, c2 = st.columns([4, 1])
+                    with c1:
+                        st.markdown(f"**{fila_esc['Tipo_Escritura']}** — {fila_esc['Detalle']}")
+                        st.caption(f"Fecha: {fila_esc['Fecha']}")
+                    with c2:
+                        bytes_desc_esc = obtener_bytes_adjunto(fila_esc, 'Archivo_Drive_ID', 'Archivo_B64')
+                        if bytes_desc_esc is not None:
+                            st.download_button("📥 Descargar", data=bytes_desc_esc, file_name=f"Escritura_{fila_esc['ID']}.docx", key=f"dl_esc_{fila_esc['ID']}")
+    
+    # --- PESTAÑA 2: ANÁLISIS DE ESCRITURA (IA) ---
+    with tab_esc_analisis:
+        st.markdown("#### Sube la escritura y sus documentos de respaldo para que la IA revise su redacción")
+        st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
+        
+        archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
+        docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
+        contexto_adicional_esc = st.text_area("Contexto adicional para la IA (opcional)", placeholder="Ej: Es una compraventa de un bien raíz en Providencia, verificar especialmente la cláusula de saneamiento.")
+        
+        if st.button("🔍 Analizar Escritura", type="primary", use_container_width=True):
+            if not archivo_escritura_analizar:
+                st.error("⚠️ Debes subir el PDF de la escritura a analizar.")
+            else:
+                with st.spinner("⚖️ Analizando la redacción y formalidades de la escritura..."):
+                    try:
+                        import PyPDF2
+                        lector_esc = PyPDF2.PdfReader(archivo_escritura_analizar)
+                        texto_escritura = "\n".join([pagina.extract_text() or "" for pagina in lector_esc.pages])
+                        
+                        texto_respaldos = ""
+                        if docs_respaldo_analizar:
+                            for doc_resp in docs_respaldo_analizar:
+                                lector_resp = PyPDF2.PdfReader(doc_resp)
+                                texto_respaldos += f"\n--- {doc_resp.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector_resp.pages])
+                        
+                        import google.generativeai as genai
+                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                        modelo_elegido_esc = "gemini-1.0-pro"
+                        for m in genai.list_models():
+                            if 'generateContent' in m.supported_generation_methods:
+                                md_name = m.name.replace("models/", "")
+                                if 'flash' in md_name:
+                                    modelo_elegido_esc = md_name
+                                    break
+                        modelo_esc = genai.GenerativeModel(modelo_elegido_esc)
+                        
+                        prompt_analisis_esc = f"""
+                        Actúa como un abogado chileno experto en derecho notarial y civil, revisando la redacción de una escritura pública.
+                        
+                        Analiza el siguiente texto de una escritura pública y evalúa:
+                        1. Formalidades exigidas por el Código Orgánico de Tribunales (individualización correcta del notario y comparecientes: nacionalidad, estado civil, profesión, domicilio, cédula de identidad; ausencia de espacios en blanco, abreviaturas o cifras no permitidas; idioma castellano).
+                        2. Si el objeto del acto jurídico está claramente descrito (bien, precio/monto, condiciones).
+                        3. Si contiene las cláusulas esenciales según el tipo de acto (por ejemplo, en una compraventa: precio y forma de pago; en una hipoteca: monto garantizado e inscripción; en un mandato: facultades claramente delimitadas).
+                        4. Riesgos, ambigüedades o cláusulas que podrían generar problemas de interpretación o nulidad.
+                        5. Sugerencias concretas de mejora en la redacción.
+                        
+                        Contexto adicional entregado por el abogado: {contexto_adicional_esc if contexto_adicional_esc.strip() else "(sin contexto adicional)"}
+                        
+                        TEXTO DE LA ESCRITURA A ANALIZAR:
+                        {texto_escritura[:15000]}
+                        
+                        {"DOCUMENTOS DE RESPALDO ADJUNTOS:" + texto_respaldos[:8000] if texto_respaldos else ""}
+                        
+                        Entrega el análisis estructurado en secciones claras con títulos, indicando en cada punto si CUMPLE, CUMPLE PARCIALMENTE o NO CUMPLE, seguido de la explicación y recomendación concreta.
+                        """
+                        respuesta_analisis_esc = modelo_esc.generate_content(prompt_analisis_esc)
+                        st.success("✅ Análisis completado.")
+                        st.markdown(respuesta_analisis_esc.text)
+                    except Exception as e:
+                        st.error(f"❌ Hubo un error al analizar la escritura: {e}")
+    
+    # --- PESTAÑA 3: DOCS CLIENTE ---
+    with tab_esc_docs:
+        st.markdown("#### Solicitar documentos al cliente para una escritura")
+        st.caption("Usa el mismo portal externo que ya conoces (el del link para causas): el cliente entra con el mismo enlace y ve TODAS sus solicitudes pendientes juntas, sean de una causa o de una escritura.")
+        
+        ARCHIVO_DOCS_ESC = "base_documentos_clientes.csv"
+        if not os.path.exists(ARCHIVO_DOCS_ESC):
+            pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS_ESC, index=False)
+        df_docs_esc = leer_csv_local(ARCHIVO_DOCS_ESC, ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida'])
+        
+        with st.form("form_solicitar_docs_escritura", clear_on_submit=True):
+            nombre_cliente_esc_doc = st.text_input("Nombre completo del cliente (debe coincidir exactamente con el usado al generar la escritura)")
+            documento_solicitado_esc = st.text_input("Documento que necesitas que suba", placeholder="Ej: Certificado de Dominio Vigente")
+            if st.form_submit_button("➕ Solicitar Documento", type="primary"):
+                if nombre_cliente_esc_doc.strip() and documento_solicitado_esc.strip():
+                    token_cliente_esc = re.sub(r'[^A-Za-z0-9_]', '', nombre_cliente_esc_doc.strip().replace(" ", "_"))
+                    nueva_solicitud_esc = {
+                        'ID_Req': str(uuid.uuid4())[:8], 'Cliente_Token': token_cliente_esc,
+                        'Documento_Nombre': documento_solicitado_esc.strip(), 'Estado': '⏳ Pendiente',
+                        'Archivo_B64': '', 'Archivo_Drive_ID': '', 'Fecha_Subida': ''
+                    }
+                    df_docs_esc = pd.concat([df_docs_esc, pd.DataFrame([nueva_solicitud_esc])], ignore_index=True)
+                    df_docs_esc.to_csv(ARCHIVO_DOCS_ESC, index=False)
+                    safe_update_sheet("base_documentos_clientes", df_docs_esc)
+                    st.success(f"✅ Solicitud creada. El cliente **{nombre_cliente_esc_doc}** la verá en su portal.")
+                    st.rerun()
+                else:
+                    st.error("⚠️ Completa ambos campos.")
+        
+        st.markdown("---")
+        st.markdown("### 📋 Solicitudes de Documentos Registradas")
+        if df_docs_esc.empty:
+            st.info("No hay solicitudes de documentos creadas todavía.")
+        else:
+            for _, fila_doc_esc in df_docs_esc.iloc[::-1].iterrows():
+                with st.container(border=True):
+                    c1, c2, c3 = st.columns([3, 2, 1])
+                    c1.markdown(f"**{fila_doc_esc['Documento_Nombre']}**")
+                    c2.markdown(f"Cliente: {fila_doc_esc['Cliente_Token'].replace('_', ' ')} · {fila_doc_esc['Estado']}")
+                    with c3:
+                        if fila_doc_esc['Estado'] == '✅ Completado':
+                            bytes_doc_esc = obtener_bytes_adjunto(fila_doc_esc, 'Archivo_Drive_ID', 'Archivo_B64')
+                            if bytes_doc_esc is not None:
+                                st.download_button("📥", data=bytes_doc_esc, file_name=f"{fila_doc_esc['Documento_Nombre']}.pdf", key=f"dl_docesc_{fila_doc_esc['ID_Req']}")
+
+# =====================================================================
+# 📋 MÓDULO: POSESIÓN EFECTIVA
+# =====================================================================
+elif st.session_state['menu_radio'] == "📋 Posesión Efectiva":
+    st.title("📋 Posesión Efectiva")
+    st.info("ℹ️ **Versión inicial.** Nicolás mencionó que enviará el formulario oficial de Posesión Efectiva y el del SII para ajustar este módulo exactamente a esos formatos. Mientras tanto, este es un módulo funcional basado en los datos generales que exige la tramitación (Registro Civil para posesión efectiva intestada, o vía judicial para la testada), que se irá completando apenas se reciban los documentos.")
+    
+    df_pe = leer_csv_local(ARCHIVO_POSESION_EFECTIVA, COLS_POSESION_EFECTIVA)
+    
+    with st.form("form_posesion_efectiva", clear_on_submit=True):
+        st.markdown("#### Datos del Causante (persona fallecida)")
+        c_pe1, c_pe2 = st.columns(2)
+        causante_nombre = c_pe1.text_input("Nombre completo del causante")
+        causante_rut = c_pe2.text_input("RUT del causante")
+        fecha_defuncion = c_pe1.date_input("Fecha de defunción")
+        tipo_posesion = c_pe2.selectbox("Tipo de Posesión Efectiva", ["Intestada (sin testamento)", "Testada (con testamento)"])
+        
+        st.markdown("#### Herederos")
+        herederos_pe = st.text_area("Nombre completo y RUT de cada heredero (uno por línea)", height=100, placeholder="Ej:\nJuan Pérez Soto - 12.345.678-9\nMaría Pérez Soto - 13.456.789-0")
+        
+        st.markdown("#### Cliente que solicita la gestión")
+        c_pe3, c_pe4 = st.columns(2)
+        cliente_solicitante_pe = c_pe3.text_input("Nombre del cliente solicitante")
+        rut_cliente_pe = c_pe4.text_input("RUT del cliente solicitante")
+        
+        if st.form_submit_button("➕ Registrar Trámite de Posesión Efectiva", type="primary", use_container_width=True):
+            if not causante_nombre.strip() or not causante_rut.strip():
+                st.error("⚠️ Debes completar al menos el nombre y RUT del causante.")
+            else:
+                nuevo_pe = {
+                    'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"),
+                    'Causante': causante_nombre, 'RUT_Causante': causante_rut,
+                    'Fecha_Defuncion': fecha_defuncion.strftime("%d/%m/%Y"), 'Herederos': herederos_pe,
+                    'Cliente_Solicitante': cliente_solicitante_pe, 'RUT_Cliente': rut_cliente_pe,
+                    'Estado': tipo_posesion, 'Archivo_B64': '', 'Archivo_Drive_ID': '', 'Usuario_Propietario': usuario_actual
+                }
+                df_pe = pd.concat([df_pe, pd.DataFrame([nuevo_pe])], ignore_index=True)
+                df_pe.to_csv(ARCHIVO_POSESION_EFECTIVA, index=False)
+                dn_pe = safe_read_sheet("base_posesion_efectiva", COLS_POSESION_EFECTIVA)
+                safe_update_sheet("base_posesion_efectiva", pd.concat([dn_pe, pd.DataFrame([nuevo_pe])], ignore_index=True))
+                st.success("✅ Trámite de posesión efectiva registrado.")
+                st.rerun()
+    
+    st.markdown("---")
+    st.markdown("### 🗄️ Trámites de Posesión Efectiva Registrados")
+    if df_pe.empty:
+        st.info("No hay trámites de posesión efectiva registrados todavía.")
+    else:
+        for _, fila_pe in df_pe.iloc[::-1].iterrows():
+            with st.container(border=True):
+                st.markdown(f"**Causante:** {fila_pe['Causante']} ({fila_pe['RUT_Causante']}) — **{fila_pe['Estado']}**")
+                st.caption(f"Fecha defunción: {fila_pe['Fecha_Defuncion']} · Solicitante: {fila_pe['Cliente_Solicitante']} · Registrado: {fila_pe['Fecha']}")
+                with st.expander("Ver herederos"):
+                    st.text(fila_pe['Herederos'])
