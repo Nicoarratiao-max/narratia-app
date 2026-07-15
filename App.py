@@ -330,7 +330,8 @@ def leer_csv_local(path, default_cols=None):
 #
 # CONFIGURACIÓN NECESARIA (una sola vez, de tu parte):
 # 1. En Google Cloud Console, habilita la "Google Drive API" para el mismo
-#    proyecto de tu cuenta de servicio (credenciales_calendar.json).
+#    proyecto de la cuenta de servicio que ya usas para Google Sheets
+#    (la que configuraste en Secrets, sección [connections.gsheets]).
 # 2. Crea una carpeta en Google Drive para JuriSync y compártela con el
 #    correo de la cuenta de servicio (termina en "...gserviceaccount.com"),
 #    dándole permiso de Editor.
@@ -344,7 +345,7 @@ def leer_csv_local(path, default_cols=None):
 
 def _servicio_drive():
     SCOPES_DRIVE = ['https://www.googleapis.com/auth/drive']
-    creds = Credentials.from_service_account_file('credenciales_calendar.json', scopes=SCOPES_DRIVE)
+    creds = _obtener_credenciales_google(SCOPES_DRIVE)
     return build('drive', 'v3', credentials=creds)
 
 def subir_archivo_drive(nombre_archivo: str, contenido_bytes: bytes, mime_type: str = 'application/octet-stream'):
@@ -414,6 +415,21 @@ def obtener_bytes_adjunto(fila, campo_drive: str, campo_b64: str):
 # 🛡️ MOTOR DE RESILIENCIA Y CACHÉ (AIRBAGS ANTI-CRASH Y VELOCIDAD)
 # =====================================================================
 conn = st.connection("gsheets", type=GSheetsConnection)
+
+def _obtener_credenciales_google(scopes):
+    """
+    Construye las credenciales de Google para Drive y Calendar a partir de
+    los Secrets de Streamlit (misma sección [connections.gsheets] que ya usa
+    Google Sheets), en vez de depender de un archivo credenciales_calendar.json
+    en el repositorio. Esto es más seguro (el repositorio es público, así que
+    nunca debe contener una llave de servicio) y evita tener que configurar
+    la cuenta de servicio dos veces: se reutiliza la misma que ya configuraste
+    para Sheets.
+    """
+    info = dict(st.secrets["connections"]["gsheets"])
+    info.pop("spreadsheet", None)  # no es parte de las credenciales, es la URL de la hoja
+    return Credentials.from_service_account_info(info, scopes=scopes)
+
 # --- DEFINICIÓN DE COLUMNAS MAESTRAS ---
 COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan']
 COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']
@@ -515,6 +531,7 @@ def selector_tribunal(valor_actual="", key_prefix="trib"):
 COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']
 COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ESCRITURAS = ['ID', 'Fecha', 'Tipo_Escritura', 'Cliente', 'RUT_Cliente', 'Detalle', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_ANALISIS_ESCRITURAS = ['ID', 'Fecha', 'Nombre_Archivo_Original', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
@@ -581,7 +598,7 @@ def agendar_plazo_calendar(titulo, descripcion, fecha_str, correo_destino):
 
     try:
         SCOPES = ['https://www.googleapis.com/auth/calendar.events']
-        creds = Credentials.from_service_account_file('credenciales_calendar.json', scopes=SCOPES)
+        creds = _obtener_credenciales_google(SCOPES)
         servicio = build('calendar', 'v3', credentials=creds)
 
         f_obj = datetime.strptime(fecha_str, "%d/%m/%Y")
@@ -1088,6 +1105,50 @@ def crear_contrato_word(datos):
     para_cliente.add_run("___________________________________\n")
     para_cliente.add_run(f"{datos['cliente_nombre'].upper()}\n")
     para_cliente.add_run(f"R.U.T.: {datos['cliente_rut']}")
+    
+    return doc
+
+def crear_informe_analisis_escritura_word(nombre_escritura_original, texto_analisis):
+    """
+    Genera el informe de análisis de una escritura en Word, con el mismo
+    formato profesional del resto del sistema (Calibri 11, interlineado 1.5,
+    justificado), para guardarlo en el historial igual que un contrato.
+    """
+    if not DOCX_READY:
+        return None
+    
+    doc = Document()
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(6)
+    
+    titulo = doc.add_paragraph()
+    titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    r = titulo.add_run("INFORME DE ANÁLISIS DE ESCRITURA PÚBLICA")
+    r.bold = True
+    r.font.size = Pt(14)
+    
+    meta = doc.add_paragraph()
+    meta.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    meta.add_run("Documento analizado: ").bold = True
+    meta.add_run(f"{nombre_escritura_original}\n")
+    meta.add_run("Fecha del análisis: ").bold = True
+    meta.add_run(f"{datetime.now().strftime('%d/%m/%Y %H:%M')}")
+    
+    p_disclaimer = doc.add_paragraph()
+    p_disclaimer.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_disclaimer.add_run("Este informe fue generado con apoyo de inteligencia artificial como una revisión preliminar de formalidades y redacción, y no reemplaza el criterio profesional del abogado responsable.").italic = True
+    
+    # Cada bloque separado por doble salto de línea se convierte en un párrafo
+    # real (no un salto interno dentro del mismo párrafo), para que se vea
+    # bien justificado en Word, igual que en los contratos y escrituras.
+    for bloque in texto_analisis.split("\n\n"):
+        if bloque.strip():
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p.add_run(bloque.strip())
     
     return doc
 
@@ -1795,6 +1856,7 @@ ARCHIVO_BD = f"base_causas_{usuario_actual}.csv"
 ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 ARCHIVO_ESCRITURAS = f"base_escrituras_{usuario_actual}.csv"
+ARCHIVO_ANALISIS_ESCRITURAS = f"base_analisis_escrituras_{usuario_actual}.csv"
 ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
@@ -4628,8 +4690,55 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         respuesta_analisis_esc = modelo_esc.generate_content(prompt_analisis_esc)
                         st.success("✅ Análisis completado.")
                         st.markdown(respuesta_analisis_esc.text)
+                        
+                        # Se guarda el informe como Word en el historial, exactamente igual
+                        # que se hace con los contratos: se genera el .docx, se sube a Drive
+                        # (o queda de respaldo en base64) y se registra en la nube.
+                        doc_analisis = crear_informe_analisis_escritura_word(archivo_escritura_analizar.name, respuesta_analisis_esc.text)
+                        if doc_analisis:
+                            buffer_analisis = io.BytesIO()
+                            doc_analisis.save(buffer_analisis)
+                            bytes_analisis = buffer_analisis.getvalue()
+                            nombre_archivo_analisis = f"Analisis_{archivo_escritura_analizar.name.replace('.pdf', '')}.docx"
+                            
+                            drive_id_analisis, b64_analisis = guardar_archivo_adjunto(
+                                nombre_archivo_analisis, bytes_analisis,
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                            )
+                            
+                            df_analisis = leer_csv_local(ARCHIVO_ANALISIS_ESCRITURAS, COLS_ANALISIS_ESCRITURAS)
+                            nuevo_analisis = {
+                                'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y %H:%M"),
+                                'Nombre_Archivo_Original': archivo_escritura_analizar.name,
+                                'Archivo_B64': b64_analisis, 'Archivo_Drive_ID': drive_id_analisis, 'Usuario_Propietario': usuario_actual
+                            }
+                            df_analisis = pd.concat([df_analisis, pd.DataFrame([nuevo_analisis])], ignore_index=True)
+                            df_analisis.to_csv(ARCHIVO_ANALISIS_ESCRITURAS, index=False)
+                            
+                            dn_analisis = safe_read_sheet("base_analisis_escrituras", COLS_ANALISIS_ESCRITURAS)
+                            safe_update_sheet("base_analisis_escrituras", pd.concat([dn_analisis, pd.DataFrame([nuevo_analisis])], ignore_index=True))
+                            
+                            st.download_button("📥 Descargar Informe de Análisis (.docx)", data=bytes_analisis, file_name=nombre_archivo_analisis,
+                                                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key="dl_analisis_nuevo")
                     except Exception as e:
                         st.error(f"❌ Hubo un error al analizar la escritura: {e}")
+        
+        st.markdown("---")
+        st.markdown("### 🗄️ Historial de Análisis Realizados")
+        df_analisis_hist = leer_csv_local(ARCHIVO_ANALISIS_ESCRITURAS, COLS_ANALISIS_ESCRITURAS)
+        if df_analisis_hist.empty:
+            st.info("Todavía no has generado ningún análisis.")
+        else:
+            for _, fila_an in df_analisis_hist.iloc[::-1].iterrows():
+                with st.container(border=True):
+                    c1, c2 = st.columns([4, 1])
+                    with c1:
+                        st.markdown(f"**{fila_an['Nombre_Archivo_Original']}**")
+                        st.caption(f"Analizado: {fila_an['Fecha']}")
+                    with c2:
+                        bytes_desc_an = obtener_bytes_adjunto(fila_an, 'Archivo_Drive_ID', 'Archivo_B64')
+                        if bytes_desc_an is not None:
+                            st.download_button("📥 Descargar", data=bytes_desc_an, file_name=f"Analisis_{fila_an['ID']}.docx", key=f"dl_an_{fila_an['ID']}")
     
     # --- PESTAÑA 3: DOCS CLIENTE ---
     with tab_esc_docs:
