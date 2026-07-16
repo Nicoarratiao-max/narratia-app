@@ -5522,6 +5522,13 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         st.markdown("#### Sube la escritura y sus documentos de respaldo para que la IA revise su redacción")
         st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
         
+        motor_ia_esc_sel = st.selectbox(
+            "Motor de IA a usar", ["Gemini (incluido en el sistema)", "DeepSeek (más económico, tu propio saldo)"],
+            key="esc_analisis_motor_ia",
+            help="Si Gemini te muestra un error de facturación/créditos agotados, prueba con DeepSeek mientras se resuelve."
+        )
+        motor_ia_esc_final = "Gemini" if motor_ia_esc_sel.startswith("Gemini") else "DeepSeek"
+        
         archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
         docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
         contexto_adicional_esc = st.text_area("Contexto adicional para la IA (opcional)", placeholder="Ej: Es una compraventa de un bien raíz en Providencia, verificar especialmente la cláusula de saneamiento.")
@@ -5530,29 +5537,8 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
             if not archivo_escritura_analizar:
                 st.error("⚠️ Debes subir el PDF de la escritura a analizar.")
             else:
-                with st.spinner("⚖️ Analizando la redacción y formalidades de la escritura..."):
+                with st.spinner(f"⚖️ Analizando la redacción y formalidades de la escritura con {motor_ia_esc_final}..."):
                     try:
-                        import PyPDF2
-                        lector_esc = PyPDF2.PdfReader(archivo_escritura_analizar)
-                        texto_escritura = "\n".join([pagina.extract_text() or "" for pagina in lector_esc.pages])
-                        
-                        texto_respaldos = ""
-                        if docs_respaldo_analizar:
-                            for doc_resp in docs_respaldo_analizar:
-                                lector_resp = PyPDF2.PdfReader(doc_resp)
-                                texto_respaldos += f"\n--- {doc_resp.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector_resp.pages])
-                        
-                        import google.generativeai as genai
-                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        modelo_elegido_esc = "gemini-1.0-pro"
-                        for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods:
-                                md_name = m.name.replace("models/", "")
-                                if 'flash' in md_name:
-                                    modelo_elegido_esc = md_name
-                                    break
-                        modelo_esc = genai.GenerativeModel(modelo_elegido_esc)
-                        
                         prompt_analisis_esc = f"""
                         Actúa como un abogado chileno experto en derecho notarial y civil, revisando la redacción de una escritura pública.
                         
@@ -5565,21 +5551,52 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         
                         Contexto adicional entregado por el abogado: {contexto_adicional_esc if contexto_adicional_esc.strip() else "(sin contexto adicional)"}
                         
-                        TEXTO DE LA ESCRITURA A ANALIZAR:
-                        {texto_escritura[:15000]}
-                        
-                        {"DOCUMENTOS DE RESPALDO ADJUNTOS:" + texto_respaldos[:8000] if texto_respaldos else ""}
-                        
                         Entrega el análisis estructurado en secciones claras con títulos, indicando en cada punto si CUMPLE, CUMPLE PARCIALMENTE o NO CUMPLE, seguido de la explicación y recomendación concreta.
                         """
-                        respuesta_analisis_esc = modelo_esc.generate_content(prompt_analisis_esc)
-                        st.success("✅ Análisis completado.")
-                        st.markdown(respuesta_analisis_esc.text)
+                        
+                        if motor_ia_esc_final == "Gemini":
+                            import PyPDF2
+                            lector_esc = PyPDF2.PdfReader(archivo_escritura_analizar)
+                            texto_escritura = "\n".join([pagina.extract_text() or "" for pagina in lector_esc.pages])
+                            
+                            texto_respaldos = ""
+                            if docs_respaldo_analizar:
+                                for doc_resp in docs_respaldo_analizar:
+                                    lector_resp = PyPDF2.PdfReader(doc_resp)
+                                    texto_respaldos += f"\n--- {doc_resp.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector_resp.pages])
+                            
+                            import google.generativeai as genai
+                            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+                            modelo_elegido_esc = "gemini-1.0-pro"
+                            for m in genai.list_models():
+                                if 'generateContent' in m.supported_generation_methods:
+                                    md_name = m.name.replace("models/", "")
+                                    if 'flash' in md_name:
+                                        modelo_elegido_esc = md_name
+                                        break
+                            modelo_esc = genai.GenerativeModel(modelo_elegido_esc)
+                            
+                            prompt_final_esc = prompt_analisis_esc + f"""
+                            TEXTO DE LA ESCRITURA A ANALIZAR:
+                            {texto_escritura[:15000]}
+                            
+                            {"DOCUMENTOS DE RESPALDO ADJUNTOS:" + texto_respaldos[:8000] if texto_respaldos else ""}
+                            """
+                            respuesta_analisis_esc = modelo_esc.generate_content(prompt_final_esc)
+                            texto_resultado_esc = respuesta_analisis_esc.text
+                        else:
+                            todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
+                            texto_extraido_esc = extraer_texto_pdfs(todos_archivos_esc)
+                            prompt_final_esc = prompt_analisis_esc + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_extraido_esc[:45000]}"
+                            texto_resultado_esc = consultar_deepseek(prompt_final_esc)
+                        
+                        st.success(f"✅ Análisis completado con {motor_ia_esc_final}.")
+                        st.markdown(texto_resultado_esc)
                         
                         # Se guarda el informe como Word en el historial, exactamente igual
                         # que se hace con los contratos: se genera el .docx, se sube a Drive
                         # (o queda de respaldo en base64) y se registra en la nube.
-                        doc_analisis = crear_informe_analisis_escritura_word(archivo_escritura_analizar.name, respuesta_analisis_esc.text)
+                        doc_analisis = crear_informe_analisis_escritura_word(archivo_escritura_analizar.name, texto_resultado_esc)
                         if doc_analisis:
                             buffer_analisis = io.BytesIO()
                             doc_analisis.save(buffer_analisis)
