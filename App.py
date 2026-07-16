@@ -377,6 +377,31 @@ CATALOGO_EXCEPCIONES_464 = {
     18: "La cosa juzgada",
 }
 
+def extraer_texto_pdfs(archivos_pdf_subidos):
+    """Extrae el texto de una lista de PDFs subidos, para enviárselo a Groq (no lee PDFs de forma nativa como Gemini)."""
+    import PyPDF2
+    texto_total = ""
+    for archivo in archivos_pdf_subidos:
+        try:
+            lector = PyPDF2.PdfReader(archivo)
+            texto_total += f"\n--- {archivo.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector.pages])
+        except Exception:
+            texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
+    return texto_total
+
+def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
+    """
+    Consulta la API de Groq (gratuita, sin tarjeta de crédito, formato
+    compatible con OpenAI). Se usa como motor de IA principal del sistema,
+    en reemplazo de Gemini, cuya cuenta tiene un problema de facturación
+    todavía sin resolver por parte de Google.
+    """
+    headers = {"Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", "Content-Type": "application/json"}
+    body = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
+    respuesta = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=body, timeout=180)
+    respuesta.raise_for_status()
+    return respuesta.json()["choices"][0]["message"]["content"]
+
 def _limpiar_json_ia(texto_respuesta: str) -> str:
     texto_respuesta = texto_respuesta.strip()
     if texto_respuesta.startswith("```"):
@@ -418,7 +443,9 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional=""):
     Sé riguroso: solo marca aplica=true cuando los documentos realmente respalden la excepción con hechos concretos, no supongas nada que no esté en los documentos.
     """
     
-    texto_respuesta = generar_contenido_gemini(instrucciones_base, archivos_pdf_subidos)
+    texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
+    prompt_final = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:45000]}"
+    texto_respuesta = consultar_groq(prompt_final)
     return json.loads(_limpiar_json_ia(texto_respuesta))
 
 def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_subidos, contexto_adicional):
@@ -440,7 +467,10 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
     Redacta el escrito completo, con lenguaje formal jurídico chileno, incluyendo su suma, comparecencia (usa placeholders genéricos como [NOMBRE], [ROL] si no tienes el dato exacto), fundamentos de hecho y de derecho citando las normas legales aplicables, y el petitorio final ("POR TANTO, RUEGO A US...").
     Estructura el texto en párrafos separados por doble salto de línea (\\n\\n), sin usar títulos markdown (nada de # ni **), solo texto plano formal, ya que se insertará directo en un documento Word.
     """
-    return generar_contenido_gemini(prompt_base, archivos_pdf_subidos if archivos_pdf_subidos else None)
+    if archivos_pdf_subidos:
+        texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
+        prompt_base += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:45000]}"
+    return consultar_groq(prompt_base)
 
 # =====================================================================
 # 📝 CATÁLOGO DE TIPOS DE ESCRITOS JUDICIALES (general, no solo excepciones)
@@ -5588,7 +5618,9 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         """
                         
                         todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
-                        texto_resultado_esc = generar_contenido_gemini(prompt_analisis_esc, todos_archivos_esc)
+                        texto_extraido_esc = extraer_texto_pdfs(todos_archivos_esc)
+                        prompt_final_esc = prompt_analisis_esc + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_extraido_esc[:45000]}"
+                        texto_resultado_esc = consultar_groq(prompt_final_esc)
                         
                         st.success("✅ Análisis completado.")
                         st.markdown(texto_resultado_esc)
