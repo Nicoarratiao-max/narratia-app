@@ -2607,29 +2607,45 @@ st.markdown("""
     .chat-para { font-size: 11px; color: #667781; font-weight: normal; margin-left: 5px; }
     
     /* ========================================================================
-       MENÚ LATERAL: aspecto más armónico y centrado, tipo app pulida.
-       Los botones de navegación quedan centrados (texto + emoji), sin el
-       recuadro grueso por defecto, con una barra de acento a la izquierda
-       al pasar el mouse — un look más parecido a una app real (tipo Facebook)
-       que a una lista de botones sueltos.
+       MENÚ LATERAL: proporcionado al texto de cada ítem (no estirado ni
+       forzado a centrarse todo), con los textos orillados a la izquierda
+       para que se vea ordenado, tipo app de escritorio real.
        ======================================================================== */
+    [data-testid="stSidebar"] {
+        min-width: 250px !important;
+        max-width: 250px !important;
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        padding-left: 14px !important;
+        padding-right: 14px !important;
+    }
+    [data-testid="stSidebar"] img { margin: 0 auto !important; display: block !important; }
+    
+    /* Botones de navegación: tamaño ajustado a su propio texto, no estirados
+       a todo el ancho de la barra, y con el texto orillado a la izquierda. */
     [data-testid="stSidebar"] [data-testid="stButton"] button {
-        text-align: center !important;
-        justify-content: center !important;
+        text-align: left !important;
+        justify-content: flex-start !important;
+        width: 100% !important;
         border: none !important;
         background-color: transparent !important;
         border-radius: 8px !important;
         font-weight: 600 !important;
-        padding: 10px 12px !important;
-        margin-bottom: 2px !important;
+        font-size: 14px !important;
+        padding: 8px 10px !important;
+        margin-bottom: 1px !important;
         transition: all 0.15s ease !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button p {
+        text-align: left !important;
     }
     [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
         background-color: #eef2ff !important;
         color: #0052cc !important;
-        border-left: 3px solid #0052cc !important;
-        transform: translateX(2px);
     }
+    
+    /* Categorías (Judicial, Administrativo, IA): título orillado a la
+       izquierda también, para que quede parejo con los botones de abajo. */
     [data-testid="stSidebar"] [data-testid="stExpander"] {
         border: none !important;
         background-color: transparent !important;
@@ -2639,50 +2655,45 @@ st.markdown("""
         font-weight: 800 !important;
         color: #172b4d !important;
         display: flex !important;
-        justify-content: center !important;
+        justify-content: flex-start !important;
         align-items: center !important;
-        text-align: center !important;
         gap: 6px !important;
+        padding-left: 4px !important;
     }
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary svg {
-        margin-left: 0 !important;
-        position: static !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary p { text-align: center !important; width: auto; }
-    
-    /* Barra lateral más angosta y compacta, look de programa (no de web ancha) */
-    [data-testid="stSidebar"] {
-        min-width: 250px !important;
-        max-width: 250px !important;
-    }
-    [data-testid="stSidebar"] > div:first-child {
-        padding-left: 10px !important;
-        padding-right: 10px !important;
-    }
-    /* Todo centrado dentro de la barra: texto, párrafos, contenedores de columnas */
-    [data-testid="stSidebar"] * {
-        text-align: center !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
-        justify-content: center !important;
-        align-items: center !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
-        display: flex !important;
-        justify-content: center !important;
-        width: 100% !important;
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+        text-align: left !important;
+        width: auto;
     }
     [data-testid="stSidebar"] [data-testid="stExpanderDetails"] {
-        padding-left: 4px !important;
+        padding-left: 6px !important;
         padding-right: 4px !important;
     }
-    /* Botones un poco más compactos y con letra levemente más chica, para que
-       calcen mejor en una barra angosta sin verse apretados */
-    [data-testid="stSidebar"] [data-testid="stButton"] button {
-        font-size: 13.5px !important;
-        padding: 8px 10px !important;
+    
+    /* Nombre de perfil + botón de cerrar sesión: pegados uno al lado del
+       otro, y el botón es un círculo simple (sin caja cuadrada alrededor). */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type {
+        align-items: center !important;
+        gap: 0 !important;
     }
-    [data-testid="stSidebar"] img { margin: 0 auto !important; display: block !important; }
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stButton"] button {
+        border-radius: 50% !important;
+        width: 34px !important;
+        height: 34px !important;
+        min-width: 34px !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        font-size: 16px !important;
+        border: 1px solid #e0e4e8 !important;
+        background-color: #ffffff !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type [data-testid="stButton"] button:hover {
+        background-color: #ffebe6 !important;
+        border-color: #bf2600 !important;
+        color: #bf2600 !important;
+    }
     /* Fila del nombre de perfil + botón de cerrar sesión, centrada verticalmente */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type {
         align-items: center !important;
@@ -2714,17 +2725,12 @@ with st.sidebar:
         plan_actual = "Básico"
 
     # --- NOMBRE DE PERFIL Y CERRAR SESIÓN, ARRIBA DE TODO, ANTES DEL MENÚ ---
-    # En vez de columnas separadas por todo el ancho de la barra (que dejaban
-    # el nombre a la izquierda y el botón lejos, a la derecha), se usa un
-    # bloque angosto centrado para que el botón quede pegado justo al lado
-    # del nombre, como un par visual, no como dos extremos separados.
-    st.markdown(f"""
-    <div style='display:flex; justify-content:center; align-items:center; gap:6px; margin-bottom:4px;'>
-        <span style='font-size:15px; color:#172b4d;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></span>
-    </div>
-    """, unsafe_allow_html=True)
-    c_espacio_izq, c_logout_rapido, c_espacio_der = st.columns([2, 1, 2])
-    if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba", use_container_width=True):
+    # Nombre y botón van en la misma fila, pegados y orillados a la izquierda
+    # (no centrados ni en filas separadas), para que se vea como un par
+    # natural: "👤 Nombre  ⏻", no dos elementos sueltos en distintas líneas.
+    c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
+    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
         # Se marca DESPUÉS de borrar todo, para que sobreviva al login siguiente
