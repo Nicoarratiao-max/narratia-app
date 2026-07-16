@@ -411,17 +411,17 @@ def _limpiar_json_ia(texto_respuesta: str) -> str:
         texto_respuesta = re.sub(r'\s*```$', '', texto_respuesta)
     return texto_respuesta
 
-def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional="", motor_ia="Gemini"):
+def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional="", motor_ia="Automático"):
     """
     Analiza los documentos y determina cuáles de las 18 excepciones del
     Art. 464 CPC son aplicables, con nivel de confianza y cita textual de
-    respaldo. Soporta dos motores:
-    - Gemini: sube los PDFs de forma nativa (lee incluso páginas escaneadas
-      sin necesitar un pipeline de OCR aparte), usa tu cuota ya integrada.
-    - DeepSeek: más económico y con saldo prepago propio, pero no lee PDFs
-      de forma nativa, así que primero se extrae el texto con PyPDF2 (no
-      hace OCR de páginas escaneadas sin texto real).
-    Devuelve una lista de dicts ya parseada desde JSON.
+    respaldo. Soporta:
+    - "Automático" (recomendado y por defecto): intenta primero con Gemini
+      (lee los PDFs de forma nativa, incluso páginas escaneadas) y, SOLO si
+      falla (por ejemplo, por el problema de facturación de Google), cae
+      automáticamente a DeepSeek sin que el abogado tenga que hacer nada.
+    - "Gemini" o "DeepSeek": fuerza un motor específico, sin reintento.
+    Devuelve una tupla (resultado_ya_parseado_de_json, motor_que_realmente_se_usó).
     """
     lista_excepciones_texto = "\n".join([f"N°{n}: {texto}" for n, texto in CATALOGO_EXCEPCIONES_464.items()])
     
@@ -450,10 +450,9 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional="", mot
     Sé riguroso: solo marca aplica=true cuando los documentos realmente respalden la excepción con hechos concretos, no supongas nada que no esté en los documentos.
     """
     
-    if motor_ia == "Gemini":
+    def _con_gemini():
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        
         modelo_elegido = "gemini-1.5-flash"
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods:
@@ -462,28 +461,36 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional="", mot
                     modelo_elegido = md_name
                     break
         modelo = genai.GenerativeModel(modelo_elegido)
-        
-        archivos_gemini = []
-        for archivo in archivos_pdf_subidos:
-            archivo_subido = genai.upload_file(io.BytesIO(archivo.getvalue()), mime_type="application/pdf", display_name=archivo.name)
-            archivos_gemini.append(archivo_subido)
-        
+        archivos_gemini = [genai.upload_file(io.BytesIO(a.getvalue()), mime_type="application/pdf", display_name=a.name) for a in archivos_pdf_subidos]
         respuesta = modelo.generate_content([instrucciones_base] + archivos_gemini)
-        texto_respuesta = respuesta.text
-    else:
+        return respuesta.text
+    
+    def _con_deepseek():
         texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
         prompt_deepseek = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:45000]}"
-        texto_respuesta = consultar_deepseek(prompt_deepseek)
+        return consultar_deepseek(prompt_deepseek)
     
-    return json.loads(_limpiar_json_ia(texto_respuesta))
+    if motor_ia == "Gemini":
+        return json.loads(_limpiar_json_ia(_con_gemini())), "Gemini"
+    elif motor_ia == "DeepSeek":
+        return json.loads(_limpiar_json_ia(_con_deepseek())), "DeepSeek"
+    else:
+        # Automático: Gemini primero, DeepSeek solo si Gemini falla.
+        try:
+            return json.loads(_limpiar_json_ia(_con_gemini())), "Gemini"
+        except Exception:
+            return json.loads(_limpiar_json_ia(_con_deepseek())), "DeepSeek (Gemini no disponible en este momento)"
 
-def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_subidos, contexto_adicional, motor_ia="Gemini"):
+def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_subidos, contexto_adicional, motor_ia="Automático"):
     """
     Motor general para redactar CUALQUIER tipo de presentación judicial
     (demandas, evacúa traslados, abandonos de procedimiento, nulidades
     procesales, tercerías, etc.), no solo excepciones. Analiza los
     documentos adjuntos (si los hay) y devuelve el texto del escrito ya
     redactado, listo para pasar al generador de Word.
+    Con motor_ia="Automático" (por defecto): intenta Gemini primero y, solo
+    si falla, cae solo a DeepSeek, sin que el abogado tenga que elegir nada.
+    Devuelve una tupla (texto_redactado, motor_que_realmente_se_usó).
     """
     prompt_base = f"""
     Actúa como un abogado chileno experto en litigación, redactando una presentación judicial de tipo: {tipo_escrito}.
@@ -496,7 +503,7 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
     Estructura el texto en párrafos separados por doble salto de línea (\\n\\n), sin usar títulos markdown (nada de # ni **), solo texto plano formal, ya que se insertará directo en un documento Word.
     """
     
-    if motor_ia == "Gemini":
+    def _con_gemini():
         import google.generativeai as genai
         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
         modelo_elegido = "gemini-1.5-flash"
@@ -507,18 +514,30 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
                     modelo_elegido = md_name
                     break
         modelo = genai.GenerativeModel(modelo_elegido)
-        
         if archivos_pdf_subidos:
             archivos_gemini = [genai.upload_file(io.BytesIO(a.getvalue()), mime_type="application/pdf", display_name=a.name) for a in archivos_pdf_subidos]
             respuesta = modelo.generate_content([prompt_base] + archivos_gemini)
         else:
             respuesta = modelo.generate_content(prompt_base)
         return respuesta.text
-    else:
+    
+    def _con_deepseek():
+        prompt_final = prompt_base
         if archivos_pdf_subidos:
             texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
-            prompt_base += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:45000]}"
-        return consultar_deepseek(prompt_base)
+            prompt_final += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:45000]}"
+        return consultar_deepseek(prompt_final)
+    
+    if motor_ia == "Gemini":
+        return _con_gemini(), "Gemini"
+    elif motor_ia == "DeepSeek":
+        return _con_deepseek(), "DeepSeek"
+    else:
+        # Automático: Gemini primero, DeepSeek solo si Gemini falla.
+        try:
+            return _con_gemini(), "Gemini"
+        except Exception:
+            return _con_deepseek(), "DeepSeek (Gemini no disponible en este momento)"
 
 # =====================================================================
 # 📝 CATÁLOGO DE TIPOS DE ESCRITOS JUDICIALES (general, no solo excepciones)
@@ -2619,10 +2638,17 @@ st.markdown("""
     [data-testid="stSidebar"] [data-testid="stExpander"] summary {
         font-weight: 800 !important;
         color: #172b4d !important;
+        display: flex !important;
         justify-content: center !important;
+        align-items: center !important;
         text-align: center !important;
+        gap: 6px !important;
     }
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary p { text-align: center !important; width: 100%; }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary svg {
+        margin-left: 0 !important;
+        position: static !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p { text-align: center !important; width: auto; }
     
     /* Barra lateral más angosta y compacta, look de programa (no de web ancha) */
     [data-testid="stSidebar"] {
@@ -2688,9 +2714,17 @@ with st.sidebar:
         plan_actual = "Básico"
 
     # --- NOMBRE DE PERFIL Y CERRAR SESIÓN, ARRIBA DE TODO, ANTES DEL MENÚ ---
-    c_nombre_perfil, c_logout_rapido = st.columns([3.2, 1])
-    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:38px; font-size:15px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
-    if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
+    # En vez de columnas separadas por todo el ancho de la barra (que dejaban
+    # el nombre a la izquierda y el botón lejos, a la derecha), se usa un
+    # bloque angosto centrado para que el botón quede pegado justo al lado
+    # del nombre, como un par visual, no como dos extremos separados.
+    st.markdown(f"""
+    <div style='display:flex; justify-content:center; align-items:center; gap:6px; margin-bottom:4px;'>
+        <span style='font-size:15px; color:#172b4d;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></span>
+    </div>
+    """, unsafe_allow_html=True)
+    c_espacio_izq, c_logout_rapido, c_espacio_der = st.columns([2, 1, 2])
+    if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba", use_container_width=True):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
         # Se marca DESPUÉS de borrar todo, para que sobreviva al login siguiente
@@ -4321,11 +4355,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 c_tipo_esc, c_motor_ia = st.columns(2)
                 tipo_escrito_sel = c_tipo_esc.selectbox("Tipo de Escrito", list(TIPOS_ESCRITOS_JUDICIALES.keys()), key=f"exc_tipo_escrito_{rol_actual}")
                 motor_ia_sel = c_motor_ia.selectbox(
-                    "Motor de IA a usar", ["DeepSeek (más económico, tu propio saldo)", "Gemini (incluido en el sistema)"],
+                    "Motor de IA a usar", ["Automático (recomendado)", "Solo Gemini", "Solo DeepSeek"],
                     key=f"exc_motor_ia_{rol_actual}", index=0,
-                    help="DeepSeek queda primero por defecto mientras Gemini tenga el problema de facturación pendiente. Ojo: si alguno de tus documentos es una foto/escaneo sin texto real, cámbialo a Gemini, que sí lee ese tipo de PDF; DeepSeek no."
+                    help="Automático intenta primero con Gemini y, solo si falla (por ejemplo, por el problema de facturación), cambia solo a DeepSeek. No necesitas elegir nada manualmente."
                 )
-                motor_ia_final = "DeepSeek" if motor_ia_sel.startswith("DeepSeek") else "Gemini"
+                motor_ia_final = {"Automático (recomendado)": "Automático", "Solo Gemini": "Gemini", "Solo DeepSeek": "DeepSeek"}[motor_ia_sel]
                 
                 if tipo_escrito_sel == "Excepciones Ejecutivas (Art. 464 CPC)":
                     modo_excepciones = st.radio("¿Cómo quieres trabajar?", ["📄 Subir PDFs (la IA analiza)", "✍️ Ingresar datos manualmente"], horizontal=True, key=f"pe_modo_exc_{rol_actual}")
@@ -4340,9 +4374,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             else:
                                 with st.spinner("⚖️ Analizando documentos y evaluando las 18 excepciones del Art. 464 CPC... esto puede tardar un poco si hay páginas escaneadas."):
                                     try:
-                                        resultado_exc = analizar_excepciones_con_ia(archivos_exc, contexto_exc, motor_ia_final)
+                                        resultado_exc, motor_usado_exc = analizar_excepciones_con_ia(archivos_exc, contexto_exc, motor_ia_final)
                                         st.session_state[f'exc_resultado_{rol_actual}'] = resultado_exc
-                                        st.success(f"✅ Análisis completado con {motor_ia_final}. Se identificaron {sum(1 for e in resultado_exc if e.get('aplica'))} excepciones potencialmente aplicables.")
+                                        st.success(f"✅ Análisis completado con {motor_usado_exc}. Se identificaron {sum(1 for e in resultado_exc if e.get('aplica'))} excepciones potencialmente aplicables.")
                                     except Exception as e:
                                         st.error(f"❌ Hubo un error al analizar los documentos: {e}")
                         
@@ -4468,13 +4502,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         if not contexto_gen.strip() and not archivos_gen:
                             st.error("⚠️ Escribe el contexto/hechos o sube al menos un documento de respaldo.")
                         else:
-                            with st.spinner(f"✍️ Redactando con {motor_ia_final}..."):
+                            with st.spinner("✍️ Redactando..."):
                                 try:
-                                    texto_redactado_gen = redactar_escrito_judicial_ia(
+                                    texto_redactado_gen, motor_usado_gen = redactar_escrito_judicial_ia(
                                         tipo_escrito_sel, TIPOS_ESCRITOS_JUDICIALES[tipo_escrito_sel], archivos_gen, contexto_gen, motor_ia_final
                                     )
                                     st.session_state[f'gen_texto_{rol_actual}'] = texto_redactado_gen
-                                    st.success(f"✅ Escrito redactado con {motor_ia_final}. Revísalo abajo antes de descargarlo.")
+                                    st.success(f"✅ Escrito redactado con {motor_usado_gen}. Revísalo abajo antes de descargarlo.")
                                 except Exception as e:
                                     st.error(f"❌ Hubo un error al redactar el escrito: {e}")
                     
@@ -5523,11 +5557,11 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
         
         motor_ia_esc_sel = st.selectbox(
-            "Motor de IA a usar", ["DeepSeek (más económico, tu propio saldo)", "Gemini (incluido en el sistema)"],
+            "Motor de IA a usar", ["Automático (recomendado)", "Solo Gemini", "Solo DeepSeek"],
             key="esc_analisis_motor_ia", index=0,
-            help="DeepSeek queda primero por defecto mientras Gemini tenga el problema de facturación pendiente en tu cuenta de Google."
+            help="Automático intenta primero con Gemini y, solo si falla (por ejemplo, por el problema de facturación), cambia solo a DeepSeek. No necesitas elegir nada manualmente."
         )
-        motor_ia_esc_final = "DeepSeek" if motor_ia_esc_sel.startswith("DeepSeek") else "Gemini"
+        motor_ia_esc_final = {"Automático (recomendado)": "Automático", "Solo Gemini": "Gemini", "Solo DeepSeek": "DeepSeek"}[motor_ia_esc_sel]
         
         archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
         docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
@@ -5537,7 +5571,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
             if not archivo_escritura_analizar:
                 st.error("⚠️ Debes subir el PDF de la escritura a analizar.")
             else:
-                with st.spinner(f"⚖️ Analizando la redacción y formalidades de la escritura con {motor_ia_esc_final}..."):
+                with st.spinner("⚖️ Analizando la redacción y formalidades de la escritura..."):
                     try:
                         prompt_analisis_esc = f"""
                         Actúa como un abogado chileno experto en derecho notarial y civil, revisando la redacción de una escritura pública.
@@ -5554,7 +5588,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         Entrega el análisis estructurado en secciones claras con títulos, indicando en cada punto si CUMPLE, CUMPLE PARCIALMENTE o NO CUMPLE, seguido de la explicación y recomendación concreta.
                         """
                         
-                        if motor_ia_esc_final == "Gemini":
+                        def _analizar_escritura_con_gemini():
                             import PyPDF2
                             lector_esc = PyPDF2.PdfReader(archivo_escritura_analizar)
                             texto_escritura = "\n".join([pagina.extract_text() or "" for pagina in lector_esc.pages])
@@ -5583,14 +5617,30 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                             {"DOCUMENTOS DE RESPALDO ADJUNTOS:" + texto_respaldos[:8000] if texto_respaldos else ""}
                             """
                             respuesta_analisis_esc = modelo_esc.generate_content(prompt_final_esc)
-                            texto_resultado_esc = respuesta_analisis_esc.text
-                        else:
+                            return respuesta_analisis_esc.text
+                        
+                        def _analizar_escritura_con_deepseek():
                             todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
                             texto_extraido_esc = extraer_texto_pdfs(todos_archivos_esc)
                             prompt_final_esc = prompt_analisis_esc + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_extraido_esc[:45000]}"
-                            texto_resultado_esc = consultar_deepseek(prompt_final_esc)
+                            return consultar_deepseek(prompt_final_esc)
                         
-                        st.success(f"✅ Análisis completado con {motor_ia_esc_final}.")
+                        if motor_ia_esc_final == "Gemini":
+                            texto_resultado_esc = _analizar_escritura_con_gemini()
+                            motor_usado_esc = "Gemini"
+                        elif motor_ia_esc_final == "DeepSeek":
+                            texto_resultado_esc = _analizar_escritura_con_deepseek()
+                            motor_usado_esc = "DeepSeek"
+                        else:
+                            # Automático: Gemini primero, DeepSeek solo si Gemini falla.
+                            try:
+                                texto_resultado_esc = _analizar_escritura_con_gemini()
+                                motor_usado_esc = "Gemini"
+                            except Exception:
+                                texto_resultado_esc = _analizar_escritura_con_deepseek()
+                                motor_usado_esc = "DeepSeek (Gemini no disponible en este momento)"
+                        
+                        st.success(f"✅ Análisis completado con {motor_usado_esc}.")
                         st.markdown(texto_resultado_esc)
                         
                         # Se guarda el informe como Word en el historial, exactamente igual
