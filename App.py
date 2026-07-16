@@ -2586,6 +2586,47 @@ st.markdown("""
     .chat-texto { font-size: 15px; color: #303030; line-height: 1.4; }
     .chat-hora { font-size: 11px; color: #999999; text-align: right; margin-top: 5px; }
     .chat-para { font-size: 11px; color: #667781; font-weight: normal; margin-left: 5px; }
+    
+    /* ========================================================================
+       MENÚ LATERAL: aspecto más armónico y centrado, tipo app pulida.
+       Los botones de navegación quedan centrados (texto + emoji), sin el
+       recuadro grueso por defecto, con una barra de acento a la izquierda
+       al pasar el mouse — un look más parecido a una app real (tipo Facebook)
+       que a una lista de botones sueltos.
+       ======================================================================== */
+    [data-testid="stSidebar"] [data-testid="stButton"] button {
+        text-align: center !important;
+        justify-content: center !important;
+        border: none !important;
+        background-color: transparent !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        padding: 10px 12px !important;
+        margin-bottom: 2px !important;
+        transition: all 0.15s ease !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
+        background-color: #eef2ff !important;
+        color: #0052cc !important;
+        border-left: 3px solid #0052cc !important;
+        transform: translateX(2px);
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] {
+        border: none !important;
+        background-color: transparent !important;
+        box-shadow: none !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary {
+        font-weight: 800 !important;
+        color: #172b4d !important;
+        justify-content: center !important;
+        text-align: center !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary p { text-align: center !important; width: 100%; }
+    /* Fila del nombre de perfil + botón de cerrar sesión, centrada verticalmente */
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type {
+        align-items: center !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -2614,7 +2655,7 @@ with st.sidebar:
 
     # --- NOMBRE DE PERFIL Y CERRAR SESIÓN, ARRIBA DE TODO, ANTES DEL MENÚ ---
     c_nombre_perfil, c_logout_rapido = st.columns([3.2, 1])
-    c_nombre_perfil.markdown(f"<div style='padding-top:8px;'>👤 <strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:38px; font-size:15px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
     if c_logout_rapido.button("🚪", help="Cerrar sesión", key="logout_rapido_arriba"):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
