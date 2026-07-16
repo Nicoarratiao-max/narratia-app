@@ -1013,7 +1013,11 @@ def safe_update_sheet(worksheet_name, df):
         return True
     except Exception as e:
         # ¡ESTO ES CLAVE! Si Google falla, te saldrá un aviso rojo en vez de fallar en silencio.
-        st.error(f"⚠️ Google Sheets bloqueó el guardado en la hoja '{worksheet_name}'. Detalle técnico: {e}")
+        texto_error = str(e)
+        if "not found" in texto_error.lower() or "worksheetnotfound" in texto_error.lower() or texto_error.strip() == worksheet_name:
+            st.error(f"⚠️ Falta crear la pestaña **'{worksheet_name}'** en tu Google Sheets. Ve a tu hoja, crea una pestaña nueva con ese nombre exacto (abajo, botón '+'), y vuelve a intentarlo.")
+        else:
+            st.error(f"⚠️ Google Sheets bloqueó el guardado en la hoja '{worksheet_name}'. Detalle técnico: {texto_error}")
         fetch_sheet_cached.clear()
         return False
 
