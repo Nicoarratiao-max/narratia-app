@@ -4321,11 +4321,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 c_tipo_esc, c_motor_ia = st.columns(2)
                 tipo_escrito_sel = c_tipo_esc.selectbox("Tipo de Escrito", list(TIPOS_ESCRITOS_JUDICIALES.keys()), key=f"exc_tipo_escrito_{rol_actual}")
                 motor_ia_sel = c_motor_ia.selectbox(
-                    "Motor de IA a usar", ["Gemini (incluido en el sistema)", "DeepSeek (más económico, tu propio saldo)"],
-                    key=f"exc_motor_ia_{rol_actual}",
-                    help="DeepSeek usa tu propia clave y saldo prepago (como hace tu jefe), separado de tu cuota de Gemini. Requiere configurar DEEPSEEK_API_KEY en los Secrets. DeepSeek no lee PDFs escaneados sin texto (no hace OCR); Gemini sí."
+                    "Motor de IA a usar", ["DeepSeek (más económico, tu propio saldo)", "Gemini (incluido en el sistema)"],
+                    key=f"exc_motor_ia_{rol_actual}", index=0,
+                    help="DeepSeek queda primero por defecto mientras Gemini tenga el problema de facturación pendiente. Ojo: si alguno de tus documentos es una foto/escaneo sin texto real, cámbialo a Gemini, que sí lee ese tipo de PDF; DeepSeek no."
                 )
-                motor_ia_final = "Gemini" if motor_ia_sel.startswith("Gemini") else "DeepSeek"
+                motor_ia_final = "DeepSeek" if motor_ia_sel.startswith("DeepSeek") else "Gemini"
                 
                 if tipo_escrito_sel == "Excepciones Ejecutivas (Art. 464 CPC)":
                     modo_excepciones = st.radio("¿Cómo quieres trabajar?", ["📄 Subir PDFs (la IA analiza)", "✍️ Ingresar datos manualmente"], horizontal=True, key=f"pe_modo_exc_{rol_actual}")
@@ -5523,11 +5523,11 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
         
         motor_ia_esc_sel = st.selectbox(
-            "Motor de IA a usar", ["Gemini (incluido en el sistema)", "DeepSeek (más económico, tu propio saldo)"],
-            key="esc_analisis_motor_ia",
-            help="Si Gemini te muestra un error de facturación/créditos agotados, prueba con DeepSeek mientras se resuelve."
+            "Motor de IA a usar", ["DeepSeek (más económico, tu propio saldo)", "Gemini (incluido en el sistema)"],
+            key="esc_analisis_motor_ia", index=0,
+            help="DeepSeek queda primero por defecto mientras Gemini tenga el problema de facturación pendiente en tu cuenta de Google."
         )
-        motor_ia_esc_final = "Gemini" if motor_ia_esc_sel.startswith("Gemini") else "DeepSeek"
+        motor_ia_esc_final = "DeepSeek" if motor_ia_esc_sel.startswith("DeepSeek") else "Gemini"
         
         archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
         docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
