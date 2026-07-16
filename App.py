@@ -2623,6 +2623,40 @@ st.markdown("""
         text-align: center !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] summary p { text-align: center !important; width: 100%; }
+    
+    /* Barra lateral más angosta y compacta, look de programa (no de web ancha) */
+    [data-testid="stSidebar"] {
+        min-width: 250px !important;
+        max-width: 250px !important;
+    }
+    [data-testid="stSidebar"] > div:first-child {
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+    }
+    /* Todo centrado dentro de la barra: texto, párrafos, contenedores de columnas */
+    [data-testid="stSidebar"] * {
+        text-align: center !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+        justify-content: center !important;
+        align-items: center !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] {
+        display: flex !important;
+        justify-content: center !important;
+        width: 100% !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpanderDetails"] {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+    /* Botones un poco más compactos y con letra levemente más chica, para que
+       calcen mejor en una barra angosta sin verse apretados */
+    [data-testid="stSidebar"] [data-testid="stButton"] button {
+        font-size: 13.5px !important;
+        padding: 8px 10px !important;
+    }
+    [data-testid="stSidebar"] img { margin: 0 auto !important; display: block !important; }
     /* Fila del nombre de perfil + botón de cerrar sesión, centrada verticalmente */
     [data-testid="stSidebar"] [data-testid="stHorizontalBlock"]:first-of-type {
         align-items: center !important;
@@ -2634,8 +2668,8 @@ st.markdown("""
 with st.sidebar:
     st.markdown(f"""
     <div style='text-align: center; margin-bottom: 10px;'>
-        <img src='{LOGO_URL}' style='width: 80px;'>
-        <h2 style='color:#172b4d; margin-top: 10px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h2>
+        <img src='{LOGO_URL}' style='width: 60px;'>
+        <h3 style='color:#172b4d; margin-top: 8px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h3>
     </div>
     """, unsafe_allow_html=True)
 
