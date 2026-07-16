@@ -2650,8 +2650,8 @@ st.markdown("""
         max-width: 280px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
-        padding-left: 8px !important;
-        padding-right: 8px !important;
+        padding-left: 18px !important;
+        padding-right: 12px !important;
     }
     [data-testid="stSidebar"] img { margin: 0 auto !important; display: block !important; }
     
@@ -2685,9 +2685,11 @@ st.markdown("""
         color: #0052cc !important;
     }
     
-    /* Categorías (Judicial, Administrativo, IA): mismo padding-left (10px)
-       que los botones, para que el texto de "Judicial" arranque exactamente
-       en la misma posición que "Inicio" o "Mensajería". */
+    /* Categorías (Judicial, Administrativo, IA): la flechita queda en su
+       posición normal (empuja el ícono y el texto hacia la derecha, como ya
+       se veía bien en la captura). Lo que se ajusta más abajo es todo lo
+       demás (Inicio, Mensajería, y los ítems de adentro), empujándolos la
+       misma distancia para que calcen con "Judicial", en vez de al revés. */
     [data-testid="stSidebar"] [data-testid="stExpander"] {
         border: none !important;
         background-color: transparent !important;
@@ -2707,6 +2709,13 @@ st.markdown("""
         justify-content: flex-start !important;
         width: auto !important;
         flex-grow: 0 !important;
+    }
+    /* Se agrega un espacio invisible del mismo ancho aproximado que ocupa la
+       flechita + su separación, antes del ícono de Inicio/Mensajería y de
+       los ítems de adentro de cada categoría, para que su ícono quede
+       exactamente en la misma columna vertical que el de "Judicial". */
+    [data-testid="stSidebar"] [data-testid="stButton"] button {
+        padding-left: 32px !important;
     }
     /* Sin padding extra aquí: los botones de adentro (Causas, Calendario,
        etc.) ya traen su propio padding-left de 10px arriba, así que si acá
@@ -4407,7 +4416,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 st.caption("Demandas, evacúa traslados, abandonos de procedimiento, nulidades procesales, tercerías, excepciones ejecutivas y cualquier otra presentación al Poder Judicial.")
                 
                 tipo_escrito_sel = st.selectbox("Tipo de Escrito", list(TIPOS_ESCRITOS_JUDICIALES.keys()), key=f"exc_tipo_escrito_{rol_actual}")
-                motor_ia_final = "Gemini"
+                motor_ia_final = "DeepSeek"
                 
                 if tipo_escrito_sel == "Excepciones Ejecutivas (Art. 464 CPC)":
                     modo_excepciones = st.radio("¿Cómo quieres trabajar?", ["📄 Subir PDFs (la IA analiza)", "✍️ Ingresar datos manualmente"], horizontal=True, key=f"pe_modo_exc_{rol_actual}")
@@ -5604,7 +5613,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         st.markdown("#### Sube la escritura y sus documentos de respaldo para que la IA revise su redacción")
         st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
         
-        motor_ia_esc_final = "Gemini"
+        motor_ia_esc_final = "DeepSeek"
         
         archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
         docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
