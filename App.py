@@ -397,7 +397,9 @@ def consultar_deepseek(prompt: str, temperatura: float = 0.2) -> str:
     consuman la cuota que usas para el resto del sistema.
     """
     headers = {"Authorization": f"Bearer {st.secrets['DEEPSEEK_API_KEY']}", "Content-Type": "application/json"}
-    body = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
+    # "deepseek-chat" se retira el 24 de julio de 2026 según la documentación
+    # oficial de DeepSeek; se usa el nombre de modelo vigente en su reemplazo.
+    body = {"model": "deepseek-v4-flash", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
     respuesta = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=body, timeout=180)
     respuesta.raise_for_status()
     return respuesta.json()["choices"][0]["message"]["content"]
