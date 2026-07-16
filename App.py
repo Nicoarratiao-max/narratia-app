@@ -2738,7 +2738,7 @@ st.markdown("""
         height: 34px !important;
         min-width: 34px !important;
         padding: 0 !important;
-        margin: 0 0 0 auto !important;
+        margin: 4px 0 0 auto !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -2786,7 +2786,7 @@ with st.sidebar:
     # (no centrados ni en filas separadas), para que se vea como un par
     # natural: "👤 Nombre  ⏻", no dos elementos sueltos en distintas líneas.
     c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
-    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:10px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:32px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
     if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
