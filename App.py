@@ -2597,27 +2597,21 @@ with st.sidebar:
     except:
         plan_actual = "Básico"
 
-    opciones_basicas = [
-        "🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "💼 Causas", "👥 Clientes"
-    ]
+    # --- MENÚ AGRUPADO EN 3 CATEGORÍAS (antes era una lista larga sin orden) ---
+    GRUPO_ADMINISTRATIVO = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "👥 Clientes",
+                            "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "✈️ Mensajería",
+                            "📊 Informes", "📥 Excel"]
+    GRUPO_JUDICIAL = ["💼 Causas", "📄 Contratos", "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
+    GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA"]  # Solo visibles para plan Full
     
     if plan_actual == "Básico":
-        opciones_flujo = opciones_basicas
+        disponibles = {"🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "💼 Causas", "👥 Clientes"}
     elif plan_actual == "Medio":
-        opciones_flujo = opciones_basicas + [
-            "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario"
-        ]
-    else: 
-        opciones_flujo = opciones_basicas + [
-            "📄 Contratos", "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", 
-            "✈️ Mensajería", "🧠 Estrategia", "📊 Informes", "📥 Excel", "📝 Redactor IA",
-            "📜 Escrituras Públicas", "📋 Posesión Efectiva"
-        ]
-        
-    if usuario_actual == "Narratia":
-        opciones_flujo.append("👑 Panel Admin")
-
-    for i, opcion in enumerate(opciones_flujo):
+        disponibles = set(GRUPO_ADMINISTRATIVO + ["💼 Causas", "📄 Contratos"]) - {"✈️ Mensajería", "📊 Informes", "📥 Excel"}
+    else:
+        disponibles = set(GRUPO_ADMINISTRATIVO) | set(GRUPO_JUDICIAL) | set(GRUPO_IA)
+    
+    def _boton_menu(opcion, i):
         etiqueta_boton = opcion
         if opcion == "✈️ Mensajería" and BADGE_MENSAJES_NO_LEIDOS > 0:
             etiqueta_boton = f"✈️ Mensajería 🔴 {BADGE_MENSAJES_NO_LEIDOS}"
@@ -2628,6 +2622,33 @@ with st.sidebar:
                 # Al entrar de verdad a leer el buzón, se marca todo como leído.
                 st.session_state['ultimo_mensaje_leido'] = st.session_state.get('_total_mensajes_para_mi', st.session_state.get('ultimo_mensaje_leido', 0))
             st.rerun()
+    
+    contador_botones = 0
+    with st.expander("🗂️ Administrativo", expanded=True):
+        for opcion in GRUPO_ADMINISTRATIVO:
+            if opcion in disponibles:
+                _boton_menu(opcion, contador_botones)
+                contador_botones += 1
+    
+    with st.expander("⚖️ Judicial", expanded=True):
+        for opcion in GRUPO_JUDICIAL:
+            if opcion in disponibles:
+                _boton_menu(opcion, contador_botones)
+                contador_botones += 1
+    
+    # La categoría de IA solo aparece para el plan Full: son las funciones más
+    # avanzadas (Redactor IA, Estrategia con IA), no incluidas en planes Básico/Medio.
+    if plan_actual not in ("Básico", "Medio"):
+        with st.expander("🤖 Inteligencia Artificial", expanded=True):
+            for opcion in GRUPO_IA:
+                if opcion in disponibles:
+                    _boton_menu(opcion, contador_botones)
+                    contador_botones += 1
+    
+    if usuario_actual == "Narratia":
+        st.markdown("---")
+        _boton_menu("👑 Panel Admin", contador_botones)
+        contador_botones += 1
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
@@ -4002,7 +4023,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 
                             st.session_state['creando_tarea'] = False
                             st.success("✅ Tarea registrada exitosamente.")
-                            import time; time.sleep(0.3); st.rerun()
+                            st.rerun()
                             
                 df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
                 tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual]
@@ -4066,11 +4087,24 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         """, unsafe_allow_html=True)
                                     
                                     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
-                                    adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}", label_visibility="collapsed")
+                                    
+                                    # El adjuntar archivo antes quedaba siempre expandido (ocupando casi
+                                    # toda la pantalla con el área de arrastrar-y-soltar). Ahora se
+                                    # muestra solo un botón de clip 📎 que, al presionarlo, recién ahí
+                                    # despliega el selector de archivo.
+                                    key_toggle_adj = f"mostrar_adj_{tarea['ID_Tarea']}"
+                                    c_clip, c_espacio = st.columns([1, 7])
+                                    if c_clip.button("📎", key=f"btn_clip_{tarea['ID_Tarea']}", help="Adjuntar archivo"):
+                                        st.session_state[key_toggle_adj] = not st.session_state.get(key_toggle_adj, False)
+                                    
+                                    adj_coment = None
+                                    if st.session_state.get(key_toggle_adj):
+                                        adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}")
+                                    
                                     with st.form(key=f"fc_{tarea['ID_Tarea']}", clear_on_submit=True):
-                                        c_txt, c_btn = st.columns([8, 1])
+                                        c_txt, c_btn = st.columns([5, 2])
                                         texto_com = c_txt.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Escribir comentario...")
-                                        if c_btn.form_submit_button("Enviar"):
+                                        if c_btn.form_submit_button("Enviar", use_container_width=True):
                                             if texto_com.strip() or adj_coment:
                                                 t_final = texto_com.strip() + (f" <br><em>[📎 Archivo adjunto: {adj_coment.name}]</em>" if adj_coment else "")
                                                 comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
@@ -4081,6 +4115,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                                 if not dn.empty:
                                                     dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
                                                     safe_update_sheet("base_tareas", dn)
+                                                st.session_state[key_toggle_adj] = False
                                                 st.rerun()
 
             with tab_docs_solicitados:
