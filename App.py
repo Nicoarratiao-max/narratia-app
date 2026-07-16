@@ -847,7 +847,7 @@ def _obtener_credenciales_google(scopes):
 
 # --- DEFINICIÓN DE COLUMNAS MAESTRAS ---
 COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan']
-COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']
+COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion', 'Usuario_Propietario']
 COLS_CAUSAS = ['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']
 
 # =====================================================================
@@ -2108,7 +2108,17 @@ if 'username' not in st.session_state:
 
 cookie_token = cookie_manager.get(cookie="jurisync_user")
 cookie_usuario = validar_token_sesion(cookie_token) if cookie_token else None
-if cookie_usuario and cookie_usuario in USUARIOS_DICT:
+
+# Justo después de un login o logout recién hecho, la cookie del navegador puede
+# tardar un ciclo de rerun en reflejar el cambio de verdad (es una limitación
+# conocida de este componente de cookies). Si se lee en ese instante, se corre
+# el riesgo de reingresar con la cuenta anterior encima de la que el usuario
+# recién eligió. Por eso, justo después de esa acción, se salta esta lectura
+# UNA sola vez, y luego vuelve a funcionar con normalidad (por ejemplo, para
+# que un F5 mantenga la sesión abierta como siempre).
+if st.session_state.get('_saltar_autologin_cookie'):
+    st.session_state['_saltar_autologin_cookie'] = False
+elif cookie_usuario and cookie_usuario in USUARIOS_DICT:
     st.session_state['logged_in'] = True
     st.session_state['username'] = cookie_usuario
 
@@ -2251,6 +2261,10 @@ if not st.session_state['logged_in']:
                             cookie_manager.set("jurisync_user", generar_token_sesion(user_clean), key="cookie_login")
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = user_clean
+                            # Evita que, en el próximo rerun, se vuelva a leer la cookie
+                            # (que puede tardar un ciclo en reflejar el cambio real en el
+                            # navegador) y se pise este login recién hecho con datos viejos.
+                            st.session_state['_saltar_autologin_cookie'] = True
                             import time
                             time.sleep(0.3)
                             st.rerun()
@@ -2320,6 +2334,7 @@ if not st.session_state['logged_in']:
                             st.session_state['logged_in'] = True
                             st.session_state['username'] = usr_actualizar
                             st.session_state['requiere_registro_inicial'] = False
+                            st.session_state['_saltar_autologin_cookie'] = True
                             st.success("✅ Credenciales actualizadas correctamente.")
                             st.rerun()
                         except Exception as e:
@@ -2577,7 +2592,7 @@ st.markdown("""
 # --- RENDER DE BARRA LATERAL (ESTILO CUADRADITOS) ---
 with st.sidebar:
     st.markdown(f"""
-    <div style='text-align: center; margin-bottom: 25px;'>
+    <div style='text-align: center; margin-bottom: 10px;'>
         <img src='{LOGO_URL}' style='width: 80px;'>
         <h2 style='color:#172b4d; margin-top: 10px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h2>
     </div>
@@ -2597,19 +2612,33 @@ with st.sidebar:
     except:
         plan_actual = "Básico"
 
-    # --- MENÚ AGRUPADO EN 3 CATEGORÍAS (antes era una lista larga sin orden) ---
-    GRUPO_ADMINISTRATIVO = ["🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "👥 Clientes",
-                            "💰 Contabilidad", "📝 Trámites", "📆 Estado diario", "✈️ Mensajería",
+    # --- NOMBRE DE PERFIL Y CERRAR SESIÓN, ARRIBA DE TODO, ANTES DEL MENÚ ---
+    c_nombre_perfil, c_logout_rapido = st.columns([3.2, 1])
+    c_nombre_perfil.markdown(f"<div style='padding-top:8px;'>👤 <strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    if c_logout_rapido.button("🚪", help="Cerrar sesión", key="logout_rapido_arriba"):
+        cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
+        for k in list(st.session_state.keys()): del st.session_state[k]
+        # Se marca DESPUÉS de borrar todo, para que sobreviva al login siguiente
+        # y evite que se vuelva a leer la cookie vieja (que puede tardar un ciclo
+        # en reflejar el borrado real en el navegador) reingresando a la cuenta anterior.
+        st.session_state['_saltar_autologin_cookie'] = True
+        st.rerun()
+    st.markdown("<hr style='margin: 8px 0px 14px 0px;'>", unsafe_allow_html=True)
+
+    # --- MENÚ AGRUPADO EN CATEGORÍAS ---
+    # Inicio y Mensajería van sueltos, fuera de cualquier categoría.
+    GRUPO_JUDICIAL = ["💼 Causas", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "📆 Estado diario",
+                      "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
+    GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "💰 Contabilidad", "📝 Trámites",
                             "📊 Informes", "📥 Excel"]
-    GRUPO_JUDICIAL = ["💼 Causas", "📄 Contratos", "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
     GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA"]  # Solo visibles para plan Full
     
     if plan_actual == "Básico":
         disponibles = {"🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "💼 Causas", "👥 Clientes"}
     elif plan_actual == "Medio":
-        disponibles = set(GRUPO_ADMINISTRATIVO + ["💼 Causas", "📄 Contratos"]) - {"✈️ Mensajería", "📊 Informes", "📥 Excel"}
+        disponibles = set(GRUPO_JUDICIAL + GRUPO_ADMINISTRATIVO) - {"✈️ Mensajería", "📊 Informes", "📥 Excel", "📜 Escrituras Públicas", "📋 Posesión Efectiva"}
     else:
-        disponibles = set(GRUPO_ADMINISTRATIVO) | set(GRUPO_JUDICIAL) | set(GRUPO_IA)
+        disponibles = set(GRUPO_JUDICIAL) | set(GRUPO_ADMINISTRATIVO) | set(GRUPO_IA) | {"✈️ Mensajería"}
     
     def _boton_menu(opcion, i):
         etiqueta_boton = opcion
@@ -2624,14 +2653,24 @@ with st.sidebar:
             st.rerun()
     
     contador_botones = 0
-    with st.expander("🗂️ Administrativo", expanded=True):
-        for opcion in GRUPO_ADMINISTRATIVO:
+    
+    # Inicio, suelto, arriba de las categorías.
+    _boton_menu("🏠 Inicio", contador_botones)
+    contador_botones += 1
+    
+    # Mensajería, suelto también (solo si el plan lo incluye).
+    if "✈️ Mensajería" in disponibles:
+        _boton_menu("✈️ Mensajería", contador_botones)
+        contador_botones += 1
+    
+    with st.expander("⚖️ Judicial", expanded=True):
+        for opcion in GRUPO_JUDICIAL:
             if opcion in disponibles:
                 _boton_menu(opcion, contador_botones)
                 contador_botones += 1
     
-    with st.expander("⚖️ Judicial", expanded=True):
-        for opcion in GRUPO_JUDICIAL:
+    with st.expander("🗂️ Administrativo", expanded=True):
+        for opcion in GRUPO_ADMINISTRATIVO:
             if opcion in disponibles:
                 _boton_menu(opcion, contador_botones)
                 contador_botones += 1
@@ -2652,7 +2691,7 @@ with st.sidebar:
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    with st.expander(f"👤 {nombre_real_usuario} (Mi Perfil)"):
+    with st.expander(f"✏️ Editar Mi Perfil"):
         st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
         with st.form("form_perfil"):
             df_usr = leer_csv_local(ARCHIVO_USUARIOS)
@@ -2695,12 +2734,6 @@ with st.sidebar:
                         st.rerun()
                     except Exception as e:
                         st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
-
-    st.write("")
-    if st.button("🚪 Cerrar Sesión", use_container_width=True):
-        cookie_manager.delete("jurisync_user", key="cookie_logout")
-        for k in list(st.session_state.keys()): del st.session_state[k]
-        st.rerun()
 
 # --- CONTROLADOR DE PESTAÑAS ---
 
@@ -3489,7 +3522,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                                 df_clientes_auto.at[idx_cli_auto, 'Correo'] = cli_correo
                                 df_clientes_auto.at[idx_cli_auto, 'Direccion'] = cli_dom
                             else:
-                                nuevo_cliente_auto = {'RUT': rut_limpio, 'Nombre': cli_nom, 'Telefono': cli_tel, 'Correo': cli_correo, 'Clave_unica': '', 'Direccion': cli_dom}
+                                nuevo_cliente_auto = {'RUT': rut_limpio, 'Nombre': cli_nom, 'Telefono': cli_tel, 'Correo': cli_correo, 'Clave_unica': '', 'Direccion': cli_dom, 'Usuario_Propietario': usuario_actual}
                                 df_clientes_auto = pd.concat([df_clientes_auto, pd.DataFrame([nuevo_cliente_auto])], ignore_index=True)
                             safe_update_sheet("base_clientes", df_clientes_auto)
                         
@@ -3661,7 +3694,9 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         ARCHIVO_TAREAS = f"base_tareas_{_propietario_vista}.csv"
     
     df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
-    df_clientes = safe_read_sheet("base_clientes", ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion'])
+    df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
+    if not ES_ADMIN_NARRATIA and not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
+        df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
     
     @st.dialog("Editar tarea")
     def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
@@ -4524,6 +4559,39 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
     st.markdown("<span style='color:#6b778c;'>Gestione y organice la información de sus clientes de manera eficiente.</span>", unsafe_allow_html=True)
     
     df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
+    
+    ES_ADMIN_CLIENTES_TOP = usuario_actual == "Narratia"
+    
+    # MIGRACIÓN AUTOMÁTICA: los clientes creados antes de este arreglo no tienen
+    # dueño asignado (quedaban todos mezclados en una sola hoja compartida, sin
+    # que nadie pudiera distinguir de quién era cada uno). Para no perderlos,
+    # se reconstruye el dueño cruzando el RUT del cliente contra las causas
+    # de cada abogado (cada causa sí sabe quién es su Usuario_Propietario desde
+    # el principio). El resultado se vuelve a guardar para no repetir esto cada vez.
+    if not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
+        huerfanos = df_clientes['Usuario_Propietario'].isna() | (df_clientes['Usuario_Propietario'].astype(str).str.strip() == '')
+        if huerfanos.any():
+            mapa_rut_dueno = {}
+            for arch_causa_mig in glob.glob("base_causas_*.csv"):
+                t_mig = leer_csv_local(arch_causa_mig)
+                dueno_mig = arch_causa_mig.replace("base_causas_", "").replace(".csv", "")
+                if not t_mig.empty and 'RUT' in t_mig.columns:
+                    for rut_mig in t_mig['RUT'].dropna().astype(str):
+                        rut_limpio_mig = re.sub(r'[^0-9kK]', '', rut_mig).upper()
+                        if rut_limpio_mig and rut_limpio_mig not in mapa_rut_dueno:
+                            mapa_rut_dueno[rut_limpio_mig] = dueno_mig
+            
+            for idx_mig in df_clientes[huerfanos].index:
+                rut_cliente_mig = re.sub(r'[^0-9kK]', '', str(df_clientes.at[idx_mig, 'RUT'])).upper()
+                if rut_cliente_mig in mapa_rut_dueno:
+                    df_clientes.at[idx_mig, 'Usuario_Propietario'] = mapa_rut_dueno[rut_cliente_mig]
+            
+            safe_update_sheet("base_clientes", df_clientes)
+    
+    # PRIVACIDAD: cada abogado ve solo SUS PROPIOS clientes. Solo Nicolás
+    # (Narratia), como administrador, ve los de todo el equipo.
+    if not ES_ADMIN_CLIENTES_TOP and not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
+        df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
 
     with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
         rut_conflicto = st.text_input("RUT a verificar", placeholder="Ej: 12.345.678-9", key="buscar_conflicto_rut")
@@ -4583,10 +4651,15 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 'Telefono': n_cli_tel.strip(),
                                 'Correo': n_cli_cor.strip(),
                                 'Clave_unica': n_cli_cla.strip(),
-                                'Direccion': n_cli_dom.strip()
+                                'Direccion': n_cli_dom.strip(),
+                                'Usuario_Propietario': usuario_actual
                             }
-                            df_clientes = pd.concat([df_clientes, pd.DataFrame([nuevo_cliente])], ignore_index=True)
-                            safe_update_sheet("base_clientes", df_clientes)
+                            # Se guarda sobre la hoja COMPLETA (releída de nuevo), no sobre la
+                            # versión ya filtrada por privacidad, para no borrar los clientes
+                            # del resto del equipo al agregar el nuevo.
+                            df_clientes_completo_nuevo = safe_read_sheet("base_clientes", COLS_CLIENTES)
+                            df_clientes_completo_nuevo = pd.concat([df_clientes_completo_nuevo, pd.DataFrame([nuevo_cliente])], ignore_index=True)
+                            safe_update_sheet("base_clientes", df_clientes_completo_nuevo)
                             st.success("✅ Cliente creado y sincronizado en Google Sheets.")
                             st.session_state['creando_cliente'] = False
                             st.rerun()
@@ -4699,8 +4772,12 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     dn_con = safe_read_sheet("base_contratos", COLS_CONTRATOS)
                     if not dn_con.empty: safe_update_sheet("base_contratos", dn_con[dn_con['Cliente'] != nombre_borrar])
 
-                    df_clientes = df_clientes[df_clientes['RUT'].astype(str) != str(rut_actual)]
-                    safe_update_sheet("base_clientes", df_clientes)
+                    # IMPORTANTE: se relee la hoja COMPLETA (sin el filtro de privacidad)
+                    # antes de guardar. Si se guardara la versión ya filtrada por dueño,
+                    # se borrarían de la nube los clientes de TODO el resto del equipo.
+                    df_clientes_completo_del = safe_read_sheet("base_clientes", COLS_CLIENTES)
+                    df_clientes_completo_del = df_clientes_completo_del[df_clientes_completo_del['RUT'].astype(str) != str(rut_actual)]
+                    safe_update_sheet("base_clientes", df_clientes_completo_del)
                     
                 st.session_state['cliente_seleccionado'] = None
                 st.success("✅ Cliente y TODO su historial asociado fue desintegrado.")
@@ -4722,8 +4799,12 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                             n_cla = st.text_input("Clave Única", datos_cli.get('Clave_unica', ''))
                             n_dom = st.text_input("Domicilio", datos_cli.get('Direccion', ''))
                             if st.form_submit_button("💾 Guardar"):
-                                df_clientes.loc[df_clientes['RUT'] == rut_actual, ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
-                                safe_update_sheet("base_clientes", df_clientes)
+                                # Mismo cuidado que en Eliminar: se relee la hoja completa
+                                # sin el filtro de privacidad antes de guardar, para no
+                                # borrar los clientes del resto del equipo.
+                                df_clientes_completo_edit = safe_read_sheet("base_clientes", COLS_CLIENTES)
+                                df_clientes_completo_edit.loc[df_clientes_completo_edit['RUT'] == rut_actual, ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                safe_update_sheet("base_clientes", df_clientes_completo_edit)
                                 st.session_state['editando_cli'] = False
                                 st.rerun()
                     else:
