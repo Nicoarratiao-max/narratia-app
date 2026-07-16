@@ -2690,7 +2690,7 @@ with st.sidebar:
     # --- NOMBRE DE PERFIL Y CERRAR SESIÓN, ARRIBA DE TODO, ANTES DEL MENÚ ---
     c_nombre_perfil, c_logout_rapido = st.columns([3.2, 1])
     c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:38px; font-size:15px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
-    if c_logout_rapido.button("🚪", help="Cerrar sesión", key="logout_rapido_arriba"):
+    if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
         # Se marca DESPUÉS de borrar todo, para que sobreviva al login siguiente
