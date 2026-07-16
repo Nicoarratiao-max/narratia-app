@@ -351,6 +351,284 @@ def calcular_posesion_efectiva_completa(df_herederos: pd.DataFrame, masa_heredit
     
     return pd.DataFrame(filas_resultado)
 
+# =====================================================================
+# ⚖️ CATÁLOGO OFICIAL: EXCEPCIONES DEL ARTÍCULO 464 CPC (JUICIO EJECUTIVO)
+# =====================================================================
+# Verificado contra el texto vigente del Código de Procedimiento Civil.
+# Las 4 primeras son dilatorias; el resto, perentorias.
+CATALOGO_EXCEPCIONES_464 = {
+    1: "La incompetencia del tribunal ante quien se haya presentado la demanda",
+    2: "La falta de capacidad del demandante o de personería o representación legal del que comparezca en su nombre",
+    3: "La litis pendencia ante tribunal competente, siempre que el juicio que le da origen haya sido promovido por el acreedor",
+    4: "La ineptitud del libelo por falta de algún requisito legal en el modo de formular la demanda (Art. 254 CPC)",
+    5: "El beneficio de excusión o la caducidad de la fianza",
+    6: "La falsedad del título",
+    7: "La falta de alguno de los requisitos o condiciones establecidos por las leyes para que dicho título tenga fuerza ejecutiva, sea absolutamente, sea con relación al demandado",
+    8: "El exceso de avalúo, en los casos de los incisos 2° y 3° del artículo 438",
+    9: "El pago de la deuda",
+    10: "La remisión de la deuda",
+    11: "La concesión de esperas o la prórroga del plazo",
+    12: "La novación",
+    13: "La compensación",
+    14: "La nulidad de la obligación",
+    15: "La pérdida de la cosa debida (Título XIX, Libro IV, Código Civil)",
+    16: "La transacción",
+    17: "La prescripción de la deuda o sólo de la acción ejecutiva",
+    18: "La cosa juzgada",
+}
+
+def extraer_texto_pdfs(archivos_pdf_subidos):
+    """Extrae el texto de una lista de PDFs subidos (para el motor DeepSeek, que no lee PDFs de forma nativa como Gemini)."""
+    import PyPDF2
+    texto_total = ""
+    for archivo in archivos_pdf_subidos:
+        try:
+            lector = PyPDF2.PdfReader(archivo)
+            texto_total += f"\n--- {archivo.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector.pages])
+        except Exception:
+            texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
+    return texto_total
+
+def consultar_deepseek(prompt: str, temperatura: float = 0.2) -> str:
+    """
+    Consulta la API de DeepSeek (compatible con el formato de OpenAI). Usa
+    tu propia clave y saldo prepago, separado de tu cuota de Gemini, para
+    que las funciones que analizan documentos completos (más costosas) no
+    consuman la cuota que usas para el resto del sistema.
+    """
+    headers = {"Authorization": f"Bearer {st.secrets['DEEPSEEK_API_KEY']}", "Content-Type": "application/json"}
+    body = {"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
+    respuesta = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=body, timeout=180)
+    respuesta.raise_for_status()
+    return respuesta.json()["choices"][0]["message"]["content"]
+
+def _limpiar_json_ia(texto_respuesta: str) -> str:
+    texto_respuesta = texto_respuesta.strip()
+    if texto_respuesta.startswith("```"):
+        texto_respuesta = re.sub(r'^```(json)?\s*', '', texto_respuesta)
+        texto_respuesta = re.sub(r'\s*```$', '', texto_respuesta)
+    return texto_respuesta
+
+def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional="", motor_ia="Gemini"):
+    """
+    Analiza los documentos y determina cuáles de las 18 excepciones del
+    Art. 464 CPC son aplicables, con nivel de confianza y cita textual de
+    respaldo. Soporta dos motores:
+    - Gemini: sube los PDFs de forma nativa (lee incluso páginas escaneadas
+      sin necesitar un pipeline de OCR aparte), usa tu cuota ya integrada.
+    - DeepSeek: más económico y con saldo prepago propio, pero no lee PDFs
+      de forma nativa, así que primero se extrae el texto con PyPDF2 (no
+      hace OCR de páginas escaneadas sin texto real).
+    Devuelve una lista de dicts ya parseada desde JSON.
+    """
+    lista_excepciones_texto = "\n".join([f"N°{n}: {texto}" for n, texto in CATALOGO_EXCEPCIONES_464.items()])
+    
+    instrucciones_base = f"""
+    Actúa como un abogado chileno experto en juicio ejecutivo y en la oposición de excepciones del artículo 464 del Código de Procedimiento Civil.
+
+    Analiza en profundidad los documentos de esta causa ejecutiva (pueden incluir: demanda, título ejecutivo como pagaré o mandato, resoluciones, personería, certificados, comprobantes, etc.).
+
+    Las 18 excepciones posibles del artículo 464 del CPC son:
+    {lista_excepciones_texto}
+
+    Para CADA UNA de las 18 excepciones, determina si es aplicable a este caso concreto según los documentos. Contexto adicional entregado por el abogado: {contexto_adicional if contexto_adicional.strip() else "(sin contexto adicional)"}
+
+    Responde EXCLUSIVAMENTE con un array JSON válido (nada de texto antes o después, sin usar bloques de código markdown), con un objeto por cada una de las 18 excepciones, con esta estructura exacta:
+    [
+      {{
+        "numero": 14,
+        "nombre": "Nulidad de la obligación",
+        "aplica": true,
+        "confianza": "Alta",
+        "fundamento": "Explicación detallada de por qué aplica o no aplica, citando hechos concretos de los documentos.",
+        "cita_textual": "Cita literal breve (máximo 40 palabras) extraída del documento que respalda el fundamento, o cadena vacía si no aplica."
+      }}
+    ]
+    "confianza" debe ser "Alta", "Media" o "Baja" si aplica=true, o null si aplica=false.
+    Sé riguroso: solo marca aplica=true cuando los documentos realmente respalden la excepción con hechos concretos, no supongas nada que no esté en los documentos.
+    """
+    
+    if motor_ia == "Gemini":
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        
+        modelo_elegido = "gemini-1.5-flash"
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                md_name = m.name.replace("models/", "")
+                if 'flash' in md_name:
+                    modelo_elegido = md_name
+                    break
+        modelo = genai.GenerativeModel(modelo_elegido)
+        
+        archivos_gemini = []
+        for archivo in archivos_pdf_subidos:
+            archivo_subido = genai.upload_file(io.BytesIO(archivo.getvalue()), mime_type="application/pdf", display_name=archivo.name)
+            archivos_gemini.append(archivo_subido)
+        
+        respuesta = modelo.generate_content([instrucciones_base] + archivos_gemini)
+        texto_respuesta = respuesta.text
+    else:
+        texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
+        prompt_deepseek = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:45000]}"
+        texto_respuesta = consultar_deepseek(prompt_deepseek)
+    
+    return json.loads(_limpiar_json_ia(texto_respuesta))
+
+def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_subidos, contexto_adicional, motor_ia="Gemini"):
+    """
+    Motor general para redactar CUALQUIER tipo de presentación judicial
+    (demandas, evacúa traslados, abandonos de procedimiento, nulidades
+    procesales, tercerías, etc.), no solo excepciones. Analiza los
+    documentos adjuntos (si los hay) y devuelve el texto del escrito ya
+    redactado, listo para pasar al generador de Word.
+    """
+    prompt_base = f"""
+    Actúa como un abogado chileno experto en litigación, redactando una presentación judicial de tipo: {tipo_escrito}.
+
+    Instrucciones específicas para este tipo de escrito: {instrucciones_tipo}
+
+    Contexto y hechos entregados por el abogado: {contexto_adicional if contexto_adicional.strip() else "(sin contexto adicional escrito, básate solo en los documentos adjuntos)"}
+
+    Redacta el escrito completo, con lenguaje formal jurídico chileno, incluyendo su suma, comparecencia (usa placeholders genéricos como [NOMBRE], [ROL] si no tienes el dato exacto), fundamentos de hecho y de derecho citando las normas legales aplicables, y el petitorio final ("POR TANTO, RUEGO A US...").
+    Estructura el texto en párrafos separados por doble salto de línea (\\n\\n), sin usar títulos markdown (nada de # ni **), solo texto plano formal, ya que se insertará directo en un documento Word.
+    """
+    
+    if motor_ia == "Gemini":
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        modelo_elegido = "gemini-1.5-flash"
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                md_name = m.name.replace("models/", "")
+                if 'flash' in md_name:
+                    modelo_elegido = md_name
+                    break
+        modelo = genai.GenerativeModel(modelo_elegido)
+        
+        if archivos_pdf_subidos:
+            archivos_gemini = [genai.upload_file(io.BytesIO(a.getvalue()), mime_type="application/pdf", display_name=a.name) for a in archivos_pdf_subidos]
+            respuesta = modelo.generate_content([prompt_base] + archivos_gemini)
+        else:
+            respuesta = modelo.generate_content(prompt_base)
+        return respuesta.text
+    else:
+        if archivos_pdf_subidos:
+            texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
+            prompt_base += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:45000]}"
+        return consultar_deepseek(prompt_base)
+
+# =====================================================================
+# 📝 CATÁLOGO DE TIPOS DE ESCRITOS JUDICIALES (general, no solo excepciones)
+# =====================================================================
+TIPOS_ESCRITOS_JUDICIALES = {
+    "Demanda (Ejecutiva u Ordinaria)": "Redacta una demanda completa, incluyendo los hechos, los fundamentos de derecho aplicables según el tipo de acción, y el petitorio.",
+    "Evacúa Traslado (Contestación de Demanda)": "Redacta la contestación de la demanda, oponiendo las excepciones y defensas de fondo pertinentes, controvirtiendo los hechos y el derecho invocado por la contraria.",
+    "Abandono del Procedimiento": "Redacta un incidente de abandono del procedimiento, fundado en la inactividad de todas las partes por el plazo legal, conforme a los artículos 152 y siguientes del Código de Procedimiento Civil.",
+    "Nulidad Procesal / Incidente de Nulidad": "Redacta un incidente de nulidad procesal, identificando el vicio que afecta la validez de una actuación judicial y el perjuicio reparable solo con la declaración de nulidad, conforme a los artículos 79 y siguientes del Código de Procedimiento Civil.",
+    "Tercería de Posesión": "Redacta una tercería de posesión, fundada en que el bien embargado se encuentra en poder de un tercero ajeno al juicio que invoca la posesión del mismo.",
+    "Tercería de Dominio": "Redacta una tercería de dominio, fundada en que el bien embargado es de propiedad de un tercero ajeno al juicio ejecutivo.",
+    "Tercería de Prelación": "Redacta una tercería de prelación, fundada en un mejor derecho de pago del tercero sobre el producto del remate.",
+    "Tercería de Pago": "Redacta una tercería de pago, para que el tercerista concurra proporcionalmente al pago con el producto del remate de los bienes embargados.",
+    "Excepciones Ejecutivas (Art. 464 CPC)": "__ESPECIAL__",  # Usa el flujo especializado de 18 excepciones, no este genérico
+    "Recurso de Reposición": "Redacta un recurso de reposición en contra de una resolución judicial, exponiendo el error que se reclama y solicitando que se deje sin efecto o se modifique.",
+    "Recurso de Apelación": "Redacta un recurso de apelación en contra de una resolución judicial, exponiendo los agravios y solicitando que el tribunal superior revise y revoque o modifique lo resuelto.",
+    "Solicitud de Cúmplase / Cumplimiento Incidental": "Redacta una solicitud de cumplimiento incidental de una sentencia o resolución firme y ejecutoriada, conforme a los artículos 231 y siguientes del Código de Procedimiento Civil.",
+    "Otro tipo de presentación": "Redacta la presentación judicial exactamente según las instrucciones y el contexto que entregue el abogado, sin asumir un formato predeterminado.",
+}
+
+def crear_escrito_judicial_generico_word(tipo_escrito, texto_redactado, datos_causa=None):
+    """
+    Genera en Word cualquier tipo de escrito judicial (no solo excepciones),
+    con el mismo formato profesional del resto del sistema. Convierte cada
+    bloque separado por doble salto de línea en un párrafo real, para
+    evitar el problema de huecos al justificar.
+    """
+    if not DOCX_READY:
+        return None
+    
+    doc = Document()
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(6)
+    
+    if datos_causa:
+        p_meta = doc.add_paragraph()
+        p_meta.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_meta.add_run(f"{tipo_escrito.upper()} — Causa Rol {datos_causa.get('rol','')}, \"{datos_causa.get('caratulado','')}\", {datos_causa.get('tribunal','')}").bold = True
+    
+    for bloque in texto_redactado.split("\n\n"):
+        bloque_limpio = bloque.strip().replace("**", "").replace("#", "")
+        if bloque_limpio:
+            p = doc.add_paragraph()
+            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p.add_run(bloque_limpio)
+    
+    return doc
+
+def crear_escrito_oposicion_excepciones_word(datos_causa, excepciones_seleccionadas):
+    """
+    Redacta el escrito de oposición de excepciones (EN LO PRINCIPAL) con las
+    excepciones que el abogado seleccionó, usando el mismo formato
+    profesional del resto del sistema.
+    """
+    if not DOCX_READY:
+        return None
+    
+    doc = Document()
+    style = doc.styles['Normal']
+    style.font.name = 'Calibri'
+    style.font.size = Pt(11)
+    style.paragraph_format.line_spacing = 1.5
+    style.paragraph_format.space_after = Pt(6)
+    
+    p_suma = doc.add_paragraph()
+    p_suma.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_suma.add_run("EN LO PRINCIPAL: ").bold = True
+    p_suma.add_run("Opone excepciones a la ejecución; ")
+    p_suma.add_run("OTROSÍ: ").bold = True
+    p_suma.add_run("Acompaña documentos.")
+    
+    p_suma2 = doc.add_paragraph()
+    p_suma2.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_suma2.add_run(f"\nS.J.L. {datos_causa.get('tribunal','')}\n")
+    
+    p_intro = doc.add_paragraph()
+    p_intro.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_intro.add_run(f"{datos_causa.get('nombre_ejecutado','')}, en representación de la parte ejecutada en autos sobre juicio ejecutivo, Rol N° {datos_causa.get('rol','')}, caratulados \"{datos_causa.get('caratulado','')}\", a US. respetuosamente digo:")
+    
+    p_fund = doc.add_paragraph()
+    p_fund.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_fund.add_run("Que, encontrándome dentro del plazo legal, vengo en oponer a la ejecución las excepciones contempladas en el artículo 464 del Código de Procedimiento Civil que a continuación se fundamentan, solicitando desde ya su acogimiento con expresa condenación en costas a la parte ejecutante.")
+    
+    for exc in excepciones_seleccionadas:
+        p_exc = doc.add_paragraph()
+        p_exc.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_exc.add_run(f"\n{exc['numero']}. EXCEPCIÓN DEL ARTÍCULO 464 N°{exc['numero']} DEL CPC: {exc['nombre'].upper()}. ").bold = True
+        p_exc.add_run(exc.get('fundamento_final', exc.get('fundamento', '')))
+        
+        if exc.get('cita_textual', '').strip():
+            p_cita = doc.add_paragraph()
+            p_cita.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p_cita.paragraph_format.left_indent = Pt(28)
+            r_cita = p_cita.add_run(f'«{exc["cita_textual"]}»')
+            r_cita.italic = True
+    
+    p_petitorio = doc.add_paragraph()
+    p_petitorio.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    nums_excepciones = ", ".join([f"N°{e['numero']}" for e in excepciones_seleccionadas])
+    p_petitorio.add_run(f"\nPOR TANTO,\n").bold = True
+    p_petitorio.add_run(f"RUEGO A US.: Tener por opuestas las excepciones del artículo 464 {nums_excepciones} del Código de Procedimiento Civil ya fundamentadas, acogerlas a tramitación, y en definitiva, en la sentencia definitiva que se dicte en estos autos, acogerlas en todas sus partes, rechazando la ejecución, con expresa condenación en costas.")
+    
+    p_otrosi = doc.add_paragraph()
+    p_otrosi.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    p_otrosi.add_run("\nOTROSÍ: ").bold = True
+    p_otrosi.add_run("Ruego a US. tener por acompañados los documentos fundantes de las excepciones opuestas, con citación.")
+    
+    return doc
+
 def numero_a_letras_clp(monto: int) -> str:
     """
     Convierte un monto entero a su forma escrita en español, para no tener
@@ -667,6 +945,7 @@ COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimient
 COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ESCRITURAS = ['ID', 'Fecha', 'Tipo_Escritura', 'Cliente', 'RUT_Cliente', 'Detalle', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ANALISIS_ESCRITURAS = ['ID', 'Fecha', 'Nombre_Archivo_Original', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_EXCEPCIONES = ['ID', 'Fecha', 'ROL', 'Excepciones_Opuestas', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
@@ -2056,6 +2335,7 @@ ARCHIVO_TAREAS = f"base_tareas_{usuario_actual}.csv"
 ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 ARCHIVO_ESCRITURAS = f"base_escrituras_{usuario_actual}.csv"
 ARCHIVO_ANALISIS_ESCRITURAS = f"base_analisis_escrituras_{usuario_actual}.csv"
+ARCHIVO_EXCEPCIONES = f"base_excepciones_{usuario_actual}.csv"
 ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
@@ -3658,7 +3938,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 """, unsafe_allow_html=True)
                 
         with col_izq:
-            tab_tareas_internas, tab_docs_solicitados = st.tabs(["Tareas Operativas", "📥 Docs Cliente"])
+            tab_tareas_internas, tab_docs_solicitados, tab_excepciones = st.tabs(["Tareas Operativas", "📥 Docs Cliente", "⚖️ Excepciones Ejecutivas"])
             
             with tab_tareas_internas:
                 if st.button("+ Asignar Nueva Tarea Operativa", type="primary"):
@@ -3886,6 +4166,219 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             df_docs_db = df_docs_db.drop(idx_d)
                                             df_docs_db.to_csv(ARCHIVO_DOCS, index=False)
                                             st.rerun()
+            
+            with tab_excepciones:
+                st.subheader("⚖️ Generador de Escritos Judiciales")
+                st.caption("Demandas, evacúa traslados, abandonos de procedimiento, nulidades procesales, tercerías, excepciones ejecutivas y cualquier otra presentación al Poder Judicial.")
+                
+                c_tipo_esc, c_motor_ia = st.columns(2)
+                tipo_escrito_sel = c_tipo_esc.selectbox("Tipo de Escrito", list(TIPOS_ESCRITOS_JUDICIALES.keys()), key=f"exc_tipo_escrito_{rol_actual}")
+                motor_ia_sel = c_motor_ia.selectbox(
+                    "Motor de IA a usar", ["Gemini (incluido en el sistema)", "DeepSeek (más económico, tu propio saldo)"],
+                    key=f"exc_motor_ia_{rol_actual}",
+                    help="DeepSeek usa tu propia clave y saldo prepago (como hace tu jefe), separado de tu cuota de Gemini. Requiere configurar DEEPSEEK_API_KEY en los Secrets. DeepSeek no lee PDFs escaneados sin texto (no hace OCR); Gemini sí."
+                )
+                motor_ia_final = "Gemini" if motor_ia_sel.startswith("Gemini") else "DeepSeek"
+                
+                if tipo_escrito_sel == "Excepciones Ejecutivas (Art. 464 CPC)":
+                    modo_excepciones = st.radio("¿Cómo quieres trabajar?", ["📄 Subir PDFs (la IA analiza)", "✍️ Ingresar datos manualmente"], horizontal=True, key=f"pe_modo_exc_{rol_actual}")
+                    
+                    if modo_excepciones == "📄 Subir PDFs (la IA analiza)":
+                        archivos_exc = st.file_uploader("Sube el pagaré, mandato, demanda, resoluciones, personería y demás documentos de la causa", type=["pdf"], accept_multiple_files=True, key=f"exc_pdfs_{rol_actual}")
+                        contexto_exc = st.text_area("Contexto adicional para la IA (opcional)", key=f"exc_contexto_{rol_actual}", placeholder="Ej: El pagaré fue suscrito por un apoderado, revisar si tenía facultades suficientes.")
+                        
+                        if st.button("🔍 Analizar Documentos", type="primary", use_container_width=True, key=f"exc_btn_analizar_{rol_actual}"):
+                            if not archivos_exc:
+                                st.error("⚠️ Sube al menos un documento en PDF.")
+                            else:
+                                with st.spinner("⚖️ Analizando documentos y evaluando las 18 excepciones del Art. 464 CPC... esto puede tardar un poco si hay páginas escaneadas."):
+                                    try:
+                                        resultado_exc = analizar_excepciones_con_ia(archivos_exc, contexto_exc, motor_ia_final)
+                                        st.session_state[f'exc_resultado_{rol_actual}'] = resultado_exc
+                                        st.success(f"✅ Análisis completado con {motor_ia_final}. Se identificaron {sum(1 for e in resultado_exc if e.get('aplica'))} excepciones potencialmente aplicables.")
+                                    except Exception as e:
+                                        st.error(f"❌ Hubo un error al analizar los documentos: {e}")
+                        
+                        if f'exc_resultado_{rol_actual}' in st.session_state:
+                            resultado_exc = st.session_state[f'exc_resultado_{rol_actual}']
+                            orden_confianza = {"Alta": 0, "Media": 1, "Baja": 2, None: 3}
+                            aplicables = sorted([e for e in resultado_exc if e.get('aplica')], key=lambda e: orden_confianza.get(e.get('confianza'), 3))
+                            descartadas = [e for e in resultado_exc if not e.get('aplica')]
+                            
+                            st.markdown(f"#### Excepciones a oponer — IA identificó {len(aplicables)}; se preseleccionan las de confianza alta")
+                            seleccionadas_ids = []
+                            for exc in aplicables:
+                                color_conf = {"Alta": "#e3fcef", "Media": "#fff0b3", "Baja": "#ffebe6"}.get(exc.get('confianza'), "#f4f5f7")
+                                texto_conf = {"Alta": "#1b7a4a", "Media": "#7a5b00", "Baja": "#bf2600"}.get(exc.get('confianza'), "#6b778c")
+                                with st.container(border=True):
+                                    marcado = st.checkbox(
+                                        f"N°{exc['numero']} — {exc['nombre']}", value=(exc.get('confianza') == "Alta"),
+                                        key=f"exc_check_{rol_actual}_{exc['numero']}"
+                                    )
+                                    st.markdown(f"<span style='background:{color_conf}; color:{texto_conf}; padding:2px 10px; border-radius:10px; font-size:12px; font-weight:700;'>IA: {exc.get('confianza','')}</span>", unsafe_allow_html=True)
+                                    st.markdown(f"<span style='color:#42526e; font-size:14px;'>{exc.get('fundamento','')}</span>", unsafe_allow_html=True)
+                                    if exc.get('cita_textual', '').strip():
+                                        st.markdown(f"<span style='color:#6b778c; font-size:13px; font-style:italic;'>Cita: «{exc['cita_textual']}»</span>", unsafe_allow_html=True)
+                                    if marcado:
+                                        seleccionadas_ids.append(exc['numero'])
+                            
+                            if descartadas:
+                                with st.expander(f"Ver excepciones descartadas ({len(descartadas)}) — no aplican según la IA"):
+                                    for exc in descartadas:
+                                        st.markdown(f"**N°{exc['numero']} — {exc['nombre']}** — <span style='background:#f4f5f7; color:#6b778c; padding:2px 8px; border-radius:10px; font-size:11px;'>Descartada</span>", unsafe_allow_html=True)
+                                        st.caption(exc.get('fundamento', ''))
+                            
+                            st.markdown("---")
+                            nombre_ejecutado_exc = st.text_input("Nombre de quien comparece (representante del ejecutado)", value=nombre_real_usuario, key=f"exc_nombre_ejec_{rol_actual}")
+                            
+                            if st.button("📄 Generar Escrito de Oposición de Excepciones", type="primary", use_container_width=True, key=f"exc_btn_generar_{rol_actual}"):
+                                if not seleccionadas_ids:
+                                    st.error("⚠️ Marca al menos una excepción para incluir en el escrito.")
+                                else:
+                                    excepciones_finales = [e for e in aplicables if e['numero'] in seleccionadas_ids]
+                                    datos_causa_exc = {
+                                        'tribunal': c_data.get('TRIBUNAL', ''), 'rol': rol_actual, 'caratulado': c_data.get('CARATULADO', ''),
+                                        'nombre_ejecutado': nombre_ejecutado_exc
+                                    }
+                                    doc_exc = crear_escrito_oposicion_excepciones_word(datos_causa_exc, excepciones_finales)
+                                    if doc_exc:
+                                        buffer_exc = io.BytesIO()
+                                        doc_exc.save(buffer_exc)
+                                        bytes_exc = buffer_exc.getvalue()
+                                        nombre_archivo_exc = f"Oposicion_Excepciones_{rol_actual.replace('-', '_')}.docx"
+                                        
+                                        drive_id_exc, b64_exc = guardar_archivo_adjunto(nombre_archivo_exc, bytes_exc, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+                                        
+                                        df_exc_hist = leer_csv_local(ARCHIVO_EXCEPCIONES, COLS_EXCEPCIONES)
+                                        nuevo_exc_hist = {
+                                            'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'ROL': rol_actual,
+                                            'Excepciones_Opuestas': ", ".join([f"N°{n}" for n in seleccionadas_ids]),
+                                            'Archivo_B64': b64_exc, 'Archivo_Drive_ID': drive_id_exc, 'Usuario_Propietario': usuario_actual
+                                        }
+                                        df_exc_hist = pd.concat([df_exc_hist, pd.DataFrame([nuevo_exc_hist])], ignore_index=True)
+                                        df_exc_hist.to_csv(ARCHIVO_EXCEPCIONES, index=False)
+                                        dn_exc = safe_read_sheet("base_excepciones", COLS_EXCEPCIONES)
+                                        safe_update_sheet("base_excepciones", pd.concat([dn_exc, pd.DataFrame([nuevo_exc_hist])], ignore_index=True))
+                                        
+                                        st.success("✅ Escrito generado y guardado en el historial de esta causa.")
+                                        st.download_button("📥 Descargar Escrito (.docx)", data=bytes_exc, file_name=nombre_archivo_exc,
+                                                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_exc_nuevo_{rol_actual}")
+                    else:
+                        st.markdown("#### Marca manualmente las excepciones a oponer")
+                        seleccionadas_manual = []
+                        for numero_exc, nombre_exc in CATALOGO_EXCEPCIONES_464.items():
+                            with st.container(border=True):
+                                marcado_manual = st.checkbox(f"N°{numero_exc} — {nombre_exc}", key=f"exc_manual_check_{rol_actual}_{numero_exc}")
+                                if marcado_manual:
+                                    fundamento_manual = st.text_area(f"Fundamento de la excepción N°{numero_exc}", key=f"exc_manual_fund_{rol_actual}_{numero_exc}", height=80)
+                                    cita_manual = st.text_input(f"Cita textual de respaldo (opcional)", key=f"exc_manual_cita_{rol_actual}_{numero_exc}")
+                                    seleccionadas_manual.append({'numero': numero_exc, 'nombre': nombre_exc, 'fundamento_final': fundamento_manual, 'cita_textual': cita_manual})
+                        
+                        st.markdown("---")
+                        nombre_ejecutado_exc_m = st.text_input("Nombre de quien comparece (representante del ejecutado)", value=nombre_real_usuario, key=f"exc_nombre_ejec_manual_{rol_actual}")
+                        
+                        if st.button("📄 Generar Escrito de Oposición de Excepciones", type="primary", use_container_width=True, key=f"exc_btn_generar_manual_{rol_actual}"):
+                            if not seleccionadas_manual:
+                                st.error("⚠️ Marca al menos una excepción e indica su fundamento.")
+                            else:
+                                datos_causa_exc_m = {
+                                    'tribunal': c_data.get('TRIBUNAL', ''), 'rol': rol_actual, 'caratulado': c_data.get('CARATULADO', ''),
+                                    'nombre_ejecutado': nombre_ejecutado_exc_m
+                                }
+                                doc_exc_m = crear_escrito_oposicion_excepciones_word(datos_causa_exc_m, seleccionadas_manual)
+                                if doc_exc_m:
+                                    buffer_exc_m = io.BytesIO()
+                                    doc_exc_m.save(buffer_exc_m)
+                                    bytes_exc_m = buffer_exc_m.getvalue()
+                                    nombre_archivo_exc_m = f"Oposicion_Excepciones_{rol_actual.replace('-', '_')}.docx"
+                                    
+                                    drive_id_exc_m, b64_exc_m = guardar_archivo_adjunto(nombre_archivo_exc_m, bytes_exc_m, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+                                    
+                                    df_exc_hist_m = leer_csv_local(ARCHIVO_EXCEPCIONES, COLS_EXCEPCIONES)
+                                    nuevo_exc_hist_m = {
+                                        'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'ROL': rol_actual,
+                                        'Excepciones_Opuestas': ", ".join([f"N°{e['numero']}" for e in seleccionadas_manual]),
+                                        'Archivo_B64': b64_exc_m, 'Archivo_Drive_ID': drive_id_exc_m, 'Usuario_Propietario': usuario_actual
+                                    }
+                                    df_exc_hist_m = pd.concat([df_exc_hist_m, pd.DataFrame([nuevo_exc_hist_m])], ignore_index=True)
+                                    df_exc_hist_m.to_csv(ARCHIVO_EXCEPCIONES, index=False)
+                                    dn_exc_m = safe_read_sheet("base_excepciones", COLS_EXCEPCIONES)
+                                    safe_update_sheet("base_excepciones", pd.concat([dn_exc_m, pd.DataFrame([nuevo_exc_hist_m])], ignore_index=True))
+                                    
+                                    st.success("✅ Escrito generado y guardado en el historial de esta causa.")
+                                    st.download_button("📥 Descargar Escrito (.docx)", data=bytes_exc_m, file_name=nombre_archivo_exc_m,
+                                                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_exc_manual_nuevo_{rol_actual}")
+                
+                else:
+                    # --- FLUJO GENERAL: cualquier otro tipo de escrito (demandas, traslados,
+                    # abandonos, nulidades, tercerías, recursos, etc.) ---
+                    st.markdown(f"#### {tipo_escrito_sel}")
+                    archivos_gen = st.file_uploader("Documentos de respaldo (opcional)", type=["pdf"], accept_multiple_files=True, key=f"gen_pdfs_{rol_actual}")
+                    contexto_gen = st.text_area("Hechos e instrucciones para la IA", height=120, key=f"gen_contexto_{rol_actual}",
+                                                 placeholder="Describe los hechos relevantes, lo que quieres alegar y cualquier dato específico que deba incluir el escrito.")
+                    
+                    if st.button(f"✍️ Redactar {tipo_escrito_sel}", type="primary", use_container_width=True, key=f"gen_btn_redactar_{rol_actual}"):
+                        if not contexto_gen.strip() and not archivos_gen:
+                            st.error("⚠️ Escribe el contexto/hechos o sube al menos un documento de respaldo.")
+                        else:
+                            with st.spinner(f"✍️ Redactando con {motor_ia_final}..."):
+                                try:
+                                    texto_redactado_gen = redactar_escrito_judicial_ia(
+                                        tipo_escrito_sel, TIPOS_ESCRITOS_JUDICIALES[tipo_escrito_sel], archivos_gen, contexto_gen, motor_ia_final
+                                    )
+                                    st.session_state[f'gen_texto_{rol_actual}'] = texto_redactado_gen
+                                    st.success(f"✅ Escrito redactado con {motor_ia_final}. Revísalo abajo antes de descargarlo.")
+                                except Exception as e:
+                                    st.error(f"❌ Hubo un error al redactar el escrito: {e}")
+                    
+                    if f'gen_texto_{rol_actual}' in st.session_state:
+                        st.markdown("---")
+                        st.markdown("#### Borrador Generado (revisa antes de presentar)")
+                        st.markdown(st.session_state[f'gen_texto_{rol_actual}'])
+                        
+                        if st.button("📄 Descargar y Guardar en Historial (.docx)", type="primary", use_container_width=True, key=f"gen_btn_guardar_{rol_actual}"):
+                            datos_causa_gen = {'tribunal': c_data.get('TRIBUNAL', ''), 'rol': rol_actual, 'caratulado': c_data.get('CARATULADO', '')}
+                            doc_gen = crear_escrito_judicial_generico_word(tipo_escrito_sel, st.session_state[f'gen_texto_{rol_actual}'], datos_causa_gen)
+                            if doc_gen:
+                                buffer_gen = io.BytesIO()
+                                doc_gen.save(buffer_gen)
+                                bytes_gen = buffer_gen.getvalue()
+                                nombre_archivo_gen = f"{tipo_escrito_sel.split(' (')[0].replace(' ', '_')}_{rol_actual.replace('-', '_')}.docx"
+                                
+                                drive_id_gen, b64_gen = guardar_archivo_adjunto(nombre_archivo_gen, bytes_gen, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+                                
+                                df_exc_hist_g = leer_csv_local(ARCHIVO_EXCEPCIONES, COLS_EXCEPCIONES)
+                                nuevo_exc_hist_g = {
+                                    'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 'ROL': rol_actual,
+                                    'Excepciones_Opuestas': tipo_escrito_sel,
+                                    'Archivo_B64': b64_gen, 'Archivo_Drive_ID': drive_id_gen, 'Usuario_Propietario': usuario_actual
+                                }
+                                df_exc_hist_g = pd.concat([df_exc_hist_g, pd.DataFrame([nuevo_exc_hist_g])], ignore_index=True)
+                                df_exc_hist_g.to_csv(ARCHIVO_EXCEPCIONES, index=False)
+                                dn_exc_g = safe_read_sheet("base_excepciones", COLS_EXCEPCIONES)
+                                safe_update_sheet("base_excepciones", pd.concat([dn_exc_g, pd.DataFrame([nuevo_exc_hist_g])], ignore_index=True))
+                                
+                                st.success("✅ Escrito guardado en el historial de esta causa.")
+                                st.download_button("📥 Descargar Escrito (.docx)", data=bytes_gen, file_name=nombre_archivo_gen,
+                                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", key=f"dl_gen_nuevo_{rol_actual}")
+                
+                st.markdown("---")
+                st.markdown("### 🗄️ Historial de Escritos de Excepciones de esta Causa")
+                df_exc_todas = leer_csv_local(ARCHIVO_EXCEPCIONES, COLS_EXCEPCIONES)
+                df_exc_causa = df_exc_todas[df_exc_todas['ROL'] == rol_actual] if not df_exc_todas.empty else df_exc_todas
+                if df_exc_causa.empty:
+                    st.info("Todavía no se ha generado ningún escrito de excepciones para esta causa.")
+                else:
+                    for _, fila_exc in df_exc_causa.iloc[::-1].iterrows():
+                        with st.container(border=True):
+                            c1, c2 = st.columns([4, 1])
+                            with c1:
+                                st.markdown(f"**Excepciones opuestas:** {fila_exc['Excepciones_Opuestas']}")
+                                st.caption(f"Generado: {fila_exc['Fecha']}")
+                            with c2:
+                                bytes_desc_exc = obtener_bytes_adjunto(fila_exc, 'Archivo_Drive_ID', 'Archivo_B64')
+                                if bytes_desc_exc is not None:
+                                    st.download_button("📥 Descargar", data=bytes_desc_exc, file_name=f"Excepciones_{fila_exc['ID']}.docx", key=f"dl_exc_hist_{fila_exc['ID']}")
 
 # 8. AGENDA DIARIA
 elif st.session_state['menu_radio'] == "📋 Agenda":
