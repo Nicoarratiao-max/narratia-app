@@ -451,19 +451,7 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional="", mot
     """
     
     def _con_gemini():
-        import google.generativeai as genai
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        modelo_elegido = "gemini-1.5-flash"
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                md_name = m.name.replace("models/", "")
-                if 'flash' in md_name:
-                    modelo_elegido = md_name
-                    break
-        modelo = genai.GenerativeModel(modelo_elegido)
-        archivos_gemini = [genai.upload_file(io.BytesIO(a.getvalue()), mime_type="application/pdf", display_name=a.name) for a in archivos_pdf_subidos]
-        respuesta = modelo.generate_content([instrucciones_base] + archivos_gemini)
-        return respuesta.text
+        return generar_contenido_gemini(instrucciones_base, archivos_pdf_subidos)
     
     def _con_deepseek():
         texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
@@ -504,22 +492,7 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
     """
     
     def _con_gemini():
-        import google.generativeai as genai
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        modelo_elegido = "gemini-1.5-flash"
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                md_name = m.name.replace("models/", "")
-                if 'flash' in md_name:
-                    modelo_elegido = md_name
-                    break
-        modelo = genai.GenerativeModel(modelo_elegido)
-        if archivos_pdf_subidos:
-            archivos_gemini = [genai.upload_file(io.BytesIO(a.getvalue()), mime_type="application/pdf", display_name=a.name) for a in archivos_pdf_subidos]
-            respuesta = modelo.generate_content([prompt_base] + archivos_gemini)
-        else:
-            respuesta = modelo.generate_content(prompt_base)
-        return respuesta.text
+        return generar_contenido_gemini(prompt_base, archivos_pdf_subidos if archivos_pdf_subidos else None)
     
     def _con_deepseek():
         prompt_final = prompt_base
@@ -863,6 +836,64 @@ def _obtener_credenciales_google(scopes):
     info = dict(st.secrets["connections"]["gsheets"])
     info.pop("spreadsheet", None)  # no es parte de las credenciales, es la URL de la hoja
     return Credentials.from_service_account_info(info, scopes=scopes)
+
+def generar_contenido_gemini(prompt_texto, archivos_pdf=None):
+    """
+    Genera contenido con Gemini para todo el sistema (Redactor IA, Análisis
+    de Escrituras, Excepciones, Escritos Judiciales), probando dos caminos:
+    
+    1° VERTEX AI (se intenta primero): usa la MISMA cuenta de servicio de
+       Google que ya tienes configurada para Sheets/Drive, y cobra desde tu
+       facturación normal de Google Cloud, no desde la cola de "prepago" de
+       AI Studio que ha estado fallando. Este es el motivo por el que se
+       agregó: hay un problema de sincronización de facturación ampliamente
+       reportado por otros desarrolladores en 2026 específicamente con esa
+       cola de prepago de AI Studio, que Vertex AI evita por completo al
+       cobrar por el otro canal.
+    2° API DIRECTA (respaldo): si Vertex AI no está configurado o falla por
+       cualquier motivo, cae de vuelta al método anterior con GEMINI_API_KEY,
+       para no perder funcionalidad si Vertex no llegó a activarse.
+    
+    Para que el paso 1 funcione, hace falta (una sola vez, de tu parte):
+    - Habilitar la "Vertex AI API" en Google Cloud Console, mismo proyecto
+      que ya usas (jurisync-libre).
+    - Darle a la cuenta de servicio (jurisync-admin@jurisync-libre...) el
+      rol "Vertex AI User" en IAM.
+    """
+    try:
+        from google import genai as genai_vertex
+        from google.genai import types as genai_types
+        
+        creds_vertex = _obtener_credenciales_google(['https://www.googleapis.com/auth/cloud-platform'])
+        project_id_vertex = st.secrets["connections"]["gsheets"].get("project_id", "")
+        cliente_vertex = genai_vertex.Client(vertexai=True, project=project_id_vertex, location="us-central1", credentials=creds_vertex)
+        
+        partes_contenido = [prompt_texto]
+        if archivos_pdf:
+            for archivo in archivos_pdf:
+                partes_contenido.append(genai_types.Part.from_bytes(data=archivo.getvalue(), mime_type="application/pdf"))
+        
+        respuesta_vertex = cliente_vertex.models.generate_content(model="gemini-2.5-flash", contents=partes_contenido)
+        return respuesta_vertex.text
+    except Exception:
+        # Respaldo: la API directa de siempre (puede fallar si el problema
+        # de facturación de AI Studio sigue activo en tu cuenta).
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        modelo_elegido = "gemini-1.5-flash"
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                md_name = m.name.replace("models/", "")
+                if 'flash' in md_name:
+                    modelo_elegido = md_name
+                    break
+        modelo = genai.GenerativeModel(modelo_elegido)
+        if archivos_pdf:
+            archivos_gemini = [genai.upload_file(io.BytesIO(a.getvalue()), mime_type="application/pdf", display_name=getattr(a, 'name', 'archivo.pdf')) for a in archivos_pdf]
+            respuesta = modelo.generate_content([prompt_texto] + archivos_gemini)
+        else:
+            respuesta = modelo.generate_content(prompt_texto)
+        return respuesta.text
 
 # --- DEFINICIÓN DE COLUMNAS MAESTRAS ---
 COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan']
@@ -2636,7 +2667,7 @@ st.markdown("""
         border-radius: 8px !important;
         font-weight: 600 !important;
         font-size: 14px !important;
-        padding: 8px 10px !important;
+        padding: 8px 10px 8px 18px !important;
         margin-bottom: 1px !important;
         transition: all 0.15s ease !important;
     }
@@ -2666,7 +2697,7 @@ st.markdown("""
         justify-content: flex-start !important;
         align-items: center !important;
         gap: 6px !important;
-        padding-left: 4px !important;
+        padding-left: 14px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] summary *:not(svg) {
         text-align: left !important;
@@ -2675,7 +2706,7 @@ st.markdown("""
         flex-grow: 0 !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpanderDetails"] {
-        padding-left: 6px !important;
+        padding-left: 16px !important;
         padding-right: 4px !important;
     }
     
@@ -5594,35 +5625,8 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         """
                         
                         def _analizar_escritura_con_gemini():
-                            import PyPDF2
-                            lector_esc = PyPDF2.PdfReader(archivo_escritura_analizar)
-                            texto_escritura = "\n".join([pagina.extract_text() or "" for pagina in lector_esc.pages])
-                            
-                            texto_respaldos = ""
-                            if docs_respaldo_analizar:
-                                for doc_resp in docs_respaldo_analizar:
-                                    lector_resp = PyPDF2.PdfReader(doc_resp)
-                                    texto_respaldos += f"\n--- {doc_resp.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector_resp.pages])
-                            
-                            import google.generativeai as genai
-                            genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                            modelo_elegido_esc = "gemini-1.0-pro"
-                            for m in genai.list_models():
-                                if 'generateContent' in m.supported_generation_methods:
-                                    md_name = m.name.replace("models/", "")
-                                    if 'flash' in md_name:
-                                        modelo_elegido_esc = md_name
-                                        break
-                            modelo_esc = genai.GenerativeModel(modelo_elegido_esc)
-                            
-                            prompt_final_esc = prompt_analisis_esc + f"""
-                            TEXTO DE LA ESCRITURA A ANALIZAR:
-                            {texto_escritura[:15000]}
-                            
-                            {"DOCUMENTOS DE RESPALDO ADJUNTOS:" + texto_respaldos[:8000] if texto_respaldos else ""}
-                            """
-                            respuesta_analisis_esc = modelo_esc.generate_content(prompt_final_esc)
-                            return respuesta_analisis_esc.text
+                            todos_archivos_esc_gemini = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
+                            return generar_contenido_gemini(prompt_analisis_esc, todos_archivos_esc_gemini)
                         
                         def _analizar_escritura_con_deepseek():
                             todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
