@@ -377,30 +377,6 @@ CATALOGO_EXCEPCIONES_464 = {
     18: "La cosa juzgada",
 }
 
-def extraer_texto_pdfs(archivos_pdf_subidos):
-    """Extrae el texto de una lista de PDFs subidos, para enviárselo a DeepSeek (no lee PDFs de forma nativa como Gemini)."""
-    import PyPDF2
-    texto_total = ""
-    for archivo in archivos_pdf_subidos:
-        try:
-            lector = PyPDF2.PdfReader(archivo)
-            texto_total += f"\n--- {archivo.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector.pages])
-        except Exception:
-            texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
-    return texto_total
-
-def consultar_deepseek(prompt: str, temperatura: float = 0.2) -> str:
-    """
-    Consulta la API de DeepSeek (compatible con el formato de OpenAI), usando
-    tu propia clave y saldo prepago. Se usa mientras el problema de la cuenta
-    de Gemini se resuelve del lado de Google.
-    """
-    headers = {"Authorization": f"Bearer {st.secrets['DEEPSEEK_API_KEY']}", "Content-Type": "application/json"}
-    body = {"model": "deepseek-v4-flash", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
-    respuesta = requests.post("https://api.deepseek.com/chat/completions", headers=headers, json=body, timeout=180)
-    respuesta.raise_for_status()
-    return respuesta.json()["choices"][0]["message"]["content"]
-
 def _limpiar_json_ia(texto_respuesta: str) -> str:
     texto_respuesta = texto_respuesta.strip()
     if texto_respuesta.startswith("```"):
