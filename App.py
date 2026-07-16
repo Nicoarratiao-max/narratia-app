@@ -2622,8 +2622,12 @@ st.markdown("""
     [data-testid="stSidebar"] img { margin: 0 auto !important; display: block !important; }
     
     /* Botones de navegación: tamaño ajustado a su propio texto, no estirados
-       a todo el ancho de la barra, y con el texto orillado a la izquierda. */
+       a todo el ancho de la barra, y con el texto orillado a la izquierda.
+       Se fuerza con selector comodín (*) porque Streamlit envuelve el
+       texto del botón en varios niveles internos (div > div > p), y el
+       selector dirigido solo al <p> no alcanzaba a pisar el centrado. */
     [data-testid="stSidebar"] [data-testid="stButton"] button {
+        display: flex !important;
         text-align: left !important;
         justify-content: flex-start !important;
         width: 100% !important;
@@ -2636,8 +2640,10 @@ st.markdown("""
         margin-bottom: 1px !important;
         transition: all 0.15s ease !important;
     }
-    [data-testid="stSidebar"] [data-testid="stButton"] button p {
+    [data-testid="stSidebar"] [data-testid="stButton"] button * {
         text-align: left !important;
+        justify-content: flex-start !important;
+        width: auto !important;
     }
     [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
         background-color: #eef2ff !important;
@@ -2645,7 +2651,9 @@ st.markdown("""
     }
     
     /* Categorías (Judicial, Administrativo, IA): título orillado a la
-       izquierda también, para que quede parejo con los botones de abajo. */
+       izquierda también, para que quede parejo con los botones de abajo.
+       Mismo comodín aplicado al contenido del <summary>, salvo la flechita
+       (el ícono SVG del expander), que debe quedarse donde está. */
     [data-testid="stSidebar"] [data-testid="stExpander"] {
         border: none !important;
         background-color: transparent !important;
@@ -2660,9 +2668,11 @@ st.markdown("""
         gap: 6px !important;
         padding-left: 4px !important;
     }
-    [data-testid="stSidebar"] [data-testid="stExpander"] summary p {
+    [data-testid="stSidebar"] [data-testid="stExpander"] summary *:not(svg) {
         text-align: left !important;
-        width: auto;
+        justify-content: flex-start !important;
+        width: auto !important;
+        flex-grow: 0 !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpanderDetails"] {
         padding-left: 6px !important;
@@ -2728,8 +2738,8 @@ with st.sidebar:
     # Nombre y botón van en la misma fila, pegados y orillados a la izquierda
     # (no centrados ni en filas separadas), para que se vea como un par
     # natural: "👤 Nombre  ⏻", no dos elementos sueltos en distintas líneas.
-    c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
-    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    c_nombre_perfil, c_logout_rapido, c_espacio_derecho = st.columns([3, 1, 2])
+    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:6px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
     if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
@@ -4358,14 +4368,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 st.subheader("⚖️ Generador de Escritos Judiciales")
                 st.caption("Demandas, evacúa traslados, abandonos de procedimiento, nulidades procesales, tercerías, excepciones ejecutivas y cualquier otra presentación al Poder Judicial.")
                 
-                c_tipo_esc, c_motor_ia = st.columns(2)
-                tipo_escrito_sel = c_tipo_esc.selectbox("Tipo de Escrito", list(TIPOS_ESCRITOS_JUDICIALES.keys()), key=f"exc_tipo_escrito_{rol_actual}")
-                motor_ia_sel = c_motor_ia.selectbox(
-                    "Motor de IA a usar", ["Automático (recomendado)", "Solo Gemini", "Solo DeepSeek"],
-                    key=f"exc_motor_ia_{rol_actual}", index=0,
-                    help="Automático intenta primero con Gemini y, solo si falla (por ejemplo, por el problema de facturación), cambia solo a DeepSeek. No necesitas elegir nada manualmente."
-                )
-                motor_ia_final = {"Automático (recomendado)": "Automático", "Solo Gemini": "Gemini", "Solo DeepSeek": "DeepSeek"}[motor_ia_sel]
+                tipo_escrito_sel = st.selectbox("Tipo de Escrito", list(TIPOS_ESCRITOS_JUDICIALES.keys()), key=f"exc_tipo_escrito_{rol_actual}")
+                motor_ia_final = "Gemini"
                 
                 if tipo_escrito_sel == "Excepciones Ejecutivas (Art. 464 CPC)":
                     modo_excepciones = st.radio("¿Cómo quieres trabajar?", ["📄 Subir PDFs (la IA analiza)", "✍️ Ingresar datos manualmente"], horizontal=True, key=f"pe_modo_exc_{rol_actual}")
@@ -5562,12 +5566,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         st.markdown("#### Sube la escritura y sus documentos de respaldo para que la IA revise su redacción")
         st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
         
-        motor_ia_esc_sel = st.selectbox(
-            "Motor de IA a usar", ["Automático (recomendado)", "Solo Gemini", "Solo DeepSeek"],
-            key="esc_analisis_motor_ia", index=0,
-            help="Automático intenta primero con Gemini y, solo si falla (por ejemplo, por el problema de facturación), cambia solo a DeepSeek. No necesitas elegir nada manualmente."
-        )
-        motor_ia_esc_final = {"Automático (recomendado)": "Automático", "Solo Gemini": "Gemini", "Solo DeepSeek": "DeepSeek"}[motor_ia_esc_sel]
+        motor_ia_esc_final = "Gemini"
         
         archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
         docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
