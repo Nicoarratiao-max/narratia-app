@@ -2638,25 +2638,29 @@ st.markdown("""
     .chat-para { font-size: 11px; color: #667781; font-weight: normal; margin-left: 5px; }
     
     /* ========================================================================
-       MENÚ LATERAL: proporcionado al texto de cada ítem (no estirado ni
-       forzado a centrarse todo), con los textos orillados a la izquierda
-       para que se vea ordenado, tipo app de escritorio real.
+       MENÚ LATERAL: un solo valor de indentación (10px) usado en TODOS los
+       elementos por igual (nombre, Inicio, Mensajería, categorías e ítems
+       de adentro), para que todo el texto arranque exactamente en la misma
+       posición horizontal. El ancho de la barra se ajustó para que quepa
+       cómodo el ítem más largo ("🤖 Inteligencia Artificial") sin cortarse
+       ni hacer wrap.
        ======================================================================== */
     [data-testid="stSidebar"] {
-        min-width: 250px !important;
-        max-width: 250px !important;
+        min-width: 280px !important;
+        max-width: 280px !important;
     }
     [data-testid="stSidebar"] > div:first-child {
-        padding-left: 14px !important;
-        padding-right: 14px !important;
+        padding-left: 8px !important;
+        padding-right: 8px !important;
     }
     [data-testid="stSidebar"] img { margin: 0 auto !important; display: block !important; }
     
-    /* Botones de navegación: tamaño ajustado a su propio texto, no estirados
-       a todo el ancho de la barra, y con el texto orillado a la izquierda.
-       Se fuerza con selector comodín (*) porque Streamlit envuelve el
-       texto del botón en varios niveles internos (div > div > p), y el
-       selector dirigido solo al <p> no alcanzaba a pisar el centrado. */
+    /* Botones de navegación (Inicio, Mensajería, y los de adentro de cada
+       categoría): mismo padding-left (10px) para que todos arranquen en el
+       mismo punto horizontal. Se fuerza con selector comodín (*) porque
+       Streamlit envuelve el texto del botón en varios niveles internos
+       (div > div > p), y el selector dirigido solo al <p> no alcanzaba a
+       pisar el centrado por defecto. */
     [data-testid="stSidebar"] [data-testid="stButton"] button {
         display: flex !important;
         text-align: left !important;
@@ -2667,7 +2671,7 @@ st.markdown("""
         border-radius: 8px !important;
         font-weight: 600 !important;
         font-size: 14px !important;
-        padding: 8px 10px 8px 18px !important;
+        padding: 8px 10px !important;
         margin-bottom: 1px !important;
         transition: all 0.15s ease !important;
     }
@@ -2681,10 +2685,9 @@ st.markdown("""
         color: #0052cc !important;
     }
     
-    /* Categorías (Judicial, Administrativo, IA): título orillado a la
-       izquierda también, para que quede parejo con los botones de abajo.
-       Mismo comodín aplicado al contenido del <summary>, salvo la flechita
-       (el ícono SVG del expander), que debe quedarse donde está. */
+    /* Categorías (Judicial, Administrativo, IA): mismo padding-left (10px)
+       que los botones, para que el texto de "Judicial" arranque exactamente
+       en la misma posición que "Inicio" o "Mensajería". */
     [data-testid="stSidebar"] [data-testid="stExpander"] {
         border: none !important;
         background-color: transparent !important;
@@ -2697,7 +2700,7 @@ st.markdown("""
         justify-content: flex-start !important;
         align-items: center !important;
         gap: 6px !important;
-        padding-left: 14px !important;
+        padding-left: 10px !important;
     }
     [data-testid="stSidebar"] [data-testid="stExpander"] summary *:not(svg) {
         text-align: left !important;
@@ -2705,9 +2708,13 @@ st.markdown("""
         width: auto !important;
         flex-grow: 0 !important;
     }
+    /* Sin padding extra aquí: los botones de adentro (Causas, Calendario,
+       etc.) ya traen su propio padding-left de 10px arriba, así que si acá
+       se agregara otro, quedarían doblemente indentados hacia la derecha
+       respecto a "Inicio" y "Mensajería". */
     [data-testid="stSidebar"] [data-testid="stExpanderDetails"] {
-        padding-left: 16px !important;
-        padding-right: 4px !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
     }
     
     /* Nombre de perfil + botón de cerrar sesión: pegados uno al lado del
@@ -2722,7 +2729,7 @@ st.markdown("""
         height: 34px !important;
         min-width: 34px !important;
         padding: 0 !important;
-        margin: 0 !important;
+        margin: 0 0 0 auto !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -2769,8 +2776,8 @@ with st.sidebar:
     # Nombre y botón van en la misma fila, pegados y orillados a la izquierda
     # (no centrados ni en filas separadas), para que se vea como un par
     # natural: "👤 Nombre  ⏻", no dos elementos sueltos en distintas líneas.
-    c_nombre_perfil, c_logout_rapido, c_espacio_derecho = st.columns([3, 1, 2])
-    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:6px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
+    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:10px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
     if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
