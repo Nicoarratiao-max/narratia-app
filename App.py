@@ -4614,7 +4614,10 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.rerun()
                             
                 df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
-                tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual]
+                # Las tareas más recientes van primero, independiente de su estado
+                # (aprobada/rechazada), en vez del orden de creación original que
+                # las dejaba siempre al final de la lista.
+                tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual].iloc[::-1]
                 
                 if tareas_de_esta_causa.empty:
                     st.info("Esta causa no registra tareas en progreso.")
@@ -4662,7 +4665,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 
                                 comentarios_js = json.loads(tarea['Comentarios'])
                                 
-                                with st.expander(f"💬 Comentarios ({len(comentarios_js)})", expanded=False):
+                                # El expander de comentarios se queda abierto después de
+                                # comentar (antes se cerraba solo al recargar la página
+                                # justo después de enviar un comentario nuevo).
+                                key_com_abiertos = f"comentarios_abiertos_{tarea['ID_Tarea']}"
+                                with st.expander(f"💬 Comentarios ({len(comentarios_js)})", expanded=st.session_state.get(key_com_abiertos, False)):
                                     if not comentarios_js:
                                         st.caption("No hay comentarios todavía.")
                                     for c in comentarios_js:
@@ -4676,23 +4683,29 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     
                                     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
                                     
-                                    # El adjuntar archivo antes quedaba siempre expandido (ocupando casi
-                                    # toda la pantalla con el área de arrastrar-y-soltar). Ahora se
-                                    # muestra solo un botón de clip 📎 que, al presionarlo, recién ahí
-                                    # despliega el selector de archivo.
+                                    # El clip 📎 ahora va en la misma fila que el texto y el
+                                    # botón Enviar (antes ocupaba una fila aparte arriba, que
+                                    # abarcaba mucho espacio en el lugar equivocado). El botón
+                                    # del clip queda FUERA del formulario a propósito, porque
+                                    # solo así puede reaccionar al toque sin tener que apretar
+                                    # "Enviar" primero.
                                     key_toggle_adj = f"mostrar_adj_{tarea['ID_Tarea']}"
-                                    c_clip, c_espacio = st.columns([1, 7])
-                                    if c_clip.button("📎", key=f"btn_clip_{tarea['ID_Tarea']}", help="Adjuntar archivo"):
-                                        st.session_state[key_toggle_adj] = not st.session_state.get(key_toggle_adj, False)
+                                    c_clip, c_txt_col, c_btn_col = st.columns([0.6, 5, 1.4])
+                                    with c_clip:
+                                        st.markdown("<div style='padding-top:26px;'></div>", unsafe_allow_html=True)
+                                        if st.button("📎", key=f"btn_clip_{tarea['ID_Tarea']}", help="Adjuntar archivo"):
+                                            st.session_state[key_toggle_adj] = not st.session_state.get(key_toggle_adj, False)
                                     
                                     adj_coment = None
                                     if st.session_state.get(key_toggle_adj):
                                         adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}")
                                     
                                     with st.form(key=f"fc_{tarea['ID_Tarea']}", clear_on_submit=True):
-                                        c_txt, c_btn = st.columns([5, 2])
-                                        texto_com = c_txt.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Escribir comentario...")
-                                        if c_btn.form_submit_button("Enviar", use_container_width=True):
+                                        with c_txt_col:
+                                            texto_com = st.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Escribir comentario...")
+                                        with c_btn_col:
+                                            enviar_click = st.form_submit_button("Enviar", use_container_width=True)
+                                        if enviar_click:
                                             if texto_com.strip() or adj_coment:
                                                 t_final = texto_com.strip() + (f" <br><em>[📎 Archivo adjunto: {adj_coment.name}]</em>" if adj_coment else "")
                                                 comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
@@ -4704,6 +4717,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                                     dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
                                                     safe_update_sheet("base_tareas", dn)
                                                 st.session_state[key_toggle_adj] = False
+                                                st.session_state[key_com_abiertos] = True
                                                 st.rerun()
 
             with tab_docs_solicitados:
