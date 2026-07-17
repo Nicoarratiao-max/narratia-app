@@ -1141,6 +1141,7 @@ COLS_CITAS = ['ID_Cita', 'Fecha', 'Hora', 'RUT_Cliente', 'Nombre_Cliente', 'Tele
               'Estado', 'Usuario_Propietario']
 COLS_ENCARGOS = ['ID_Encargo', 'Nombre_Encargante', 'RUT_Encargante', 'Fecha_Encargo', 'Fecha_Limite',
                  'Descripcion_Encargo', 'Monto', 'Estado', 'Usuario_Propietario']
+COLS_PAGOS_HONORARIOS = ['ID_Pago', 'Fecha_Pago', 'Cliente', 'ROL', 'Monto_Cuota', 'Numero_Cuota', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
@@ -2552,6 +2553,7 @@ ARCHIVO_ANALISIS_ESCRITURAS = f"base_analisis_escrituras_{usuario_actual}.csv"
 ARCHIVO_EXCEPCIONES = f"base_excepciones_{usuario_actual}.csv"
 ARCHIVO_CITAS = f"base_citas_{usuario_actual}.csv"
 ARCHIVO_ENCARGOS = f"base_encargos_{usuario_actual}.csv"
+ARCHIVO_PAGOS_HONORARIOS = f"base_pagos_honorarios_{usuario_actual}.csv"
 ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
@@ -3145,70 +3147,175 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     st.title("💰 Panel de Honorarios y Contabilidad")
     df_c = leer_csv_local(ARCHIVO_BD)
     
-    df_activos = df_c[(df_c['Total_Honorarios'] > 0) & (df_c['Estado_Honorarios'] == "Pendientes")].copy()
+    ES_ADMIN_CONTA = usuario_actual == "Narratia"
     
-    if df_activos.empty:
-        st.info("No hay contratos activos con honorarios pendientes de pago.")
-    else:
-        col_l, col_c, col_r = st.columns([0.2, 8, 0.2])
+    tab_conta_cliente, tab_conta_general = st.tabs(["📋 Gestión por Cliente", "📊 Contabilidad General"])
+    
+    # --- PESTAÑA: GESTIÓN POR CLIENTE (funcionalidad existente) ---
+    with tab_conta_cliente:
+        df_activos = df_c[(df_c['Total_Honorarios'] > 0) & (df_c['Estado_Honorarios'] == "Pendientes")].copy()
         
-        with col_c:
-            cliente_sel = st.selectbox("Selecciona un Cliente para gestionar su ficha:", df_activos['Cliente'].unique())
-            datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
+        if df_activos.empty:
+            st.info("No hay contratos activos con honorarios pendientes de pago.")
+        else:
+            col_l, col_c, col_r = st.columns([0.2, 8, 0.2])
             
-            with st.expander("⚙️ Ajustar Fecha de Inicio de Pagos"):
-                fecha_actual_cli = fecha_segura(datos_cli.get('Fecha_Inicio'))
-                nueva_fecha = st.date_input("Fecha de inicio de la primera cuota:", value=fecha_actual_cli)
-                if st.button("Guardar nueva fecha de inicio"):
-                    # Si la columna no existía o quedó tipada como número (todo NaN),
-                    # pandas moderno rechaza escribir un string ahí (TypeError de dtype).
-                    # La forzamos a texto antes de escribir la fecha.
-                    if 'Fecha_Inicio' not in df_c.columns:
-                        df_c['Fecha_Inicio'] = ""
-                    df_c['Fecha_Inicio'] = df_c['Fecha_Inicio'].astype(object)
-                    df_c.loc[df_c['Cliente'] == cliente_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
-                    df_c.to_csv(ARCHIVO_BD, index=False)
-                    st.rerun()
-
-            c_f1, c_f2, c_f3 = st.columns(3)
-            c_f1.metric("Total Pactado", f"${datos_cli['Total_Honorarios']:,.0f}")
-            c_f2.metric("Cuotas Pagadas", f"{datos_cli['Cuotas_Pagadas']} de {datos_cli['Cuotas_Totales']}")
-            valor_cuota = datos_cli['Total_Honorarios'] / datos_cli['Cuotas_Totales']
-            saldo = datos_cli['Total_Honorarios'] - (valor_cuota * datos_cli['Cuotas_Pagadas'])
-            c_f3.metric("Saldo Pendiente", f"${saldo:,.0f}")
-            
-            st.write("---")
-            st.subheader(f"Detalle de Cuotas: {cliente_sel}")
-            
-            fecha_inicio = fecha_segura(datos_cli.get('Fecha_Inicio'))
-            cuotas_data = []
-            hoy = datetime.now()
-            
-            for i in range(1, int(datos_cli['Cuotas_Totales']) + 1):
-                mes = (fecha_inicio.month + i - 2) % 12 + 1
-                anio = fecha_inicio.year + (fecha_inicio.month + i - 2) // 12
-                try:
-                    fecha_venc = datetime(anio, mes, fecha_inicio.day)
-                except ValueError:
-                    fecha_venc = datetime(anio, mes, 28)
+            with col_c:
+                cliente_sel = st.selectbox("Selecciona un Cliente para gestionar su ficha:", df_activos['Cliente'].unique())
+                datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
                 
-                estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else ("⚠️ VENCIDA" if fecha_venc < hoy else "❌ Pendiente")
-                cuotas_data.append({"Cuota": i, "Vencimiento": fecha_venc.strftime("%d/%m/%Y"), "Monto": valor_cuota, "Estado": estado})
+                with st.expander("⚙️ Ajustar Fecha de Inicio de Pagos"):
+                    fecha_actual_cli = fecha_segura(datos_cli.get('Fecha_Inicio'))
+                    nueva_fecha = st.date_input("Fecha de inicio de la primera cuota:", value=fecha_actual_cli)
+                    if st.button("Guardar nueva fecha de inicio"):
+                        # Si la columna no existía o quedó tipada como número (todo NaN),
+                        # pandas moderno rechaza escribir un string ahí (TypeError de dtype).
+                        # La forzamos a texto antes de escribir la fecha.
+                        if 'Fecha_Inicio' not in df_c.columns:
+                            df_c['Fecha_Inicio'] = ""
+                        df_c['Fecha_Inicio'] = df_c['Fecha_Inicio'].astype(object)
+                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
+                        df_c.to_csv(ARCHIVO_BD, index=False)
+                        st.rerun()
+
+                c_f1, c_f2, c_f3 = st.columns(3)
+                c_f1.metric("Total Pactado", f"${datos_cli['Total_Honorarios']:,.0f}")
+                c_f2.metric("Cuotas Pagadas", f"{datos_cli['Cuotas_Pagadas']} de {datos_cli['Cuotas_Totales']}")
+                valor_cuota = datos_cli['Total_Honorarios'] / datos_cli['Cuotas_Totales']
+                saldo = datos_cli['Total_Honorarios'] - (valor_cuota * datos_cli['Cuotas_Pagadas'])
+                c_f3.metric("Saldo Pendiente", f"${saldo:,.0f}")
+                
+                st.write("---")
+                st.subheader(f"Detalle de Cuotas: {cliente_sel}")
+                
+                fecha_inicio = fecha_segura(datos_cli.get('Fecha_Inicio'))
+                cuotas_data = []
+                hoy = datetime.now()
+                
+                for i in range(1, int(datos_cli['Cuotas_Totales']) + 1):
+                    mes = (fecha_inicio.month + i - 2) % 12 + 1
+                    anio = fecha_inicio.year + (fecha_inicio.month + i - 2) // 12
+                    try:
+                        fecha_venc = datetime(anio, mes, fecha_inicio.day)
+                    except ValueError:
+                        fecha_venc = datetime(anio, mes, 28)
+                    
+                    estado = "✅ Pagada" if i <= int(datos_cli['Cuotas_Pagadas']) else ("⚠️ VENCIDA" if fecha_venc < hoy else "❌ Pendiente")
+                    cuotas_data.append({"Cuota": i, "Vencimiento": fecha_venc.strftime("%d/%m/%Y"), "Monto": valor_cuota, "Estado": estado})
+                
+                st.table(pd.DataFrame(cuotas_data).style.format({"Monto": "${:,.0f}"}))
+                
+                c_b1, c_b2 = st.columns(2)
+                if c_b1.button("📥 Registrar Pago", type="primary", use_container_width=True):
+                    if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
+                        nueva_cuota_num = int(datos_cli['Cuotas_Pagadas']) + 1
+                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] += 1
+                        if df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
+                            df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pagados"
+                        df_c.to_csv(ARCHIVO_BD, index=False)
+                        
+                        # Se registra el pago en el historial, para poder calcular
+                        # ingresos reales (por fecha y por mes) en Contabilidad General,
+                        # en vez de solo un contador de cuotas sin fecha.
+                        nuevo_pago = {
+                            'ID_Pago': str(uuid.uuid4())[:8], 'Fecha_Pago': datetime.now().strftime("%d/%m/%Y"),
+                            'Cliente': cliente_sel, 'ROL': datos_cli.get('ROL', ''), 'Monto_Cuota': valor_cuota,
+                            'Numero_Cuota': nueva_cuota_num, 'Usuario_Propietario': usuario_actual
+                        }
+                        df_pagos_local = leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS)
+                        df_pagos_local = pd.concat([df_pagos_local, pd.DataFrame([nuevo_pago])], ignore_index=True)
+                        df_pagos_local.to_csv(ARCHIVO_PAGOS_HONORARIOS, index=False)
+                        dn_pagos = safe_read_sheet("base_pagos_honorarios", COLS_PAGOS_HONORARIOS)
+                        safe_update_sheet("base_pagos_honorarios", pd.concat([dn_pagos, pd.DataFrame([nuevo_pago])], ignore_index=True))
+                        
+                        st.rerun()
+                if c_b2.button("⏪ Revertir Pago", use_container_width=True):
+                    if datos_cli['Cuotas_Pagadas'] > 0:
+                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] -= 1
+                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pendientes"
+                        df_c.to_csv(ARCHIVO_BD, index=False)
+                        
+                        # Se elimina el último pago registrado de este cliente del
+                        # historial, para que Contabilidad General no quede
+                        # sobrevalorada tras revertir.
+                        df_pagos_revertir = leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS)
+                        pagos_cliente = df_pagos_revertir[df_pagos_revertir['Cliente'] == cliente_sel]
+                        if not pagos_cliente.empty:
+                            idx_ultimo_pago = pagos_cliente.index[-1]
+                            df_pagos_revertir = df_pagos_revertir.drop(idx_ultimo_pago)
+                            df_pagos_revertir.to_csv(ARCHIVO_PAGOS_HONORARIOS, index=False)
+                            dn_pagos_rev = safe_read_sheet("base_pagos_honorarios", COLS_PAGOS_HONORARIOS)
+                            if not dn_pagos_rev.empty:
+                                coincidencia_rev = dn_pagos_rev[(dn_pagos_rev['Cliente'] == cliente_sel) & (dn_pagos_rev['Usuario_Propietario'] == usuario_actual)]
+                                if not coincidencia_rev.empty:
+                                    dn_pagos_rev = dn_pagos_rev.drop(coincidencia_rev.index[-1])
+                                    safe_update_sheet("base_pagos_honorarios", dn_pagos_rev)
+                        
+                        st.rerun()
+    
+    # --- PESTAÑA: CONTABILIDAD GENERAL (nueva) ---
+    with tab_conta_general:
+        st.markdown("#### Visión general de ingresos por honorarios de todos los clientes")
+        
+        df_todos_conta = df_c[df_c['Total_Honorarios'] > 0].copy() if not df_c.empty else pd.DataFrame()
+        df_pagos_general = leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS)
+        if ES_ADMIN_CONTA:
+            df_todos_causas_conta = df_c.copy()
+            for arch_conta in glob.glob("base_causas_*.csv"):
+                propietario_conta = arch_conta.replace("base_causas_", "").replace(".csv", "")
+                if propietario_conta != usuario_actual:
+                    t_conta = leer_csv_local(arch_conta)
+                    if not t_conta.empty and 'Total_Honorarios' in t_conta.columns:
+                        df_todos_conta = pd.concat([df_todos_conta, t_conta[t_conta['Total_Honorarios'] > 0]], ignore_index=True)
+            for arch_pago in glob.glob("base_pagos_honorarios_*.csv"):
+                propietario_pago = arch_pago.replace("base_pagos_honorarios_", "").replace(".csv", "")
+                if propietario_pago != usuario_actual:
+                    t_pago = leer_csv_local(arch_pago, COLS_PAGOS_HONORARIOS)
+                    if not t_pago.empty:
+                        df_pagos_general = pd.concat([df_pagos_general, t_pago], ignore_index=True)
+        
+        if df_todos_conta.empty:
+            st.info("Todavía no hay honorarios pactados con ningún cliente.")
+        else:
+            df_todos_conta['Total_Honorarios'] = pd.to_numeric(df_todos_conta['Total_Honorarios'], errors='coerce').fillna(0)
+            df_todos_conta['Cuotas_Totales'] = pd.to_numeric(df_todos_conta['Cuotas_Totales'], errors='coerce').fillna(1).replace(0, 1)
+            df_todos_conta['Cuotas_Pagadas'] = pd.to_numeric(df_todos_conta['Cuotas_Pagadas'], errors='coerce').fillna(0)
+            df_todos_conta['Valor_Cuota'] = df_todos_conta['Total_Honorarios'] / df_todos_conta['Cuotas_Totales']
+            df_todos_conta['Cobrado'] = df_todos_conta['Valor_Cuota'] * df_todos_conta['Cuotas_Pagadas']
+            df_todos_conta['Pendiente'] = df_todos_conta['Total_Honorarios'] - df_todos_conta['Cobrado']
             
-            st.table(pd.DataFrame(cuotas_data).style.format({"Monto": "${:,.0f}"}))
+            total_pactado = df_todos_conta['Total_Honorarios'].sum()
+            total_cobrado = df_todos_conta['Cobrado'].sum()
+            total_pendiente = df_todos_conta['Pendiente'].sum()
             
-            c_b1, c_b2 = st.columns(2)
-            if c_b1.button("📥 Registrar Pago", type="primary", use_container_width=True):
-                if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
-                    df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] += 1
-                    if df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
-                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pagados"
-                    df_c.to_csv(ARCHIVO_BD, index=False); st.rerun()
-            if c_b2.button("⏪ Revertir Pago", use_container_width=True):
-                if datos_cli['Cuotas_Pagadas'] > 0:
-                    df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] -= 1
-                    df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pendientes"
-                    df_c.to_csv(ARCHIVO_BD, index=False); st.rerun()
+            c_m1, c_m2, c_m3 = st.columns(3)
+            c_m1.metric("💼 Total Pactado (todos los clientes)", formatear_clp(total_pactado))
+            c_m2.metric("✅ Total Cobrado", formatear_clp(total_cobrado), delta=f"{(total_cobrado/total_pactado*100):.0f}% del total" if total_pactado > 0 else None)
+            c_m3.metric("⏳ Total Pendiente por Cobrar", formatear_clp(total_pendiente))
+            
+            st.markdown("---")
+            
+            if not df_pagos_general.empty and 'Fecha_Pago' in df_pagos_general.columns:
+                df_pagos_general['Monto_Cuota'] = pd.to_numeric(df_pagos_general['Monto_Cuota'], errors='coerce').fillna(0)
+                df_pagos_general['Fecha_Pago_dt'] = pd.to_datetime(df_pagos_general['Fecha_Pago'], format='%d/%m/%Y', errors='coerce')
+                df_pagos_validos = df_pagos_general.dropna(subset=['Fecha_Pago_dt'])
+                if not df_pagos_validos.empty:
+                    df_pagos_validos['Mes'] = df_pagos_validos['Fecha_Pago_dt'].dt.strftime('%Y-%m')
+                    ingresos_por_mes = df_pagos_validos.groupby('Mes')['Monto_Cuota'].sum().reset_index()
+                    ingresos_por_mes = ingresos_por_mes.sort_values('Mes')
+                    
+                    st.markdown("##### 📈 Ingresos efectivos por mes (según pagos registrados)")
+                    st.bar_chart(ingresos_por_mes.set_index('Mes')['Monto_Cuota'])
+            else:
+                st.caption("Todavía no hay pagos registrados en el historial nuevo (los pagos ya existentes desde antes de este historial no aparecen aquí por fecha, solo en los totales generales de arriba).")
+            
+            st.markdown("##### 📋 Detalle por cliente")
+            df_mostrar_conta = df_todos_conta[['Cliente', 'ROL', 'Total_Honorarios', 'Cobrado', 'Pendiente', 'Estado_Honorarios']].copy()
+            df_mostrar_conta['% Avance'] = (df_todos_conta['Cobrado'] / df_todos_conta['Total_Honorarios'] * 100).round(0).astype(str) + '%'
+            st.dataframe(
+                df_mostrar_conta.style.format({'Total_Honorarios': '${:,.0f}', 'Cobrado': '${:,.0f}', 'Pendiente': '${:,.0f}'}),
+                use_container_width=True, hide_index=True
+            )
 
 # 3. TRÁMITES Y CONTROL DE AUXILIARES
 elif st.session_state['menu_radio'] == "📝 Trámites":
