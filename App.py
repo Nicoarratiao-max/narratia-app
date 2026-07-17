@@ -5426,8 +5426,8 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                     st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
 
 # 11.5 AGENDA DE CITAS (agendamiento de asesorías a clientes)
-elif st.session_state['menu_radio'] == "🗓️ Agenda Asesorias":
-    st.title("🗓️ Agenda Asesorias")
+elif st.session_state['menu_radio'] == "🗓️ Agenda de Citas":
+    st.title("🗓️ Agenda de Citas")
     
     ES_ADMIN_CITAS = usuario_actual == "Narratia"
     df_citas = leer_csv_local(ARCHIVO_CITAS, COLS_CITAS)
