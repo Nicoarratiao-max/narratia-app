@@ -1136,6 +1136,9 @@ COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B
 COLS_ESCRITURAS = ['ID', 'Fecha', 'Tipo_Escritura', 'Cliente', 'RUT_Cliente', 'Detalle', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ANALISIS_ESCRITURAS = ['ID', 'Fecha', 'Nombre_Archivo_Original', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_EXCEPCIONES = ['ID', 'Fecha', 'ROL', 'Excepciones_Opuestas', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
+COLS_CITAS = ['ID_Cita', 'Fecha', 'Hora', 'RUT_Cliente', 'Nombre_Cliente', 'Telefono', 'Email',
+              'Sucursal', 'Modalidad', 'Abogado_Asignado', 'Tipo_Juicio', 'Observacion',
+              'Estado', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
@@ -2545,6 +2548,7 @@ ARCHIVO_CONTRATOS = f"base_contratos_{usuario_actual}.csv"
 ARCHIVO_ESCRITURAS = f"base_escrituras_{usuario_actual}.csv"
 ARCHIVO_ANALISIS_ESCRITURAS = f"base_analisis_escrituras_{usuario_actual}.csv"
 ARCHIVO_EXCEPCIONES = f"base_excepciones_{usuario_actual}.csv"
+ARCHIVO_CITAS = f"base_citas_{usuario_actual}.csv"
 ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
@@ -2943,7 +2947,7 @@ with st.sidebar:
     # Inicio y Mensajería van sueltos, fuera de cualquier categoría.
     GRUPO_JUDICIAL = ["💼 Causas", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "📆 Estado diario",
                       "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
-    GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "💰 Contabilidad", "📝 Trámites",
+    GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "🗓️ Agenda de Citas", "💰 Contabilidad", "📝 Trámites",
                             "📊 Informes", "📥 Excel"]
     GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA"]  # Solo visibles para plan Full
     
@@ -5308,8 +5312,146 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                 with c3:
                     st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
 
-# 12. EXCEL IMPORTADOR 
-elif st.session_state['menu_radio'] == "📥 Excel":
+# 11.5 AGENDA DE CITAS (agendamiento de asesorías a clientes)
+elif st.session_state['menu_radio'] == "🗓️ Agenda de Citas":
+    st.title("🗓️ Agenda de Citas")
+    
+    ES_ADMIN_CITAS = usuario_actual == "Narratia"
+    df_citas = leer_csv_local(ARCHIVO_CITAS, COLS_CITAS)
+    if ES_ADMIN_CITAS:
+        for arch_cita in glob.glob("base_citas_*.csv"):
+            propietario_cita = arch_cita.replace("base_citas_", "").replace(".csv", "")
+            if propietario_cita != usuario_actual:
+                t_cita = leer_csv_local(arch_cita, COLS_CITAS)
+                if not t_cita.empty:
+                    df_citas = pd.concat([df_citas, t_cita], ignore_index=True)
+    
+    ESTADOS_CITA = ["Por Confirmar", "Confirmada", "Realizada", "Cliente No Asiste",
+                    "Cancelada por Cliente", "Cancelada por Asesor", "No Contesta",
+                    "Reagendada", "Reasignada"]
+    COLOR_ESTADO_CITA = {
+        "Por Confirmar": ("#fff0b3", "#7a5b00"), "Confirmada": ("#e3f2f1", "#0e6b74"),
+        "Realizada": ("#e3fcef", "#1b7a4a"), "Cliente No Asiste": ("#ffebe6", "#bf2600"),
+        "Cancelada por Cliente": ("#ffebe6", "#bf2600"), "Cancelada por Asesor": ("#ffebe6", "#bf2600"),
+        "No Contesta": ("#f4f5f7", "#6b778c"), "Reagendada": ("#fff0b3", "#7a5b00"),
+        "Reasignada": ("#fff0b3", "#7a5b00"),
+    }
+    
+    tab_citas_hoy, tab_citas_nueva, tab_citas_todas = st.tabs(["📅 Hoy", "➕ Agendar Cita", "📋 Todas las Citas"])
+    
+    # --- PESTAÑA: HOY ---
+    with tab_citas_hoy:
+        fecha_hoy_cita = datetime.now().strftime("%d-%m-%Y")
+        st.markdown(f"#### Citas agendadas para hoy — {fecha_hoy_cita}")
+        
+        if df_citas.empty or 'Fecha' not in df_citas.columns:
+            st.info("No hay citas registradas todavía.")
+        else:
+            df_hoy = df_citas[df_citas['Fecha'].astype(str) == fecha_hoy_cita].copy()
+            if df_hoy.empty:
+                st.info("No hay citas agendadas para hoy.")
+            else:
+                df_hoy = df_hoy.sort_values('Hora')
+                for _, cita in df_hoy.iterrows():
+                    color_bg, color_txt = COLOR_ESTADO_CITA.get(cita['Estado'], ("#f4f5f7", "#6b778c"))
+                    with st.container(border=True):
+                        c1, c2, c3 = st.columns([1, 3, 1.5])
+                        with c1:
+                            st.markdown(f"### {cita['Hora']}")
+                        with c2:
+                            st.markdown(f"**{cita['Nombre_Cliente']}** — {cita.get('Tipo_Juicio','')}")
+                            st.caption(f"📞 {cita['Telefono']} · {cita['Modalidad']} · {cita['Sucursal']} · Abogado: {cita['Abogado_Asignado']}")
+                        with c3:
+                            nuevo_estado = st.selectbox("Estado", ESTADOS_CITA, index=ESTADOS_CITA.index(cita['Estado']) if cita['Estado'] in ESTADOS_CITA else 0,
+                                                         key=f"estado_hoy_{cita['ID_Cita']}", label_visibility="collapsed")
+                            st.markdown(f"<span style='background:{color_bg}; color:{color_txt}; padding:2px 10px; border-radius:10px; font-size:11px; font-weight:700;'>{cita['Estado']}</span>", unsafe_allow_html=True)
+                            if nuevo_estado != cita['Estado']:
+                                df_citas_completo = leer_csv_local(f"base_citas_{cita['Usuario_Propietario']}.csv", COLS_CITAS)
+                                df_citas_completo.loc[df_citas_completo['ID_Cita'] == cita['ID_Cita'], 'Estado'] = nuevo_estado
+                                df_citas_completo.to_csv(f"base_citas_{cita['Usuario_Propietario']}.csv", index=False)
+                                dn_cita = safe_read_sheet("base_citas", COLS_CITAS)
+                                if not dn_cita.empty:
+                                    dn_cita.loc[dn_cita['ID_Cita'] == cita['ID_Cita'], 'Estado'] = nuevo_estado
+                                    safe_update_sheet("base_citas", dn_cita)
+                                st.rerun()
+    
+    # --- PESTAÑA: AGENDAR NUEVA CITA ---
+    with tab_citas_nueva:
+        st.markdown("#### Buscar cliente por RUT (autocompleta si ya existe)")
+        c_rut_buscar, c_btn_buscar = st.columns([3, 1])
+        rut_buscar_cita = c_rut_buscar.text_input("RUT (ej: 12345678-9)", key="cita_rut_buscar", label_visibility="collapsed", placeholder="RUT (ej: 12345678-9)")
+        
+        datos_cliente_encontrado = None
+        if rut_buscar_cita.strip():
+            df_clientes_cita = safe_read_sheet("base_clientes", COLS_CLIENTES)
+            rut_limpio_buscar = re.sub(r'[^0-9kK]', '', rut_buscar_cita).upper()
+            if not df_clientes_cita.empty:
+                coincidencia = df_clientes_cita[df_clientes_cita['RUT'].astype(str).apply(lambda r: re.sub(r'[^0-9kK]', '', r).upper()) == rut_limpio_buscar]
+                if not coincidencia.empty:
+                    datos_cliente_encontrado = coincidencia.iloc[0]
+                    st.success(f"✅ Cliente encontrado: {datos_cliente_encontrado['Nombre']}")
+        
+        with st.form("form_nueva_cita", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            nombre_cita = c1.text_input("Nombre", value=datos_cliente_encontrado['Nombre'] if datos_cliente_encontrado is not None else "")
+            telefono_cita = c2.text_input("Teléfono", value=datos_cliente_encontrado['Telefono'] if datos_cliente_encontrado is not None else "")
+            email_cita = c1.text_input("Email", value=datos_cliente_encontrado['Correo'] if datos_cliente_encontrado is not None else "")
+            sucursal_cita = c2.selectbox("Sucursal", ["Santiago Centro", "Sucursal Virtual", "Otra"])
+            modalidad_cita = c1.selectbox("Modalidad de cita", ["Telefónica", "Presencial", "Videollamada"])
+            abogado_cita = c2.text_input("Abogado asignado", value=nombre_real_usuario)
+            fecha_cita = c1.date_input("Fecha")
+            hora_cita = c2.time_input("Hora")
+            tipo_juicio_cita = st.text_input("Tipo de juicio / materia (ej: Juicio Ejecutivo cobro de pagaré)", key="cita_tipo_juicio")
+            observacion_cita = st.text_area("Observación", height=80)
+            
+            if st.form_submit_button("📅 Agendar Cita", type="primary", use_container_width=True):
+                if not nombre_cita.strip():
+                    st.error("⚠️ Debes indicar al menos el nombre del cliente.")
+                else:
+                    nueva_cita = {
+                        'ID_Cita': str(uuid.uuid4())[:8], 'Fecha': fecha_cita.strftime("%d-%m-%Y"), 'Hora': hora_cita.strftime("%H:%M"),
+                        'RUT_Cliente': rut_buscar_cita.strip().upper(), 'Nombre_Cliente': nombre_cita.strip(),
+                        'Telefono': telefono_cita.strip(), 'Email': email_cita.strip(), 'Sucursal': sucursal_cita,
+                        'Modalidad': modalidad_cita, 'Abogado_Asignado': abogado_cita.strip(), 'Tipo_Juicio': tipo_juicio_cita.strip(),
+                        'Observacion': observacion_cita.strip(), 'Estado': 'Por Confirmar', 'Usuario_Propietario': usuario_actual
+                    }
+                    df_citas_local = leer_csv_local(ARCHIVO_CITAS, COLS_CITAS)
+                    df_citas_local = pd.concat([df_citas_local, pd.DataFrame([nueva_cita])], ignore_index=True)
+                    df_citas_local.to_csv(ARCHIVO_CITAS, index=False)
+                    dn_citas = safe_read_sheet("base_citas", COLS_CITAS)
+                    safe_update_sheet("base_citas", pd.concat([dn_citas, pd.DataFrame([nueva_cita])], ignore_index=True))
+                    st.success("✅ Cita agendada correctamente.")
+                    st.rerun()
+        
+        # 💰 Referencia de honorarios según el tipo de juicio ingresado arriba
+        if st.session_state.get("cita_tipo_juicio", "").strip():
+            sugerencias_cita = buscar_arancel_referencial(st.session_state["cita_tipo_juicio"])
+            if sugerencias_cita:
+                st.markdown("##### 💰 Referencia de Honorarios (Arancel Colegio de Abogados de Valparaíso)")
+                for sug in sugerencias_cita:
+                    st.markdown(f"**N°{sug['numero']} — {sug['descripcion']}**")
+                    st.caption(sug['honorario'])
+    
+    # --- PESTAÑA: TODAS LAS CITAS ---
+    with tab_citas_todas:
+        st.markdown("#### Buscador general")
+        busqueda_cita = st.text_input("Buscar por nombre, RUT, abogado, teléfono...", key="busqueda_citas_general", label_visibility="collapsed", placeholder="Buscar por nombre, RUT, abogado, teléfono...")
+        
+        if df_citas.empty:
+            st.info("No hay citas registradas todavía.")
+        else:
+            df_mostrar_citas = df_citas.copy()
+            if busqueda_cita.strip():
+                mask_busqueda = df_mostrar_citas.astype(str).apply(lambda col: col.str.contains(busqueda_cita, case=False, na=False)).any(axis=1)
+                df_mostrar_citas = df_mostrar_citas[mask_busqueda]
+            
+            df_mostrar_citas = df_mostrar_citas.sort_values(['Fecha', 'Hora'], ascending=[False, True])
+            st.dataframe(
+                df_mostrar_citas[['Fecha', 'Hora', 'Abogado_Asignado', 'Telefono', 'Nombre_Cliente', 'RUT_Cliente', 'Sucursal', 'Modalidad', 'Estado']],
+                use_container_width=True, hide_index=True
+            )
+
+
     st.title("📥 Importador Masivo de Causas (OJV)")
     st.markdown("Sube tu archivo Excel de la Oficina Judicial Virtual para consolidar o actualizar masivamente tus causas.")
     archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx", "xls"])
