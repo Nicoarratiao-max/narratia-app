@@ -4683,29 +4683,31 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     
                                     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
                                     
-                                    # El clip 📎 ahora va en la misma fila que el texto y el
-                                    # botón Enviar (antes ocupaba una fila aparte arriba, que
-                                    # abarcaba mucho espacio en el lugar equivocado). El botón
-                                    # del clip queda FUERA del formulario a propósito, porque
-                                    # solo así puede reaccionar al toque sin tener que apretar
-                                    # "Enviar" primero.
+                                    # Streamlit no permite repartir un mismo formulario entre
+                                    # columnas creadas AFUERA de él (eso causaba el error). La
+                                    # solución correcta es que las 3 columnas (clip, texto,
+                                    # Enviar) se creen DENTRO del formulario, usando el clip
+                                    # como un segundo botón de envío (Streamlit sí permite más
+                                    # de un st.form_submit_button en el mismo formulario).
                                     key_toggle_adj = f"mostrar_adj_{tarea['ID_Tarea']}"
-                                    c_clip, c_txt_col, c_btn_col = st.columns([0.6, 5, 1.4])
-                                    with c_clip:
-                                        st.markdown("<div style='padding-top:26px;'></div>", unsafe_allow_html=True)
-                                        if st.button("📎", key=f"btn_clip_{tarea['ID_Tarea']}", help="Adjuntar archivo"):
-                                            st.session_state[key_toggle_adj] = not st.session_state.get(key_toggle_adj, False)
-                                    
-                                    adj_coment = None
-                                    if st.session_state.get(key_toggle_adj):
-                                        adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}")
                                     
                                     with st.form(key=f"fc_{tarea['ID_Tarea']}", clear_on_submit=True):
+                                        c_clip, c_txt_col, c_btn_col = st.columns([0.6, 5, 1.4])
+                                        with c_clip:
+                                            clip_click = st.form_submit_button("📎")
                                         with c_txt_col:
                                             texto_com = st.text_input("Agregar un comentario...", label_visibility="collapsed", placeholder="Escribir comentario...")
                                         with c_btn_col:
                                             enviar_click = st.form_submit_button("Enviar", use_container_width=True)
-                                        if enviar_click:
+                                        
+                                        adj_coment = None
+                                        if st.session_state.get(key_toggle_adj):
+                                            adj_coment = st.file_uploader("📎 Adjuntar archivo al comentario", key=f"fu_{tarea['ID_Tarea']}")
+                                        
+                                        if clip_click:
+                                            st.session_state[key_toggle_adj] = not st.session_state.get(key_toggle_adj, False)
+                                            st.rerun()
+                                        elif enviar_click:
                                             if texto_com.strip() or adj_coment:
                                                 t_final = texto_com.strip() + (f" <br><em>[📎 Archivo adjunto: {adj_coment.name}]</em>" if adj_coment else "")
                                                 comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
