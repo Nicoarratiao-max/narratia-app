@@ -402,6 +402,184 @@ def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
     respuesta.raise_for_status()
     return respuesta.json()["choices"][0]["message"]["content"]
 
+# =====================================================================
+# 💰 ARANCEL DE HONORARIOS — COLEGIO DE ABOGADOS DE VALPARAÍSO
+# =====================================================================
+# Arancel profesional aprobado por el H. Consejo del Colegio de Abogados
+# de Valparaíso (14 de junio de 1999). Son valores ORIENTADORES y
+# supletorios (Art. 7 del propio Arancel): rigen solo a falta de pacto
+# expreso entre abogado y cliente, y sirven como referencia de la
+# costumbre forense. Nunca reemplazan el criterio del abogado.
+ARANCEL_COLEGIO_VALPARAISO = [
+    {'numero': 1, 'descripcion': 'Actas, minutas, cartas, proposiciones o contraproposiciones de negocios, memoriales, solicitudes, formularios, protestas, finiquitos, declaraciones, decretos, instrucciones, etc. (redacción de)', 'honorario': 'De 2 UF a 20 UF'},
+    {'numero': 2, 'descripcion': 'Administración de bienes en general, desempeñada por abogado', 'honorario': 'Del 5% al 10% de la renta mensual, o del 0,5% al 1% del capital en caso de bienes que no generen rentas periódicas. El honorario no comprende la redacción de contratos.'},
+    {'numero': 3, 'descripcion': 'Administración pro-indiviso o albaceazgo, desempeñado por abogado', 'honorario': 'Se aplicarán las reglas previstas para el honorario del juez árbitro en el N56. .'},
+    {'numero': 4, 'descripcion': 'Aguas', 'honorario': '- Tramitación de mercedes de agua: De 15 UF a 50 UF En caso de oposición, el honorario se recargará en un 50%. - Inscripción de derechos de aprovechamiento, de acuerdo al articulado transitorio del Código de Aguas: De 10 UF a 40 UF - Constitución de Organizaciones de Usuarios (Juntas de Vigilancia, Asociaciones de Canalistas, Comunidades de Aguas, Comunidades de Obras de Drenaje y similares): De 4'},
+    {'numero': 5, 'descripcion': 'Capitulaciones matrimoniales', 'honorario': 'De 5 UF a 20 UF'},
+    {'numero': 6, 'descripcion': 'Cobranzas extrajudiciales', 'honorario': 'Del 2% al 10% del monto recuperado.'},
+    {'numero': 7, 'descripcion': 'Concesiones o permisos de servicio público, marítimas, de acuicultura, de pesca, administrativas y similares', 'honorario': 'Se cobrará por tiempo trabajado, en conformidad al artículo 33.'},
+    {'numero': 8, 'descripcion': 'Contratos en general (incluye estudio de títulos o antecedentes, redacción, inscripción y publicación)', 'honorario': '- Si se tratare de contratos estandarizados, entendiendo por tales aquellos que se redactan sobre la base de modelos de uso corriente en la práctica forense, el honorario será de 5 UF a 100 UF. - En los demás casos, del 0,5% al 5% del monto del negocio, con un mínimo de 5 UF. Si la cuantía fuere indeterminada, de 5 UF a 200 UF. - En los contratos de tracto sucesivo, la mitad de una renta mensual,'},
+    {'numero': 9, 'descripcion': 'Contratos en general (revisión de contratos ya redactados)', 'honorario': 'Del 25% al 50% del honorario que corresponda según el número precedente.'},
+    {'numero': 10, 'descripcion': 'Convenios extrajudiciales', 'honorario': 'Del 0,5% al 5% del valor del activo del deudor que figure en el acta del convenio, con un mínimo de 50 UF. El honorario del abogado de cada acreedor será del 1% al 5% del monto del crédito, con un mínimo de 5 UF.'},
+    {'numero': 11, 'descripcion': 'Copropiedad Inmobiliaria (asesoramiento general)', 'honorario': 'Del 1% al 5% del valor de venta del edificio, con un mínimo de 50 UF. Estas gestiones comprenden todos los actos y trámites conducentes a la constitución de la copropiedad inmobiliaria y al completo desarrollo de la misma, incluyéndose, por tanto, el estudio de títulos, redacción de escrituras de compraventas y/o sociedad, contratos para la ejecución del proyecto (contratos de promesa, de trabajo,'},
+    {'numero': 12, 'descripcion': 'Expropiación forzosa con solución mediante gestión meramente administrativa', 'honorario': 'Del 2% al 5% del monto de la indemnización que se pague.'},
+    {'numero': 13, 'descripcion': 'Extranjería, Asilo y Retorno. Comprende tramitación de permiso de residencia y clasificación de refugiado o retornado', 'honorario': 'De 10 UF a 100 UF'},
+    {'numero': 14, 'descripcion': 'Impacto ambiental (asesoramiento para oponerse a autorización)', 'honorario': 'De 30 UF a 100 UF'},
+    {'numero': 15, 'descripcion': 'Impacto ambiental (asesoramiento para obtener autorización ante autoridades administrativas)', 'honorario': 'De 30 UF a 300 UF'},
+    {'numero': 16, 'descripcion': 'Informe privado por escrito', 'honorario': 'De 10 UF a 100 UF, según la especialidad o dificultad de la consulta, el tiempo empleado en absolverla y la extensión y trascendencia del informe.'},
+    {'numero': 17, 'descripcion': 'Informe en derecho nacional o extranjero', 'honorario': 'De 40 UF a 400 UF, según las mismas circunstancias previstas en la regla precedente.'},
+    {'numero': 18, 'descripcion': 'Inscripción de dominio', 'honorario': '- Primera inscripción: Del 1% al 2% del valor comercial del predio con un mínimo de 10 UF. - Otras inscripciones (cuando no están incluidas en los números 8 y 11): De 5 UF a 15 UF.'},
+    {'numero': 19, 'descripcion': 'Legalización y protocolización de documentos', 'honorario': 'De 1 UF a 10 UF'},
+    {'numero': 20, 'descripcion': 'Nacionalización (gestiones de)', 'honorario': 'De 10 UF a 100 UF'},
+    {'numero': 21, 'descripcion': 'Parcelaciones, loteos, urbanizaciones y formación de poblaciones (asesoramiento en)', 'honorario': 'El honorario previsto en el N11 y comprende las gestiones señaladas en él, en cuanto fueren compatibles. Del mismo modo, se excluyen los procedimientos judiciales.'},
+    {'numero': 22, 'descripcion': 'Permanencia de extranjeros (tramitación de)', 'honorario': 'De 10 UF a 100 UF'},
+    {'numero': 23, 'descripcion': 'Personalidad jurídica (tramitación), de Corporaciones, fundaciones, cooperativas, sindicatos y asociaciones en general', 'honorario': 'De 20 UF a 200 UF'},
+    {'numero': 24, 'descripcion': 'Propiedad Intelectual, Industrial y Marcas Comerciales (Registro de)', 'honorario': 'De 2 UF a 15 UF'},
+    {'numero': 25, 'descripcion': 'Reclamaciones y Recursos Administrativos en general, no previstos especialmente', 'honorario': 'De 10 UF a 100 UF'},
+    {'numero': 26, 'descripcion': 'Rectificación y derecho de respuesta Ley de Prensa (redacción de)', 'honorario': 'De 2 UF a 8 UF'},
+    {'numero': 27, 'descripcion': 'Reglamentos, estatutos u otros ordenamientos normativos, cuando no estuvieren comprendidos en el número 23 (redacción de)', 'honorario': 'De 10 UF a 70 UF'},
+    {'numero': 28, 'descripcion': 'Representación de personas, grupos de acción cívica, de intereses económicos comunes u otros análogos, ante autoridades del Estado o ante organismos internacionales', 'honorario': 'Cuando no pudieren aplicarse otros números contemplados en este Arancel, se cobrará por tiempo trabajado.'},
+    {'numero': 29, 'descripcion': 'Separación convencional de bienes', 'honorario': '- Simple: de 5 UF a 20 UF. - Con liquidación de sociedad conyugal: del 0,5% al 5% del patrimonio social, con un mínimo de 10 UF.'},
+    {'numero': 30, 'descripcion': 'Sociedades colectivas, de responsabilidad limitada, en comandita simple y por acciones, anónimas, cuentas en participación o contractuales mineras. Incluye constitución, modificaciones, estudio de títulos o antecedentes, redacción, inscripción y publicación', 'honorario': '- Si el contrato es estandarizado, de 5 UF a 100 UF - En los demás casos, de 10 UF a 200 UF'},
+    {'numero': 31, 'descripcion': 'Sociedades (disolución y liquidación)', 'honorario': '- Simple disolución: de 5 UF a 20 UF - Con liquidación: del 0,5% al 5% del patrimonio neto, con un mínimo de 10 UF.'},
+    {'numero': 32, 'descripcion': 'Testamentos (redacción de)', 'honorario': 'De 5 UF a 100 UF'},
+    {'numero': 33, 'descripcion': 'Títulos (examen de)', 'honorario': 'De 5 UF a 50 UF. Si comprendiere la formación, arreglo u obtención de antecedentes: de 10 UF a 100 UF'},
+    {'numero': 34, 'descripcion': 'Transacciones extrajudiciales', 'honorario': 'Si precaven el juicio, hasta la mitad del honorario que correspondería en caso de deducirse.'},
+    {'numero': 35, 'descripcion': 'Usufructo, hipotecas y otros derechos reales (constitución)', 'honorario': 'Se aplicará la regla contenida en el N8. # CAPITULO II ASUNTOS DE JURISDICCION VOLUNTARIA.'},
+    {'numero': 36, 'descripcion': 'Adopción simple y Adopción plena', 'honorario': 'De 10 UF a 80 UF'},
+    {'numero': 37, 'descripcion': 'Ausencia y nombramiento de curador (declaración de)', 'honorario': 'De 10 UF a 50 UF'},
+    {'numero': 38, 'descripcion': 'Autorizaciones Judiciales', 'honorario': 'Para enajenar, gravar o dar en arrendamiento bienes de incapaces; para obligar a éstos como fiadores; para celebrar contratos de sociedad; para proceder a la partición de bienes de incapaces; para celebrar capitulaciones matrimoniales y otras autorizaciones que sean necesa-rias para la validez de los actos de incapaces, o supletorias del cónyuge o incapaz: De 10 UF a 50 UF'},
+    {'numero': 39, 'descripcion': 'Consignaciones judiciales derivadas de expropiaciones (monto provisional), constitución de servidumbres legales para concesión de servicios públicos y otras similares', 'honorario': 'Del 2% al 4% del monto percibido.'},
+    {'numero': 40, 'descripcion': 'Curadores de bienes, adjuntos o especiales (nombramiento de)', 'honorario': 'De 10 UF a 50 UF'},
+    {'numero': 41, 'descripcion': 'Herencia yacente y nombramiento de curador (declaración de)', 'honorario': 'De 10 UF a 100 UF'},
+    {'numero': 42, 'descripcion': 'Información para perpetua memoria', 'honorario': 'De 5 UF a 20 UF'},
+    {'numero': 43, 'descripcion': 'Insinuación de donaciones, incluyendo determinación del impuesto', 'honorario': 'De 5 UF a 30 UF'},
+    {'numero': 44, 'descripcion': 'Inventario solemne (facción de)', 'honorario': 'De 5 UF a 20 UF'},
+    {'numero': 45, 'descripcion': 'Muerte presunta (declaración de)', 'honorario': 'De 10 UF a 50 UF'},
+    {'numero': 46, 'descripcion': 'Nombre (diligencias sobre cambio de)', 'honorario': 'De 10 UF a 20 UF'},
+    {'numero': 47, 'descripcion': 'Posesión efectiva de herencia, incluyendo apertura de testamento, inventario, protocolizaciones, exención o determinación, pago y aprobación del impuesto de herencia e inscripciones', 'honorario': 'Del 0,5% al 5% del valor comercial de los bienes, con un mínimo de 10 UF'},
+    {'numero': 48, 'descripcion': 'Reconocimiento de hijos', 'honorario': 'De 5 UF a 50 UF'},
+    {'numero': 49, 'descripcion': 'Rectificación de partidas', 'honorario': 'De 5 UF a 20 UF'},
+    {'numero': 50, 'descripcion': 'Remates o pública subasta (patrocinio de interesados en)', 'honorario': 'Del O,5% al 5% del precio, incluyendo las gestiones señaladas en el N8.'},
+    {'numero': 51, 'descripcion': 'Tutelas y curatelas generales (nombramiento y discernimiento de)', 'honorario': 'De 10 UF a 50 UF'},
+    {'numero': 52, 'descripcion': 'Venta en pública subasta o en licitación', 'honorario': 'Del 0,5% al 4% del precio que se obtenga. El honorario incluirá todo el trabajo profesional necesario para realizar la venta y enajenación de los bienes subastados o licitados. # CAPITULO III MATERIAS CIVILES CONTENCIOSAS'},
+    {'numero': 53, 'descripcion': 'Acción de desposeimiento', 'honorario': 'Abogado del demandante: del 2% al 10% del monto recuperado, con un mínimo de 10 UF. Abogado del demandado: del 2% al 10% del valor comercial del bien, o de la deuda, debiendo aplicarse el porcentaje sobre el valor que fuere menor.'},
+    {'numero': 54, 'descripcion': 'Aguas (recurso de amparo de)', 'honorario': 'De 20 UF a 200 UF'},
+    {'numero': 55, 'descripcion': 'Alimentos (juicios de)', 'honorario': 'Abogado del demandante: un honorario equivalente de 1 a 3 meses de la pensión que se obtenga. Abogado del demandado: un honorario de media a una y media pensión mensual demandada. Cuando se hubiere remunerado el incidente de alimentos provisionales, este honorario servirá de abono al que corresponda al término del juicio.'},
+    {'numero': 56, 'descripcion': 'Arbitrajes, liquidaciones y particiones (honorarios del juez o del liquidador)', 'honorario': '- El árbitro podrá fijar sus honorarios por tiempo o de acuerdo a la cuantía, considerando la naturaleza del caso, o conforme a lo que convenga con todas las partes del proceso. - Cuando el honorario se fije por tiempo, el árbitro deberá tener presente los parámetros establecidos en el artículo 33 de este arancel. - Cuando el honorario se fije según la cuantía, se aplicará la tabla siguiente a fal'},
+    {'numero': 57, 'descripcion': 'Arrendamientos (juicios de)', 'honorario': 'De una a cuatro rentas mensuales.'},
+    {'numero': 58, 'descripcion': 'Avenimiento, conciliación o transacción', 'honorario': 'Cuando se pone término al juicio, regirá la regla del art. 24.'},
+    {'numero': 59, 'descripcion': 'Bien Familiar (declaración o defensa en gestión judicial)', 'honorario': 'De 10 UF a 100 UF'},
+    {'numero': 60, 'descripcion': 'Citación de evicción', 'honorario': 'De 4 UF a 40 UF'},
+    {'numero': 61, 'descripcion': 'Convenio Judicial Preventivo', 'honorario': 'Abogado del deudor: Del 1% al 5% del valor del activo, con un mínimo de 75 UF. Abogado del acreedor: Del 1% al 5% del monto del crédito, con un mínimo de 5 UF.'},
+    {'numero': 62, 'descripcion': 'Cumplimiento de sentencias dictadas por tribunales extranjeros. En materia contenciosa, de 10 UF a 100 UF. En materia voluntaria, de 5 UF a 50 UF. ## 63.- Cheques (cobranzas de)', 'honorario': 'Se aplicará la regla correspondiente al juicio ejecutivo.'},
+    {'numero': 64, 'descripcion': 'Derecho legal de retención como acción especial', 'honorario': 'Se aplicará la regla del N72, sobre medidas cautelares.'},
+    {'numero': 65, 'descripcion': 'Exhortos (diligenciamiento de)', 'honorario': 'Nacionales: de 2 UF a 25 UF. Extranjeros: de 10 UF a 75 UF.'},
+    {'numero': 66, 'descripcion': 'Expropiación (gestión o juicios de)', 'honorario': 'Se aplicarán las reglas del juicio ordinario, calculándose los porcentajes sobre la mayor suma que se consigne judicialmente.'},
+    {'numero': 67, 'descripcion': 'Incidentes', 'honorario': 'De previo y especial pronunciamiento: Hasta la cuarta parte del honorario correspondiente a la cuestión principal. Ordinarios: Hasta la décima parte del honorario correspondiente a la cuestión principal. En segunda instancia el honorario se elevará hasta el doble. Si se ha asumido la defensa de la causa, no habrá derecho a cobrar honorarios por la promoción de incidentes.'},
+    {'numero': 68, 'descripcion': 'Interdictos posesorios', 'honorario': 'Regirán las reglas del juicio ordinario o del de cuantía indeterminada, en su caso.'},
+    {'numero': 69, 'descripcion': 'Jactancia (acción de)', 'honorario': 'El 25% del honorario que corresponda al juicio que con la demanda de jactancia se trata de provocar o silenciar.'},
+    {'numero': 70, 'descripcion': 'Juicios y Procedimientos', 'honorario': '- Juicio de cuantía indeterminada: De 10 UF a 100 UF, pudiendo elevarse hasta 500 UF en casos de especial trascendencia económica. ## Juicio ejecutivo y ejecución de resoluciones conforme al Título XIX del Libro I del Código de Procedimiento Civil. Abogado del ejecutante: Si se oponen excepciones, se aplicará la escala de la letra c) de este número, rebajada a las tres cuartas partes. Si no hay ex'},
+    {'numero': 71, 'descripcion': 'Medidas Cautelares Prejudiciales', 'honorario': 'Si con la obtención de la medida se solucionare la cuestión o cuestiones que iban a ser objeto del juicio, el honorario será la mitad del que habría correspondido a dicho juicio. Si no se hubiera obtenido la medida, o habiéndosela obtenido no se solucionare la cuestión, de 10 UF a 100 UF. El mismo honorario precedente corresponderá al abogado de la parte en contra de la cual se hubiere pedido la m'},
+    {'numero': 72, 'descripcion': 'Medidas Precautorias o cautelares', 'honorario': 'Se entenderán comprendidas en el honorario correspondiente al juicio, en conformidad al art. 18 letra m).'},
+    {'numero': 73, 'descripcion': 'Menores (patrocinio en gestiones ante los Juzgados de Letras de)', 'honorario': '- Si fueren de alimentos, se aplicarán las reglas previstas para el juicio de alimentos. - Si fueren sobre otras materias, de 3 UF a 50 UF, salvo que se tratare de asuntos especialmente contemplados en otros números de este Arancel, en que el honorario se encuentra fijado en ellos.'},
+    {'numero': 74, 'descripcion': 'Notificaciones aisladas de Cesión de Créditos, Prendas, Títulos Ejecutivos, y demás asuntos o diligencias similares, en que la ley o el contrato dispusieren la notificación para fines especiales', 'honorario': 'De 1 UF a 10 UF.'},
+    {'numero': 75, 'descripcion': 'Pago por Consignación', 'honorario': 'De 5 UF a 50 UF. En el juicio sobre suficiencia del pago el honorario se regirá por las reglas correspondientes al juicio ordinario.'},
+    {'numero': 76, 'descripcion': 'Preparación de la vía ejecutiva sin que se siga ejecución', 'honorario': 'Si estas gestiones producen como resultado el pago total o parcial de la deuda, el honorario será el que corresponda al juicio ejecutivo. Si no se obtiene título ejecutivo, o si obteniéndolo no se consigue el pago, el honorario será de 5 UF a 50 UF.'},
+    {'numero': 77, 'descripcion': 'Quiebra (Juicios de)', 'honorario': 'Abogado del acreedor: Se aplicará ]a escala del juicio ejecutivo, sobre la cantidad que el acreedor perciba, con un mínimo de 10 UF. Abogado del deudor: Si éste hubiere solicitado su quiebra, del 1% al 5% del activo de la quiebra. Si se rechaza la quiebra, de 50 UF a 200 UF. Si se rechazare la oposición y se declara la quiebra, de 10 UF a 100 UF. En el juicio de calificación de la quiebra, el hono'},
+    {'numero': 78, 'descripcion': 'Tercerías en juicio ejecutivo', 'honorario': 'Se aplicará la escala del juicio ejecutivo con un mínimo de 10 UF. El honorario se calculará sobre el valor del bien en las tercerías de dominio y posesión, y sobre el monto percibido en las tercerías de prelación y pago.'},
+    {'numero': 79, 'descripcion': 'Violencia intrafamiliar (denuncia o defensa de)', 'honorario': 'De 2 UF a 50 UF. # CAPITULO IV ACCIONES Y MATERIAS JURISDICCIONALES DE RANGO CONSTITUCIONAL.'},
+    {'numero': 80, 'descripcion': 'Acciones de rango constitucional no previstas especialmente en este arancel', 'honorario': 'De 30 UF a 300 UF.'},
+    {'numero': 81, 'descripcion': 'Error o arbitrariedad judicial. Declaración de la Corte Suprema y juicio indemnizatorio', 'honorario': '- Declaración de la Corte Suprema, de 50 UF a 200 UF. - Juicio indemnizatorio. Se aplicarán las reglas del juicio ordinario civil.'},
+    {'numero': 82, 'descripcion': 'Expropiación (acción o reclamo de ilegalidad del acto expropiatorio)', 'honorario': 'De 50 UF a 250 UF.'},
+    {'numero': 83, 'descripcion': 'Inconstitucionalidad de organizaciones, movimientos o partidos políticos', 'honorario': 'De 50 UF a 200 UF.'},
+    {'numero': 84, 'descripcion': 'Nacionalidad. Reclamación contra acto o resolución administrativa que prive de ella o la desconozca', 'honorario': 'De 50 UF a 100 UF.'},
+    {'numero': 85, 'descripcion': 'Nulidad de Derecho Público (acción de)', 'honorario': 'Se aplicarán las reglas del juicio ordinario civil de cuantía indeterminada.'},
+    {'numero': 86, 'descripcion': 'Protección (acción o recurso de)', 'honorario': 'De 25 UF a 500 UF.'},
+    {'numero': 87, 'descripcion': 'Rehabilitación de Ciudadanía ante el Senado', 'honorario': 'De 40 UF a 100 UF.'},
+    {'numero': 88, 'descripcion': 'Requisiciones y limitaciones al dominio en estados de excepción constitucional', 'honorario': 'Se aplicarán las reglas del juicio ordinario civil. # CAPITULO V MATERIAS PENALES'},
+    {'numero': 89, 'descripcion': 'Acción Civil de juicio ordinario Se aplicarán las reglas de juicio ordinario ## 90.- Acusación o contestación de las mismas', 'honorario': 'La tercera parte del honorario contemplado para el juicio ordinario penal.'},
+    {'numero': 91, 'descripcion': 'Anotaciones prontuariales (eliminación de)', 'honorario': 'De 5 UF a 50 UF.'},
+    {'numero': 92, 'descripcion': 'Denuncias (redacción de)', 'honorario': 'De 5 UF a 50 UF.'},
+    {'numero': 93, 'descripcion': 'Desafueros De 100 UF a 500 UF. ## 94.- Embargo de bienes (incidentes de)', 'honorario': 'Se aplicará el honorario previsto para las tercerías del juicio ejecutivo.'},
+    {'numero': 95, 'descripcion': 'Extradición. De 100 UF a 500 UF. ## 96.- Indulto (remisivo, reductivo y conmutativo)', 'honorario': 'De 20 UF a 100 UF.'},
+    {'numero': 97, 'descripcion': 'Juicio ordinario penal', 'honorario': '- Abogado Querellante: - Presentación de denuncia o querella: De UF. 10 a UF. 50 - Al dictarse auto de procedimiento o sobreseimiento sin que exista procesado: De UF. 10 a UF. 50 - Al presentarse acusación o adhesión de la acusación: De UF. 20 a UF. 100 - Al dictarse sentencia definitiva de 1ª instancia: De UF. 20 a UF. 100 - Por la segunda instancia: De UF. 30 a UF. 150 ## Abogado del Querellado:'},
+    {'numero': 98, 'descripcion': 'Ley de Tránsito (infracción a la)', 'honorario': 'De 5 UF a 5O UF. Si se ejerciere la acción civil, se devengará además el honorario que corresponda según las reglas del juicio ordinario civil.'},
+    {'numero': 99, 'descripcion': 'Libertad provisional (gestión aislada)', 'honorario': 'De 5 UF a 50 UF.'},
+    {'numero': 100, 'descripcion': 'Querella de capítulos', 'honorario': 'De 50 UF a 500 UF.'},
+    {'numero': 101, 'descripcion': 'Restitución de especies en poder de la justicia (mera devolución)', 'honorario': 'De 5 UF a 30 UF. # CAPITULO VI MATERIAS LABORALES'},
+    {'numero': 102, 'descripcion': 'Comisiones de Medicina preventiva y curativa (gestiones ante las)', 'honorario': 'De 10 UF a 30 UF'},
+    {'numero': 103, 'descripcion': 'Despidos (demandas por)', 'honorario': 'Del 10% al 25% del monto obtenido.'},
+    {'numero': 104, 'descripcion': 'Leyes sociales y del trabajo, defensas administrativas en denuncias por infracción a ellas (ante la Inspección del Trabajo, instituciones de previsión, ministerio o subsecretarías, etc.)', 'honorario': 'Del 5% al 15% de la ventaja a beneficio económico que resultare al cliente, con un mínimo de 5 UF.'},
+    {'numero': 105, 'descripcion': 'Negociación y conflictos Colectivos (incluye asesoría, y redacción o revisión del contrato). - Conversaciones directas (incluyendo comparendos o audiencias ante las autoridades), sin acuerdo que ponga término al conflicto', 'honorario': 'De una cuarta UF a media UF por trabajador involucrado, con un mínimo de 20 UF. - Conversaciones directas, con acta de avenimiento o contrato colectivo. De media UF a una UF por trabajador involucrado, con un mínimo de 40 UF - Honorarios del empleador: De 30 UF a 300 UF.'},
+    {'numero': 106, 'descripcion': 'Pensiones y Jubilaciones (gestiones para obtener su reajuste o revalorización)', 'honorario': 'Del 5% al 20% del aumento que representare en un año, con un mínimo de 10 UF.'},
+    {'numero': 107, 'descripcion': 'Previsión (gestiones relativas a los beneficios de)', 'honorario': '- Por la tramitación de beneficios que conceden las leyes de previsión, el 10% de las pensiones o asignaciones atrasadas, y, además, de una a tres de las pensiones y asignaciones bases mensuales que se fijen definitivamente. - Por la tramitación de desahucio que conceden esas mismas leyes, del 5% al 10% del monto total. - En caso de rechazarse el beneficio solicitado, el honorario se regulará de a'},
+    {'numero': 108, 'descripcion': 'Reclamaciones laborales de carácter administrativo', 'honorario': 'Del 5% al 20% del monto disputado y percibido.'},
+    {'numero': 109, 'descripcion': 'Trabajo (juicios que no incluyen despidos)', 'honorario': '- Si fueren susceptibles de apreciación pecuniaria, se estar a las reglas del juicio ordinario civil. - En los demás casos, se estará a las reglas del juicio de cuantía indetermada. # CAPITULO VII MATERIAS TRIBUTARIAS A.- CONTENCIOSAS.'},
+    {'numero': 110, 'descripcion': 'Contestación de Citaciones', 'honorario': 'De 10 UF a 50 UF.'},
+    {'numero': 111, 'descripcion': 'Reclamos de avalúo y reclamos por cambios de avalúo, sobre bienes raíces', 'honorario': 'Del 2% al 4% de la diferencia de avalúo que se obtenga en definitiva respecto al fijado en la tasación general.'},
+    {'numero': 112, 'descripcion': 'Reclamos de Impuestos', 'honorario': 'Del 12 al 15% sobre los menores impuestos actualizados que se obtengan, con un mínimo a todo evento de 20 UF a 100 UF, que se imputará a los porcentajes referidos. En casos de reclamos de liquidaciones separadas, por concepto de Impuesto Global Complementario correspondiente a los socios, y que provengan de las mismas partidas liquidadas a la sociedad por Impuesto de Primera Categoría, se cobrará'},
+    {'numero': 113, 'descripcion': 'Oposiciones en cobros ejecutivos de impuestos', 'honorario': 'Se aplicará el honorario previsto para el juicio ejecutivo. # B.- INFRACCIONALES.'},
+    {'numero': 114, 'descripcion': 'Juicios por delitos tributarios', 'honorario': 'Se aplicará el honorario previsto para el juicio ordinario penal.'},
+    {'numero': 115, 'descripcion': 'Reclamo de denuncias por infracciones', 'honorario': 'De 10 UF a 80 UF. # C.- GESTIONES NO CONTENCIOSAS.'},
+    {'numero': 116, 'descripcion': 'Convenios de pago con el Servicio de Tesorería. Del 2% al 5% del monto del impuesto objeto del convenio, con un mínimo de 5 UF. ## 117.- Solicitudes de condonación de intereses penales ante el Servicio de Impuestos Internos o ante el Servicio de Tesorería. De 5 UF a 20 UF. ## 118.- Solicitudes de devolución de impuestos (art. 126 Código Tributario)', 'honorario': 'Del 5% al 10% sobre las sumas actualizadas que se devuelvan, con un mínimo de 5 UF. # CAPITULO VIII MATERIAS MINERAS.'},
+    {'numero': 119, 'descripcion': 'Administración de la Pertenencia por parte del Minero, del Aviador o del Acreedor a quien corresponda (juicios relativos al ejercicio de la)', 'honorario': 'De 10 UF a 100 UF.'},
+    {'numero': 120, 'descripcion': 'Catar y Cavar (gestión judicial para obtener permiso)', 'honorario': 'De 10 UF a 50 UF.'},
+    {'numero': 121, 'descripcion': 'Concesión minera de exploración (gestión judicial de constitución)', 'honorario': 'De 20 UF a 100 UF.'},
+    {'numero': 122, 'descripcion': 'Concesión minera de explotación o pertenencia (gestión judicial de constitución, sin considerar los juicios de oposición)', 'honorario': 'De 30 UF a 200 UF.'},
+    {'numero': 123, 'descripcion': 'Internación de pertenencias (juicios sobre)', 'honorario': 'De 20 UF a 200 UF.'},
+    {'numero': 124, 'descripcion': 'Juicios mineros no contemplados expresamente en este párrafo', 'honorario': 'Si son de cuantía determinada, debe estarse a la escala establecida para el juicio ordinario. Si son de cuantía indeterminada, de 20 UF a 200 UF, pudiendo elevarse hasta 500 UF en casos de especial trascendencia económica.'},
+    {'numero': 125, 'descripcion': 'Mensura (juicios de nulidad de la concesión minera)', 'honorario': 'De 20 UF a 200 UF.'},
+    {'numero': 126, 'descripcion': 'Mensura (juicios de oposición a la)', 'honorario': 'De 20 UF a 200 UF.'},
+    {'numero': 127, 'descripcion': 'Remate de concesión minera por no pago de patente (defensa en)', 'honorario': '| 128.- | Remate de concesión minera (asesoramiento para participar en): De 10 UF a 50 UF. | | --- | --- | | 129.- | Servidumbres mineras (juicios de constitución, ejercicio y terminación de): De 30 UF a 200 UF. | | 130.- | Servidumbres mineras (constitución por escritura pública): De 20 UF a 100 UF. | | 131.- | Sociedades legales Mineras (asesoramiento): Se remunerará por tiempo trabajado. | # CA'},
+    {'numero': 132, 'descripcion': 'Acusaciones constitucionales ante el Senado', 'honorario': 'De 50 UF a 200 UF.'},
+    {'numero': 133, 'descripcion': 'Aduana (procedimientos de)', 'honorario': '- Reclamo de aforo: De 20 UF a 100 UF. - Reclamaciones por simples infracciones aduaneras: De 5 UF a 50 UF. - Juicio aduanero: Se aplicará el honorario previsto en el juicio ordinario civil, respecto del abogado del demandado. - Gestión para obtener la renuncia de la acción penal: De 10 UF a 100 UF.'},
+    {'numero': 134, 'descripcion': 'Antimonopolios (Ley)', 'honorario': '- Defensa ante la Comisión Preventiva Regional: De 5 UF a 100 UF. - Defensa ante la Comisión Preventiva Central: - Defensa ante la Comisión Resolutiva: De 50 UF a 500 UF. - Recurso de reclamación ante la Corte Suprema: De 50 UF a 300 UF. El honorario de la defensa en dos o más tramos de los indicados no será acumulativa cuando sea atendida por el mismo abogado. En este caso, se cobrará el honorari'},
+    {'numero': 135, 'descripcion': 'Aporte de capitales extranjeros (gestiones sobre)', 'honorario': 'Del O,5% al 2% del capital involucrado.'},
+    {'numero': 136, 'descripcion': 'Clausura de inmuebles (alzamiento)', 'honorario': 'De 10 UF a 100 UF.'},
+    {'numero': 137, 'descripcion': 'Concesiones de Bienes Nacionales', 'honorario': 'De una a cuatro rentas mensuales garantizadas por el contrato. Si no pudiere aplicarse esta regla, el honorario será de 5 UF a 200 UF.'},
+    {'numero': 138, 'descripcion': 'Contiendas de Competencia ante el Tribunal Constitucional, ante el Senado o ante la Corte Suprema', 'honorario': 'De 20 UF a 100 UF.'},
+    {'numero': 139, 'descripcion': 'Electorales (reclamos)', 'honorario': 'Ante la Justicia Ordinaria o Justicia Electoral, de 5 UF a 50 UF'},
+    {'numero': 140, 'descripcion': 'Ilegalidad contra decretos alcaldicios, acuerdos de las Municipalidades o actuaciones de funcionarios municipales, formulados ante la autoridad comunal o ante los tribunales (reclamos o recursos de)', 'honorario': 'Del 5 % al 10 % de la cuantía controvertida del negocio. Si no fuere susceptible de apreciación pecuniaria, de 10 UF a 100 UF.'},
+    {'numero': 141, 'descripcion': 'Inscripción de documentos en casos de negativa del Conservador de Bienes Raíces (gestiones para obtener la)', 'honorario': 'De 5 UF a 50 UF.'},
+    {'numero': 142, 'descripcion': 'Militares, Navales, de Carabineros y Aviación (juicios ante Tribunales)', 'honorario': 'Se aplicarán las reglas del juicio ordinario penal.'},
+    {'numero': 143, 'descripcion': 'Patentes (reclamos de)', 'honorario': 'De 10 UF a 100 UF.'},
+    {'numero': 144, 'descripcion': 'Policía Local (patrocinio ante los Juzgados de)', 'honorario': 'De aplicará la regla prevista para las infracciones a la Ley del Tránsito en el N97.'},
+    {'numero': 145, 'descripcion': 'Propiedad Industrial y Marcas Comerciales (gestiones sobre)', 'honorario': 'Se aplicarán la regla prevista para su respectivo registro en el N24.'},
+    {'numero': 146, 'descripcion': 'Propiedad Industrial y Marcas Comerciales (Juicios sobre)', 'honorario': 'Se aplicarán las reglas del juicio ordinario civil o penal, según el caso.'},
+    {'numero': 147, 'descripcion': 'Propiedad Intelectual y Derechos de Autor (gestiones relativas a)', 'honorario': 'Se aplicará la regla prevista para su respectivo registro en el N24.'},
+    {'numero': 148, 'descripcion': 'Protección al Consumidor', 'honorario': '- Defensa ante el Servicio Nacional del Consumidor: De 2 UF a 50 UF. - Defensa ante el Juzgado de Policía Local: Se aplicará la regla prevista para las infracciones a la Ley del Tránsito.'},
+    {'numero': 149, 'descripcion': 'Regularización de la posesión de Bienes Raíces (D.L. 2695)', 'honorario': '- Regularización: De 10 UF a 100 UF. - Defensa del propietario afectado: Del 10% al 20% del valor comercial del bien recuperado, con un mínimo de 50 UF. - Acciones de dominio y de compensación: Se aplicarán las reglas del juicio ordinario.'},
+    {'numero': 150, 'descripcion': 'Regularización de vehículos, capitales, u otros bienes en situación irregular', 'honorario': 'Del 1% al 4 % de su cuantía o valor comercial.'},
+    {'numero': 151, 'descripcion': 'Servicios Públicos, semifiscales o de administración autónoma, bancos, sociedades, etc. (gestiones ante)', 'honorario': 'De 3 UF a 50 UF.'},
+    {'numero': 152, 'descripcion': 'Superintendencia de Bancos e Instituciones Financieras, de Valores y Seguros, de Seguridad Social, Cámaras de Comercio y otras semejantes (arbitrajes ante la): Para los honorarios del abogado, se aplicará la regla prevista para el juicio ordinario civil. # CAPITULO X RECURSOS Y ALEGATOS. Este párrafo regula los honorarios por recursos y alegatos de abogados distintos del patrocinante de la causa, y también los de este último para los efectos del inciso segundo del artículo 140 del Código de Procedimiento Civil. # RECURSOS ## 153.- Amparo (recurso de)', 'honorario': 'De 20 UF a 150 UF.'},
+    {'numero': 154, 'descripcion': 'Casación civil ante la Corte Suprema (interposición y alegato)', 'honorario': 'De 50 UF a 300 UF.'},
+    {'numero': 155, 'descripcion': 'Casación penal ante la Corte Suprema (interposición y alegato)', 'honorario': 'De 50 UF a 300 UF.'},
+    {'numero': 156, 'descripcion': 'Hecho (redacción del recurso de)', 'honorario': 'De 10 UF a 30 UF.'},
+    {'numero': 157, 'descripcion': 'Inaplicabilidad (redacción y tramitación del recurso de)', 'honorario': 'De 50 UF a 300 UF.'},
+    {'numero': 158, 'descripcion': 'Queja (redacción y tramitación del recurso de)', 'honorario': 'De 10 UF a 100 UF.'},
+    {'numero': 159, 'descripcion': 'Recursos y solicitudes ante la Contraloría General de la República', 'honorario': 'De 10 UF a 100 UF.'},
+    {'numero': 160, 'descripcion': 'Revisión (redacción y tramitación del recurso de)', 'honorario': 'De 50 UF a 300 UF. # ALEGATOS. 161.- Si el alegato no está comprendido en la interposición del recurso, se aplicarán las siguientes reglas: - Del 20% al 50% del honorario que corresponda a la interposición del recurso. - Si no pudiere aplicarse la regla anterior, el honorario será de 10 UF a 100 UF, según la naturaleza y complejidad del recurso.'},
+]
+
+
+def buscar_arancel_referencial(texto_busqueda, top_n=3):
+    """
+    Busca en el Arancel del Colegio de Abogados de Valparaíso las entradas
+    más relacionadas con el texto de una acción o rama del derecho, usando
+    coincidencia de palabras clave (sin necesitar librerías extra). Se usa
+    en Contratos para sugerir un rango de honorarios de referencia.
+    """
+    palabras_busqueda = set(re.findall(r'\w{4,}', texto_busqueda.lower()))
+    resultados = []
+    for item in ARANCEL_COLEGIO_VALPARAISO:
+        palabras_item = set(re.findall(r'\w{4,}', item['descripcion'].lower()))
+        interseccion = palabras_busqueda & palabras_item
+        if interseccion:
+            resultados.append((len(interseccion), item))
+    resultados.sort(key=lambda x: -x[0])
+    return [r[1] for r in resultados[:top_n] if r[0] > 0]
+
 def _limpiar_json_ia(texto_respuesta: str) -> str:
     texto_respuesta = texto_respuesta.strip()
     if texto_respuesta.startswith("```"):
@@ -1093,7 +1271,7 @@ st.markdown("""
 
         const themeColor = document.createElement('meta');
         themeColor.name = 'theme-color';
-        themeColor.content = '#0052cc';
+        themeColor.content = '#0e6b74';
         head.appendChild(themeColor);
 
         const appleIcon = document.createElement('link');
@@ -1160,16 +1338,16 @@ def get_logo_src():
                 
     svg_logo = """
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-        <path d="M 30 20 A 35 35 0 0 1 85 50" fill="none" stroke="#0052cc" stroke-width="6" stroke-linecap="round"/>
-        <polygon points="85,60 76,46 94,46" fill="#0052cc"/>
+        <path d="M 30 20 A 35 35 0 0 1 85 50" fill="none" stroke="#0e6b74" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="85,60 76,46 94,46" fill="#0e6b74"/>
         <path d="M 70 80 A 35 35 0 0 1 15 50" fill="none" stroke="#172b4d" stroke-width="6" stroke-linecap="round"/>
         <polygon points="15,40 6,54 24,54" fill="#172b4d"/>
-        <line x1="50" y1="15" x2="50" y2="70" stroke="#0052cc" stroke-width="3.5" stroke-linecap="round"/>
-        <line x1="43" y1="28" x2="57" y2="28" stroke="#0052cc" stroke-width="3" stroke-linecap="round"/>
-        <circle cx="50" cy="72" r="3" fill="#0052cc"/>
+        <line x1="50" y1="15" x2="50" y2="70" stroke="#0e6b74" stroke-width="3.5" stroke-linecap="round"/>
+        <line x1="43" y1="28" x2="57" y2="28" stroke="#0e6b74" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="50" cy="72" r="3" fill="#0e6b74"/>
         <path d="M 50 35 Q 40 55 33 75 L 67 75 Q 60 55 50 35 Z" fill="#172b4d" stroke-linejoin="round"/>
         <circle cx="50" cy="35" r="7" fill="#172b4d"/>
-        <path d="M 41 35 Q 50 38 59 35" fill="none" stroke="#0052cc" stroke-width="2.5" stroke-linecap="round"/>
+        <path d="M 41 35 Q 50 38 59 35" fill="none" stroke="#0e6b74" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M 40 52 L 60 52" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round"/>
         <path d="M 40 52 L 36 64 L 44 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
         <path d="M 60 52 L 56 64 L 64 64 Z" fill="none" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
@@ -2233,7 +2411,7 @@ if not st.session_state['logged_in']:
         .block-container { max-width: 1300px !important; margin: 0 auto !important; padding-top: 2rem !important; }
         [data-testid="stForm"] { background-color: white !important; border-radius: 16px !important; border: 1px solid #e0e4e8 !important; padding: 40px 30px !important; box-shadow: 0 4px 15px rgba(0,0,0,0.05) !important; }
         p, label, span, div { color: #172b4d !important; }
-        [data-testid="stFormSubmitButton"] button { background-color: #0052cc !important; color: white !important; border: none !important; font-weight: bold !important;}
+        [data-testid="stFormSubmitButton"] button { background-color: #0e6b74 !important; color: white !important; border: none !important; font-weight: bold !important;}
         [data-testid="stFormSubmitButton"] button:hover { background-color: #0047b3 !important; }
         .stTextInput input { border: 1px solid #cbd2d9 !important; border-radius: 6px !important; padding: 10px !important; }
     </style>
@@ -2575,9 +2753,9 @@ st.markdown("""
     [data-testid="stHeader"] { background-color: transparent !important; }
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
     .dash-card { background: #ffffff !important; border-radius: 12px; padding: 18px; border: 1px solid #e0e4e8 !important; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
-    .dash-header { border-bottom: 2px solid #0052cc; padding-bottom: 5px; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #0052cc; letter-spacing: 0.5px; text-transform: uppercase; }
+    .dash-header { border-bottom: 2px solid #0e6b74; padding-bottom: 5px; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #0e6b74; letter-spacing: 0.5px; text-transform: uppercase; }
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
-    .badge-propio { background: #0052cc !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+    .badge-propio { background: #0e6b74 !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .info-field { display:flex; justify-content:space-between; align-items:baseline; padding:6px 0; border-bottom:1px solid #f4f5f7; }
     .info-field:last-of-type { border-bottom: none; }
     .info-label { font-size:12px; color:#6b778c !important; font-weight:600; text-transform:uppercase; letter-spacing:0.3px; }
@@ -2588,10 +2766,10 @@ st.markdown("""
     .task-status-aprobada { background:#e3fcef !important; color:#1b7a4a !important; }
     .task-status-rechazada { background:#ffebe6 !important; color:#bf2600 !important; }
     .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; }
-    .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0052cc !important; box-shadow: 0 0 0 1px #0052cc !important; }
+    .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0e6b74 !important; box-shadow: 0 0 0 1px #0e6b74 !important; }
     ::placeholder { color: #6b778c !important; opacity: 1; }
     [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s ease !important; }
-    [data-testid="stButton"] button:hover { border-color: #0052cc !important; color: #0052cc !important; background-color: #deebff !important; }
+    [data-testid="stButton"] button:hover { border-color: #0e6b74 !important; color: #0e6b74 !important; background-color: #e3f2f1 !important; }
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; }
     .chat-bg { background-color: #efeae2; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
     .burbuja-mia { background-color: #dcf8c6; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-left: auto; margin-bottom: 12px; border: 1px solid #c9eab1;}
@@ -2645,8 +2823,8 @@ st.markdown("""
         width: auto !important;
     }
     [data-testid="stSidebar"] [data-testid="stButton"] button:hover {
-        background-color: #eef2ff !important;
-        color: #0052cc !important;
+        background-color: #e8f5f4 !important;
+        color: #0e6b74 !important;
     }
     
     /* Categorías (Judicial, Administrativo, IA): la flechita queda en su
@@ -3207,7 +3385,7 @@ elif st.session_state['menu_radio'] == "📊 Informes":
                     
                     st.success("✅ Análisis completado con éxito.")
                     
-                    st.markdown("<div class='dash-card'><h4 style='color:#0052cc;'>📄 Informe Ejecutivo Generado</h4>", unsafe_allow_html=True)
+                    st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>📄 Informe Ejecutivo Generado</h4>", unsafe_allow_html=True)
                     st.write(f"**Cliente:** {nombre_cliente_ia}")
                     st.write(f"**Causa:** {rol_seleccionado_ia}")
                     st.write("---")
@@ -3281,7 +3459,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         
                         respuesta = modelo.generate_content(prompt_maestro)
                         st.success("✅ Análisis estratégico formulado con éxito.")
-                        st.markdown("<div class='dash-card'><h4 style='color:#0052cc;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
+                        st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
                         st.write(respuesta.text)
                         st.markdown("</div>", unsafe_allow_html=True)
                         
@@ -3533,6 +3711,20 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     finalidad_auto = diccionario_servicios[materia_sel].get(accion_sel, "")
                 
                 tipo_servicio_final = f"{materia_sel}: {accion_final}"
+                
+                # 💡 Referencia de honorarios: busca en el Arancel del Colegio de
+                # Abogados de Valparaíso las entradas más relacionadas con la
+                # acción elegida, para orientar el cobro (siempre a título
+                # referencial, no vinculante).
+                if accion_final and accion_final != "Acción sin especificar":
+                    sugerencias_arancel = buscar_arancel_referencial(f"{materia_sel} {accion_final}")
+                    if sugerencias_arancel:
+                        with st.expander("💰 Referencia de Honorarios (Arancel Colegio de Abogados de Valparaíso)", expanded=False):
+                            st.caption("Valor orientador y supletorio (rige solo a falta de pacto expreso, Art. 7 del Arancel). El honorario final siempre se acuerda con el cliente.")
+                            for sug in sugerencias_arancel:
+                                st.markdown(f"**N°{sug['numero']} — {sug['descripcion']}**")
+                                st.markdown(f"<span style='color:#42526e;'>{sug['honorario']}</span>", unsafe_allow_html=True)
+                                st.markdown("---")
                 
                 # Auto-relleno de la Cláusula Primera: solo se sobrescribe cuando cambia
                 # la rama/acción seleccionada, para no borrar ediciones manuales del abogado
@@ -3989,7 +4181,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 for idx, row in df_filtrado.iterrows():
                     fila_es_propia = row.get('Propietario_Vista', usuario_actual) == usuario_actual
                     c1, c2, c3, c4, c5 = st.columns([1.5, 2.5, 3, 2.5, 1.5])
-                    color_rol = "#0052cc" if fila_es_propia else "#ff8b00"
+                    color_rol = "#0e6b74" if fila_es_propia else "#ff8b00"
                     c1.markdown(f"<span style='color:{color_rol}; font-weight:bold; font-size:15px;'>{row['ROL']}</span>", unsafe_allow_html=True)
                     if not fila_es_propia:
                         nombre_dueno = NOMBRES_REALES.get(row.get('Propietario_Vista'), row.get('Propietario_Vista'))
@@ -5159,21 +5351,21 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
         .fc-view-harness { border-radius: 14px; overflow: hidden; }
         .fc .fc-toolbar-title { font-size: 20px; font-weight: 700; color: #172b4d; text-transform: capitalize; }
         .fc .fc-button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 20px !important; font-weight: 600 !important; box-shadow: none !important; text-transform: capitalize; padding: 6px 16px !important; }
-        .fc .fc-button:hover { background-color: #deebff !important; border-color: #0052cc !important; color: #0052cc !important; }
-        .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #0052cc !important; border-color: #0052cc !important; color: #ffffff !important; }
+        .fc .fc-button:hover { background-color: #e3f2f1 !important; border-color: #0e6b74 !important; color: #0e6b74 !important; }
+        .fc .fc-button-primary:not(:disabled).fc-button-active { background-color: #0e6b74 !important; border-color: #0e6b74 !important; color: #ffffff !important; }
         .fc-theme-standard td, .fc-theme-standard th { border-color: transparent !important; }
         .fc-scrollgrid { border: none !important; border-collapse: separate !important; border-spacing: 6px !important; }
         .fc-col-header-cell-cushion { color: #6b778c !important; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-decoration: none !important; padding: 8px 0 !important; }
         .fc-daygrid-day { background-color: #fbfbfc !important; border: 1px solid #eaecf0 !important; border-radius: 14px !important; overflow: hidden; transition: all 0.15s ease; }
         .fc-daygrid-day:hover { border-color: #b3d4ff !important; background-color: #f4f8ff !important; }
         .fc-daygrid-day-number { color: #172b4d !important; font-size: 13px; font-weight: 600; text-decoration: none !important; padding: 8px !important; }
-        .fc-day-today { background-color: #eaf2ff !important; border: 1px solid #0052cc !important; }
+        .fc-day-today { background-color: #e8f5f4 !important; border: 1px solid #0e6b74 !important; }
         .fc-day-other { background-color: #f7f8fa !important; }
         .fc-day-other .fc-daygrid-day-number { color: #a5adba !important; font-weight: 400; }
         .fc-daygrid-event { border-radius: 10px !important; font-size: 12px !important; padding: 1px 6px !important; margin-top: 2px !important; }
         .fc-daygrid-event-dot { border-width: 4px !important; }
         .fc-event-title { font-weight: 500; }
-        .fc-daygrid-more-link { color: #0052cc !important; font-weight: 700; font-size: 12px; }
+        .fc-daygrid-more-link { color: #0e6b74 !important; font-weight: 700; font-size: 12px; }
         .fc-daygrid-day-frame { padding: 4px; }
         .fc-scrollgrid-section-header th { border: none !important; }
     """
