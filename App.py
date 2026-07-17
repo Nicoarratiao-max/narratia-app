@@ -2761,7 +2761,7 @@ st.markdown("""
     [data-testid="stSidebar"] { background-color: #ffffff !important; border-right: 1px solid #e0e4e8 !important; }
     [data-testid="stHeader"] { background-color: transparent !important; }
     .stMarkdown, p, span, label, h1, h2, h3, h4, h5, h6 { color: #172b4d !important; }
-    .dash-card { background: #ffffff !important; border-radius: 12px; padding: 18px; border: 1px solid #e0e4e8 !important; margin-bottom: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .dash-card { background: #ffffff !important; border-radius: 12px; padding: 18px; border: 1px solid #e0e4e8 !important; border-top: 4px solid #0e6b74 !important; margin-bottom: 15px; box-shadow: 0 2px 6px rgba(14,107,116,0.08); }
     .dash-header { border-bottom: 2px solid #0e6b74; padding-bottom: 5px; margin-bottom: 15px; font-weight: 800; font-size: 13px; color: #0e6b74; letter-spacing: 0.5px; text-transform: uppercase; }
     .badge-active { background: #57a15a !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
     .badge-propio { background: #0e6b74 !important; color: white !important; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
@@ -2779,6 +2779,10 @@ st.markdown("""
     ::placeholder { color: #6b778c !important; opacity: 1; }
     [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s ease !important; }
     [data-testid="stButton"] button:hover { border-color: #0e6b74 !important; color: #0e6b74 !important; background-color: #e3f2f1 !important; }
+    /* Métricas nativas (st.metric): el número grande en teal, para que
+       combine con el resto del sistema en vez del gris/negro por defecto. */
+    [data-testid="stMetricValue"] { color: #0e6b74 !important; font-weight: 800 !important; }
+    [data-testid="stMetricLabel"] { color: #6b778c !important; }
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; }
     .chat-bg { background-color: #f4f6f7; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
     .burbuja-mia { background-color: #d4ebe9; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.06); margin-left: auto; margin-bottom: 12px; border: 1px solid #aed9d4;}
@@ -2845,7 +2849,27 @@ st.markdown("""
         border: none !important;
         background-color: transparent !important;
         box-shadow: none !important;
+        border-left: 4px solid transparent !important;
+        border-radius: 4px !important;
+        margin-bottom: 4px !important;
     }
+    /* Cada categoría con su propio color de acento, para diferenciarlas de
+       un vistazo (antes todas se veían exactamente iguales, sin color). */
+    [data-testid="stSidebar"] [data-testid="stExpander"]:nth-of-type(1) {
+        border-left-color: #172b4d !important;
+        background-color: rgba(23,43,77,0.04) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"]:nth-of-type(1) summary { color: #172b4d !important; }
+    [data-testid="stSidebar"] [data-testid="stExpander"]:nth-of-type(2) {
+        border-left-color: #0e6b74 !important;
+        background-color: rgba(14,107,116,0.05) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"]:nth-of-type(2) summary { color: #0e6b74 !important; }
+    [data-testid="stSidebar"] [data-testid="stExpander"]:nth-of-type(3) {
+        border-left-color: #5243aa !important;
+        background-color: rgba(82,67,170,0.05) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stExpander"]:nth-of-type(3) summary { color: #5243aa !important; }
     [data-testid="stSidebar"] [data-testid="stExpander"] summary {
         font-weight: 800 !important;
         color: #172b4d !important;
@@ -2911,36 +2935,12 @@ st.markdown("""
 
 # --- RENDER DE BARRA LATERAL (ESTILO CUADRADITOS) ---
 with st.sidebar:
-    if 'menu_compacto' not in st.session_state:
-        st.session_state['menu_compacto'] = False
-    modo_compacto = st.session_state['menu_compacto']
-    
-    # Ancho dinámico de la barra según el modo. Se agrega como una regla CSS
-    # aparte y más específica (en vez de tocar el bloque CSS grande de arriba),
-    # porque ese bloque es un string plano lleno de llaves { } de CSS — 
-    # convertirlo a f-string completo rompería por choque con esas llaves.
-    ancho_sidebar_actual = "80px" if modo_compacto else "280px"
     st.markdown(f"""
-    <style>
-        [data-testid="stSidebar"] {{ min-width: {ancho_sidebar_actual} !important; max-width: {ancho_sidebar_actual} !important; }}
-    </style>
+    <div style='text-align: center; margin-bottom: 10px;'>
+        <img src='{LOGO_URL}' style='width: 60px;'>
+        <h3 style='color:#172b4d; margin-top: 8px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h3>
+    </div>
     """, unsafe_allow_html=True)
-    
-    c_logo_espacio, c_toggle_compacto = st.columns([4, 1]) if not modo_compacto else st.columns([1, 1])
-    with c_logo_espacio:
-        if modo_compacto:
-            st.markdown(f"<div style='text-align:center;'><img src='{LOGO_URL}' style='width: 40px;'></div>", unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div style='text-align: center; margin-bottom: 10px;'>
-                <img src='{LOGO_URL}' style='width: 60px;'>
-                <h3 style='color:#172b4d; margin-top: 8px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h3>
-            </div>
-            """, unsafe_allow_html=True)
-    with c_toggle_compacto:
-        if st.button("»" if modo_compacto else "«", key="btn_toggle_compacto", help="Expandir menú" if modo_compacto else "Reducir menú a solo íconos"):
-            st.session_state['menu_compacto'] = not modo_compacto
-            st.rerun()
 
     # --- SISTEMA DE PLANES Y PERMISOS ---
     df_usuarios_plan = leer_csv_local(ARCHIVO_USUARIOS)
@@ -2957,35 +2957,17 @@ with st.sidebar:
         plan_actual = "Básico"
 
     # --- NOMBRE DE PERFIL Y CERRAR SESIÓN, ARRIBA DE TODO, ANTES DEL MENÚ ---
-    # Nombre y botón van en la misma fila, pegados y orillados a la izquierda
-    # (no centrados ni en filas separadas), para que se vea como un par
-    # natural: "👤 Nombre  ⏻", no dos elementos sueltos en distintas líneas.
-    # En modo compacto, se esconde el nombre y solo queda el botón de salir.
-    if not modo_compacto:
-        c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
-        c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:32px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
-    else:
-        c_logout_rapido = st.container()
+    c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
+    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:32px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
     if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
-        # Se hacen DOS cosas, no solo una, porque el borrado de cookies de este
-        # componente a veces no llega a completarse de verdad en el navegador
-        # (quedaba la cookie vieja "viva" y volvía a entrar con la cuenta
-        # anterior). Sobrescribir el valor con algo inválido es un respaldo:
-        # aunque el borrado fallara, la cookie vieja queda invalidada igual,
-        # porque validar_token_sesion() la va a rechazar al no poder separarla
-        # en sus 3 partes (usuario|expiración|firma).
         cookie_manager.set("jurisync_user", "sesion_cerrada", key="cookie_logout_invalidar")
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
-        # Se marca DESPUÉS de borrar todo, para que sobreviva al login siguiente
-        # y evite que se vuelva a leer la cookie vieja (que puede tardar un ciclo
-        # en reflejar el borrado real en el navegador) reingresando a la cuenta anterior.
         st.session_state['_saltar_autologin_cookie'] = True
         st.rerun()
     st.markdown("<hr style='margin: 8px 0px 14px 0px;'>", unsafe_allow_html=True)
 
     # --- MENÚ AGRUPADO EN CATEGORÍAS ---
-    # Inicio y Mensajería van sueltos, fuera de cualquier categoría.
     GRUPO_JUDICIAL = ["💼 Causas", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "📆 Estado diario",
                       "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
     GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "🗓️ Agenda de Asesorías", "💰 Contabilidad", "📝 Trámites",
@@ -3003,72 +2985,40 @@ with st.sidebar:
         etiqueta_boton = opcion
         if opcion == "✈️ Mensajería" and BADGE_MENSAJES_NO_LEIDOS > 0:
             etiqueta_boton = f"✈️ Mensajería 🔴 {BADGE_MENSAJES_NO_LEIDOS}"
-        # En modo compacto, el botón muestra solo el ícono (primera "palabra"
-        # de la etiqueta), sin el texto — así el menú se reduce a una barra
-        # angosta de íconos, y al ensanchar vuelve a mostrar ícono + nombre.
-        etiqueta_final = etiqueta_boton.split(" ", 1)[0] if modo_compacto else etiqueta_boton
-        ayuda_compacta = opcion if modo_compacto else None
-        if st.button(etiqueta_final, use_container_width=True, key=f"btn_nav_{i}", help=ayuda_compacta):
+        if st.button(etiqueta_boton, use_container_width=True, key=f"btn_nav_{i}"):
             st.session_state['menu_radio'] = opcion
             resetear_vistas()
             if opcion == "✈️ Mensajería":
-                # Al entrar de verdad a leer el buzón, se marca todo como leído.
                 st.session_state['ultimo_mensaje_leido'] = st.session_state.get('_total_mensajes_para_mi', st.session_state.get('ultimo_mensaje_leido', 0))
             st.rerun()
     
     contador_botones = 0
     
-    # Inicio, suelto, arriba de las categorías.
     _boton_menu("🏠 Inicio", contador_botones)
     contador_botones += 1
     
-    # Mensajería, suelto también (solo si el plan lo incluye).
     if "✈️ Mensajería" in disponibles:
         _boton_menu("✈️ Mensajería", contador_botones)
         contador_botones += 1
     
-    # En modo compacto no se usan expanders con título de categoría (no tendría
-    # sentido mostrar "Judicial" en una barra angosta de solo íconos) — se
-    # listan los botones de cada categoría directamente, separados por una
-    # línea fina, conservando el mismo agrupamiento pero sin el encabezado.
-    if modo_compacto:
-        st.markdown("<hr style='margin:6px 0; border-color:#e0e4e8;'>", unsafe_allow_html=True)
+    with st.expander("⚖️ Judicial", expanded=True):
         for opcion in GRUPO_JUDICIAL:
             if opcion in disponibles:
                 _boton_menu(opcion, contador_botones)
                 contador_botones += 1
-        st.markdown("<hr style='margin:6px 0; border-color:#e0e4e8;'>", unsafe_allow_html=True)
+    
+    with st.expander("🗂️ Administrativo", expanded=True):
         for opcion in GRUPO_ADMINISTRATIVO:
             if opcion in disponibles:
                 _boton_menu(opcion, contador_botones)
                 contador_botones += 1
-        if plan_actual not in ("Básico", "Medio"):
-            st.markdown("<hr style='margin:6px 0; border-color:#e0e4e8;'>", unsafe_allow_html=True)
+    
+    if plan_actual not in ("Básico", "Medio"):
+        with st.expander("🤖 Inteligencia Artificial", expanded=True):
             for opcion in GRUPO_IA:
                 if opcion in disponibles:
                     _boton_menu(opcion, contador_botones)
                     contador_botones += 1
-    else:
-        with st.expander("⚖️ Judicial", expanded=True):
-            for opcion in GRUPO_JUDICIAL:
-                if opcion in disponibles:
-                    _boton_menu(opcion, contador_botones)
-                    contador_botones += 1
-        
-        with st.expander("🗂️ Administrativo", expanded=True):
-            for opcion in GRUPO_ADMINISTRATIVO:
-                if opcion in disponibles:
-                    _boton_menu(opcion, contador_botones)
-                    contador_botones += 1
-        
-        # La categoría de IA solo aparece para el plan Full: son las funciones más
-        # avanzadas (Redactor IA, Estrategia con IA), no incluidas en planes Básico/Medio.
-        if plan_actual not in ("Básico", "Medio"):
-            with st.expander("🤖 Inteligencia Artificial", expanded=True):
-                for opcion in GRUPO_IA:
-                    if opcion in disponibles:
-                        _boton_menu(opcion, contador_botones)
-                        contador_botones += 1
     
     if usuario_actual == "Narratia":
         st.markdown("---")
@@ -3077,58 +3027,43 @@ with st.sidebar:
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    with st.expander(f"✏️ Editar Mi Perfil" if not modo_compacto else "✏️"):
-        if modo_compacto:
-            st.caption("Expande el menú (botón » arriba) para editar tu perfil.")
-        else:
-            st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
-            with st.form("form_perfil"):
-                df_usr = leer_csv_local(ARCHIVO_USUARIOS)
-                # Mismo tipo de bug que ya vimos con Fecha_Inicio: si la columna quedó
-                # tipada como booleano/número (por ejemplo, todo "True"/"False" que
-                # pandas infiere como bool), asignar un string ahí revienta con
-                # TypeError. Forzamos texto antes de cualquier asignación.
-                for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
-                    if _col_segura in df_usr.columns:
-                        df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
-                # Si por cualquier motivo la columna 'Correo' no existiera en la base
-                # (por ejemplo, una fila o archivo antiguo incompleto), se crea vacía
-                # en vez de reventar toda la barra lateral con un KeyError.
-                if 'Correo' not in df_usr.columns:
-                    df_usr['Correo'] = ''
-                filas_usuario_actual = df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo']
-                mi_correo = str(filas_usuario_actual.values[0]) if not filas_usuario_actual.empty else ""
-                if mi_correo == "nan" or mi_correo == "pendiente": 
-                    mi_correo = ""
-            
-                upd_correo = st.text_input("Correo de Recuperación", value=mi_correo, placeholder="ejemplo@correo.cl")
-                upd_clave = st.text_input("Nueva Contraseña", type="password", placeholder="Dejar en blanco para mantener actual")
-            
-                if st.form_submit_button("💾 Guardar Datos", use_container_width=True):
-                    cambios = False
-                    if upd_correo.strip() != "" and "@" in upd_correo:
-                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'] = upd_correo.strip().lower()
+    with st.expander(f"✏️ Editar Mi Perfil"):
+        st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
+        with st.form("form_perfil"):
+            df_usr = leer_csv_local(ARCHIVO_USUARIOS)
+            for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
+                if _col_segura in df_usr.columns:
+                    df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
+            if 'Correo' not in df_usr.columns:
+                df_usr['Correo'] = ''
+            filas_usuario_actual = df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo']
+            mi_correo = str(filas_usuario_actual.values[0]) if not filas_usuario_actual.empty else ""
+            if mi_correo == "nan" or mi_correo == "pendiente": 
+                mi_correo = ""
+        
+            upd_correo = st.text_input("Correo de Recuperación", value=mi_correo, placeholder="ejemplo@correo.cl")
+            upd_clave = st.text_input("Nueva Contraseña", type="password", placeholder="Dejar en blanco para mantener actual")
+        
+            if st.form_submit_button("💾 Guardar Datos", use_container_width=True):
+                cambios = False
+                if upd_correo.strip() != "" and "@" in upd_correo:
+                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'] = upd_correo.strip().lower()
+                    cambios = True
+                if upd_clave.strip() != "":
+                    if len(upd_clave) >= 6:
+                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = hash_password(upd_clave)
                         cambios = True
-                    if upd_clave.strip() != "":
-                        if len(upd_clave) >= 6:
-                            df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = hash_password(upd_clave)
-                            cambios = True
-                        else:
-                            st.error("La clave debe tener mínimo 6 caracteres")
-                
-                    if cambios:
-                        try:
-                            df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
-                            # BUGFIX: antes esto solo se guardaba en el archivo local, nunca
-                            # se sincronizaba con Google Sheets. Como el login verifica las
-                            # credenciales contra la copia de Sheets, un cambio de contraseña
-                            # hecho aquí podía "perderse" y la próxima vez pedir lo mismo de
-                            # nuevo, o directamente no dejar entrar con la clave nueva.
-                            guardar_en_nube(df_usr)
-                            st.success("¡Datos actualizados correctamente! Ya quedaron sincronizados en la nube.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
+                    else:
+                        st.error("La clave debe tener mínimo 6 caracteres")
+            
+                if cambios:
+                    try:
+                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
+                        guardar_en_nube(df_usr)
+                        st.success("¡Datos actualizados correctamente! Ya quedaron sincronizados en la nube.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
 
 # --- CONTROLADOR DE PESTAÑAS ---
 
