@@ -2934,6 +2934,14 @@ with st.sidebar:
     c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
     c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:32px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
     if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
+        # Se hacen DOS cosas, no solo una, porque el borrado de cookies de este
+        # componente a veces no llega a completarse de verdad en el navegador
+        # (quedaba la cookie vieja "viva" y volvía a entrar con la cuenta
+        # anterior). Sobrescribir el valor con algo inválido es un respaldo:
+        # aunque el borrado fallara, la cookie vieja queda invalidada igual,
+        # porque validar_token_sesion() la va a rechazar al no poder separarla
+        # en sus 3 partes (usuario|expiración|firma).
+        cookie_manager.set("jurisync_user", "sesion_cerrada", key="cookie_logout_invalidar")
         cookie_manager.delete("jurisync_user", key="cookie_logout_arriba")
         for k in list(st.session_state.keys()): del st.session_state[k]
         # Se marca DESPUÉS de borrar todo, para que sobreviva al login siguiente
