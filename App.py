@@ -1139,6 +1139,8 @@ COLS_EXCEPCIONES = ['ID', 'Fecha', 'ROL', 'Excepciones_Opuestas', 'Archivo_B64',
 COLS_CITAS = ['ID_Cita', 'Fecha', 'Hora', 'RUT_Cliente', 'Nombre_Cliente', 'Telefono', 'Email',
               'Sucursal', 'Modalidad', 'Abogado_Asignado', 'Tipo_Juicio', 'Observacion',
               'Estado', 'Usuario_Propietario']
+COLS_ENCARGOS = ['ID_Encargo', 'Nombre_Encargante', 'RUT_Encargante', 'Fecha_Encargo', 'Fecha_Limite',
+                 'Descripcion_Encargo', 'Monto', 'Estado', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 @st.cache_data(ttl=900)
@@ -2549,6 +2551,7 @@ ARCHIVO_ESCRITURAS = f"base_escrituras_{usuario_actual}.csv"
 ARCHIVO_ANALISIS_ESCRITURAS = f"base_analisis_escrituras_{usuario_actual}.csv"
 ARCHIVO_EXCEPCIONES = f"base_excepciones_{usuario_actual}.csv"
 ARCHIVO_CITAS = f"base_citas_{usuario_actual}.csv"
+ARCHIVO_ENCARGOS = f"base_encargos_{usuario_actual}.csv"
 ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
@@ -2956,7 +2959,7 @@ with st.sidebar:
     GRUPO_JUDICIAL = ["💼 Causas", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "📆 Estado diario",
                       "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
     GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "🗓️ Agenda de Citas", "💰 Contabilidad", "📝 Trámites",
-                            "📊 Informes", "📥 Excel"]
+                            "📇 Encargos", "📊 Informes", "📥 Excel"]
     GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA"]  # Solo visibles para plan Full
     
     if plan_actual == "Básico":
@@ -3371,6 +3374,102 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                     bytes_ed = obtener_bytes_adjunto(doc_ed, 'Doc_Drive_ID', 'Doc_B64')
                     if bytes_ed is not None:
                         st.download_button("📥 Descargar PDF", data=bytes_ed, file_name=doc_ed['Doc_Nombre'], key=f"bj_{doc_ed['ID_ED']}")
+
+# 4.5 ENCARGOS
+elif st.session_state['menu_radio'] == "📇 Encargos":
+    st.title("📇 Encargos")
+    
+    ES_ADMIN_ENCARGOS = usuario_actual == "Narratia"
+    df_encargos = leer_csv_local(ARCHIVO_ENCARGOS, COLS_ENCARGOS)
+    if ES_ADMIN_ENCARGOS:
+        for arch_enc in glob.glob("base_encargos_*.csv"):
+            propietario_enc = arch_enc.replace("base_encargos_", "").replace(".csv", "")
+            if propietario_enc != usuario_actual:
+                t_enc = leer_csv_local(arch_enc, COLS_ENCARGOS)
+                if not t_enc.empty:
+                    df_encargos = pd.concat([df_encargos, t_enc], ignore_index=True)
+    
+    tab_enc_agregar, tab_enc_lista = st.tabs(["➕ Agregar Encargo", "📋 Lista de Encargos"])
+    
+    # --- PESTAÑA: AGREGAR ENCARGO ---
+    with tab_enc_agregar:
+        with st.form("form_nuevo_encargo", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            nombre_encargante = c1.text_input("Nombre de quien encarga")
+            rut_encargante = c2.text_input("RUT de quien encarga")
+            fecha_encargo = c1.date_input("Fecha del encargo", value=datetime.now())
+            fecha_limite_encargo = c2.date_input("Fecha límite para realizarlo")
+            descripcion_encargo = st.text_area("¿Qué es lo que se encarga?", height=100)
+            monto_encargo = st.text_input("Monto ($, opcional)", placeholder="Ej: 150.000")
+            
+            if st.form_submit_button("📇 Registrar Encargo", type="primary", use_container_width=True):
+                if not nombre_encargante.strip() or not descripcion_encargo.strip():
+                    st.error("⚠️ Debes indicar al menos el nombre de quien encarga y qué se encarga.")
+                else:
+                    monto_limpio_encargo = parsear_monto_clp(monto_encargo) if monto_encargo.strip() else 0
+                    id_encargo_nuevo = str(uuid.uuid4())[:8]
+                    
+                    nuevo_encargo = {
+                        'ID_Encargo': id_encargo_nuevo, 'Nombre_Encargante': nombre_encargante.strip(),
+                        'RUT_Encargante': rut_encargante.strip().upper(), 'Fecha_Encargo': fecha_encargo.strftime("%d/%m/%Y"),
+                        'Fecha_Limite': fecha_limite_encargo.strftime("%d/%m/%Y"), 'Descripcion_Encargo': descripcion_encargo.strip(),
+                        'Monto': monto_limpio_encargo, 'Estado': 'Pendiente', 'Usuario_Propietario': usuario_actual
+                    }
+                    df_encargos_local = leer_csv_local(ARCHIVO_ENCARGOS, COLS_ENCARGOS)
+                    df_encargos_local = pd.concat([df_encargos_local, pd.DataFrame([nuevo_encargo])], ignore_index=True)
+                    df_encargos_local.to_csv(ARCHIVO_ENCARGOS, index=False)
+                    dn_encargos = safe_read_sheet("base_encargos", COLS_ENCARGOS)
+                    safe_update_sheet("base_encargos", pd.concat([dn_encargos, pd.DataFrame([nuevo_encargo])], ignore_index=True))
+                    
+                    # Si se indicó un monto, se refleja también en Contabilidad: se
+                    # crea una causa provisional "ENCARGO-XXXXXX" con ese honorario,
+                    # ya que el panel de Contabilidad trabaja sobre la base de causas
+                    # con Total_Honorarios pendiente — así el encargo queda visible
+                    # ahí también, sin duplicar un sistema de cobro aparte.
+                    if monto_limpio_encargo > 0:
+                        df_causas_enc = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                        nueva_causa_encargo = {col: '' for col in COLS_CAUSAS}
+                        nueva_causa_encargo.update({
+                            'ROL': f"ENCARGO-{id_encargo_nuevo}", 'TRIBUNAL': 'N/A (Encargo)',
+                            'CARATULADO': f"Encargo: {descripcion_encargo.strip()[:60]}",
+                            'Cliente': nombre_encargante.strip(), 'RUT': rut_encargante.strip().upper(),
+                            'Tipo_Negocio': 'Encargo', 'Usuario_Propietario': usuario_actual,
+                            'Estado_Honorarios': 'Pendientes', 'Total_Honorarios': monto_limpio_encargo,
+                            'Cuotas_Totales': 1, 'Cuotas_Pagadas': 0, 'Fecha_Inicio': fecha_encargo.strftime("%Y-%m-%d")
+                        })
+                        df_causas_enc = pd.concat([df_causas_enc, pd.DataFrame([nueva_causa_encargo])], ignore_index=True)
+                        df_causas_enc.to_csv(ARCHIVO_BD, index=False)
+                        guardar_en_nube(df_causas_enc)
+                    
+                    st.success("✅ Encargo registrado" + (" y reflejado en Contabilidad." if monto_limpio_encargo > 0 else "."))
+                    st.rerun()
+    
+    # --- PESTAÑA: LISTA DE ENCARGOS ---
+    with tab_enc_lista:
+        if df_encargos.empty:
+            st.info("No hay encargos registrados todavía.")
+        else:
+            df_encargos_orden = df_encargos.iloc[::-1]
+            for _, enc in df_encargos_orden.iterrows():
+                with st.container(border=True):
+                    c1, c2 = st.columns([5, 1.3])
+                    with c1:
+                        st.markdown(f"**{enc['Nombre_Encargante']}** ({enc['RUT_Encargante']})")
+                        st.markdown(f"<span style='color:#42526e; font-size:14px;'>{enc['Descripcion_Encargo']}</span>", unsafe_allow_html=True)
+                        st.caption(f"Encargado: {enc['Fecha_Encargo']} · Límite: {enc['Fecha_Limite']}")
+                    with c2:
+                        es_pendiente = enc['Estado'] == 'Pendiente'
+                        color_boton = "🔴 Pendiente" if es_pendiente else "🟢 Gestionado"
+                        if st.button(color_boton, key=f"toggle_enc_{enc['ID_Encargo']}", use_container_width=True):
+                            nuevo_estado_enc = "Gestionado" if es_pendiente else "Pendiente"
+                            df_enc_completo = leer_csv_local(f"base_encargos_{enc['Usuario_Propietario']}.csv", COLS_ENCARGOS)
+                            df_enc_completo.loc[df_enc_completo['ID_Encargo'] == enc['ID_Encargo'], 'Estado'] = nuevo_estado_enc
+                            df_enc_completo.to_csv(f"base_encargos_{enc['Usuario_Propietario']}.csv", index=False)
+                            dn_enc = safe_read_sheet("base_encargos", COLS_ENCARGOS)
+                            if not dn_enc.empty:
+                                dn_enc.loc[dn_enc['ID_Encargo'] == enc['ID_Encargo'], 'Estado'] = nuevo_estado_enc
+                                safe_update_sheet("base_encargos", dn_enc)
+                            st.rerun()
 
 # 5. INFORMES (IA PARA CLIENTES)
 elif st.session_state['menu_radio'] == "📊 Informes":
@@ -5465,7 +5564,8 @@ elif st.session_state['menu_radio'] == "🗓️ Agenda de Citas":
                 use_container_width=True, hide_index=True
             )
 
-
+# 12. EXCEL IMPORTADOR
+elif st.session_state['menu_radio'] == "📥 Excel":
     st.title("📥 Importador Masivo de Causas (OJV)")
     st.markdown("Sube tu archivo Excel de la Oficina Judicial Virtual para consolidar o actualizar masivamente tus causas.")
     archivo = st.file_uploader("Sube tu archivo Excel", type=["xlsx", "xls"])
