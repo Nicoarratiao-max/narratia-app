@@ -2958,7 +2958,7 @@ with st.sidebar:
     # Inicio y Mensajería van sueltos, fuera de cualquier categoría.
     GRUPO_JUDICIAL = ["💼 Causas", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "📆 Estado diario",
                       "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
-    GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "🗓️ Agenda de Citas", "💰 Contabilidad", "📝 Trámites",
+    GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "🗓️ Agenda de Asesorías", "💰 Contabilidad", "📝 Trámites",
                             "📇 Encargos", "📊 Informes", "📥 Excel"]
     GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA"]  # Solo visibles para plan Full
     
@@ -3395,12 +3395,12 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
     with tab_enc_agregar:
         with st.form("form_nuevo_encargo", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            nombre_encargante = c1.text_input("Nombre")
-            rut_encargante = c2.text_input("Cedula de Identidad")
-            fecha_encargo = c1.date_input("Fecha encargo", value=datetime.now())
-            fecha_limite_encargo = c2.date_input("Fecha límite")
-            descripcion_encargo = st.text_area("Encargo", height=100)
-            monto_encargo = st.text_input("Monto ($)", placeholder="Ej: 150.000")
+            nombre_encargante = c1.text_input("Nombre de quien encarga")
+            rut_encargante = c2.text_input("RUT de quien encarga")
+            fecha_encargo = c1.date_input("Fecha del encargo", value=datetime.now())
+            fecha_limite_encargo = c2.date_input("Fecha límite para realizarlo")
+            descripcion_encargo = st.text_area("¿Qué es lo que se encarga?", height=100)
+            monto_encargo = st.text_input("Monto ($, opcional)", placeholder="Ej: 150.000")
             
             if st.form_submit_button("📇 Registrar Encargo", type="primary", use_container_width=True):
                 if not nombre_encargante.strip() or not descripcion_encargo.strip():
@@ -3439,7 +3439,8 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
                         })
                         df_causas_enc = pd.concat([df_causas_enc, pd.DataFrame([nueva_causa_encargo])], ignore_index=True)
                         df_causas_enc.to_csv(ARCHIVO_BD, index=False)
-                        guardar_en_nube(df_causas_enc)
+                        dn_causa_encargo = safe_read_sheet("base_causas", COLS_CAUSAS)
+                        safe_update_sheet("base_causas", pd.concat([dn_causa_encargo, pd.DataFrame([nueva_causa_encargo])], ignore_index=True))
                     
                     st.success("✅ Encargo registrado" + (" y reflejado en Contabilidad." if monto_limpio_encargo > 0 else "."))
                     st.rerun()
@@ -5426,8 +5427,8 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                     st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
 
 # 11.5 AGENDA DE CITAS (agendamiento de asesorías a clientes)
-elif st.session_state['menu_radio'] == "🗓️ Agenda de Citas":
-    st.title("🗓️ Agenda de Citas")
+elif st.session_state['menu_radio'] == "🗓️ Agenda de Asesorías":
+    st.title("🗓️ Agenda de Asesorías")
     
     ES_ADMIN_CITAS = usuario_actual == "Narratia"
     df_citas = leer_csv_local(ARCHIVO_CITAS, COLS_CITAS)
