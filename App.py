@@ -3020,7 +3020,13 @@ with st.sidebar:
             for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
                 if _col_segura in df_usr.columns:
                     df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
-            mi_correo = str(df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'].values[0])
+            # Si por cualquier motivo la columna 'Correo' no existiera en la base
+            # (por ejemplo, una fila o archivo antiguo incompleto), se crea vacía
+            # en vez de reventar toda la barra lateral con un KeyError.
+            if 'Correo' not in df_usr.columns:
+                df_usr['Correo'] = ''
+            filas_usuario_actual = df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo']
+            mi_correo = str(filas_usuario_actual.values[0]) if not filas_usuario_actual.empty else ""
             if mi_correo == "nan" or mi_correo == "pendiente": 
                 mi_correo = ""
             
