@@ -3400,7 +3400,7 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
             fecha_encargo = c1.date_input("Fecha encargo", value=datetime.now())
             fecha_limite_encargo = c2.date_input("Fecha límite")
             descripcion_encargo = st.text_area("Encargo", height=100)
-            monto_encargo = st.text_input("Monto ($", placeholder="Ej: 150.000")
+            monto_encargo = st.text_input("Monto ($)", placeholder="Ej: 150.000")
             
             if st.form_submit_button("📇 Registrar Encargo", type="primary", use_container_width=True):
                 if not nombre_encargante.strip() or not descripcion_encargo.strip():
