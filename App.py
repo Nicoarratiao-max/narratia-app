@@ -3395,12 +3395,12 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
     with tab_enc_agregar:
         with st.form("form_nuevo_encargo", clear_on_submit=True):
             c1, c2 = st.columns(2)
-            nombre_encargante = c1.text_input("Nombre de quien encarga")
-            rut_encargante = c2.text_input("RUT de quien encarga")
-            fecha_encargo = c1.date_input("Fecha del encargo", value=datetime.now())
-            fecha_limite_encargo = c2.date_input("Fecha límite para realizarlo")
-            descripcion_encargo = st.text_area("¿Qué es lo que se encarga?", height=100)
-            monto_encargo = st.text_input("Monto ($, opcional)", placeholder="Ej: 150.000")
+            nombre_encargante = c1.text_input("Nombre")
+            rut_encargante = c2.text_input("Cedula de Identidad")
+            fecha_encargo = c1.date_input("Fecha encargo", value=datetime.now())
+            fecha_limite_encargo = c2.date_input("Fecha límite")
+            descripcion_encargo = st.text_area("Encargo", height=100)
+            monto_encargo = st.text_input("Monto ($", placeholder="Ej: 150.000")
             
             if st.form_submit_button("📇 Registrar Encargo", type="primary", use_container_width=True):
                 if not nombre_encargante.strip() or not descripcion_encargo.strip():
