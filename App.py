@@ -2780,13 +2780,13 @@ st.markdown("""
     [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s ease !important; }
     [data-testid="stButton"] button:hover { border-color: #0e6b74 !important; color: #0e6b74 !important; background-color: #e3f2f1 !important; }
     [data-testid="stVerticalBlockBorderWrapper"] { background-color: #ffffff !important; border-radius: 12px !important; border: 1px solid #e0e4e8 !important; }
-    .chat-bg { background-color: #efeae2; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
-    .burbuja-mia { background-color: #dcf8c6; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-left: auto; margin-bottom: 12px; border: 1px solid #c9eab1;}
-    .burbuja-otro { background-color: #ffffff; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.1); margin-right: auto; margin-bottom: 12px; border: 1px solid #e0e4e8;}
-    .chat-autor { font-size: 13px; font-weight: 800; color: #075e54; margin-bottom: 2px; }
-    .chat-texto { font-size: 15px; color: #303030; line-height: 1.4; }
-    .chat-hora { font-size: 11px; color: #999999; text-align: right; margin-top: 5px; }
-    .chat-para { font-size: 11px; color: #667781; font-weight: normal; margin-left: 5px; }
+    .chat-bg { background-color: #f4f6f7; padding: 20px; border-radius: 12px; border: 1px solid #e0e4e8; }
+    .burbuja-mia { background-color: #d4ebe9; padding: 10px 15px; border-radius: 15px 15px 0px 15px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.06); margin-left: auto; margin-bottom: 12px; border: 1px solid #aed9d4;}
+    .burbuja-otro { background-color: #ffffff; padding: 10px 15px; border-radius: 15px 15px 15px 0px; max-width: 75%; box-shadow: 0 1px 1px rgba(0,0,0,0.06); margin-right: auto; margin-bottom: 12px; border: 1px solid #e0e4e8;}
+    .chat-autor { font-size: 13px; font-weight: 800; color: #0e6b74; margin-bottom: 2px; }
+    .chat-texto { font-size: 15px; color: #172b4d; line-height: 1.4; }
+    .chat-hora { font-size: 11px; color: #6b778c; text-align: right; margin-top: 5px; }
+    .chat-para { font-size: 11px; color: #6b778c; font-weight: normal; margin-left: 5px; }
     
     /* ========================================================================
        MENÚ LATERAL: un solo valor de indentación (10px) usado en TODOS los
@@ -2911,12 +2911,36 @@ st.markdown("""
 
 # --- RENDER DE BARRA LATERAL (ESTILO CUADRADITOS) ---
 with st.sidebar:
+    if 'menu_compacto' not in st.session_state:
+        st.session_state['menu_compacto'] = False
+    modo_compacto = st.session_state['menu_compacto']
+    
+    # Ancho dinámico de la barra según el modo. Se agrega como una regla CSS
+    # aparte y más específica (en vez de tocar el bloque CSS grande de arriba),
+    # porque ese bloque es un string plano lleno de llaves { } de CSS — 
+    # convertirlo a f-string completo rompería por choque con esas llaves.
+    ancho_sidebar_actual = "80px" if modo_compacto else "280px"
     st.markdown(f"""
-    <div style='text-align: center; margin-bottom: 10px;'>
-        <img src='{LOGO_URL}' style='width: 60px;'>
-        <h3 style='color:#172b4d; margin-top: 8px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h3>
-    </div>
+    <style>
+        [data-testid="stSidebar"] {{ min-width: {ancho_sidebar_actual} !important; max-width: {ancho_sidebar_actual} !important; }}
+    </style>
     """, unsafe_allow_html=True)
+    
+    c_logo_espacio, c_toggle_compacto = st.columns([4, 1]) if not modo_compacto else st.columns([1, 1])
+    with c_logo_espacio:
+        if modo_compacto:
+            st.markdown(f"<div style='text-align:center;'><img src='{LOGO_URL}' style='width: 40px;'></div>", unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div style='text-align: center; margin-bottom: 10px;'>
+                <img src='{LOGO_URL}' style='width: 60px;'>
+                <h3 style='color:#172b4d; margin-top: 8px; font-weight: 800; letter-spacing: 1px;'>JuriSync</h3>
+            </div>
+            """, unsafe_allow_html=True)
+    with c_toggle_compacto:
+        if st.button("»" if modo_compacto else "«", key="btn_toggle_compacto", help="Expandir menú" if modo_compacto else "Reducir menú a solo íconos"):
+            st.session_state['menu_compacto'] = not modo_compacto
+            st.rerun()
 
     # --- SISTEMA DE PLANES Y PERMISOS ---
     df_usuarios_plan = leer_csv_local(ARCHIVO_USUARIOS)
@@ -2936,8 +2960,12 @@ with st.sidebar:
     # Nombre y botón van en la misma fila, pegados y orillados a la izquierda
     # (no centrados ni en filas separadas), para que se vea como un par
     # natural: "👤 Nombre  ⏻", no dos elementos sueltos en distintas líneas.
-    c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
-    c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:32px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    # En modo compacto, se esconde el nombre y solo queda el botón de salir.
+    if not modo_compacto:
+        c_nombre_perfil, c_logout_rapido = st.columns([4, 1])
+        c_nombre_perfil.markdown(f"<div style='display:flex; align-items:center; height:34px; font-size:15px; color:#172b4d; padding-left:32px;'>👤&nbsp;<strong>{nombre_real_usuario}</strong></div>", unsafe_allow_html=True)
+    else:
+        c_logout_rapido = st.container()
     if c_logout_rapido.button("⏻", help="Cerrar sesión", key="logout_rapido_arriba"):
         # Se hacen DOS cosas, no solo una, porque el borrado de cookies de este
         # componente a veces no llega a completarse de verdad en el navegador
@@ -2975,7 +3003,12 @@ with st.sidebar:
         etiqueta_boton = opcion
         if opcion == "✈️ Mensajería" and BADGE_MENSAJES_NO_LEIDOS > 0:
             etiqueta_boton = f"✈️ Mensajería 🔴 {BADGE_MENSAJES_NO_LEIDOS}"
-        if st.button(etiqueta_boton, use_container_width=True, key=f"btn_nav_{i}"):
+        # En modo compacto, el botón muestra solo el ícono (primera "palabra"
+        # de la etiqueta), sin el texto — así el menú se reduce a una barra
+        # angosta de íconos, y al ensanchar vuelve a mostrar ícono + nombre.
+        etiqueta_final = etiqueta_boton.split(" ", 1)[0] if modo_compacto else etiqueta_boton
+        ayuda_compacta = opcion if modo_compacto else None
+        if st.button(etiqueta_final, use_container_width=True, key=f"btn_nav_{i}", help=ayuda_compacta):
             st.session_state['menu_radio'] = opcion
             resetear_vistas()
             if opcion == "✈️ Mensajería":
@@ -2994,26 +3027,48 @@ with st.sidebar:
         _boton_menu("✈️ Mensajería", contador_botones)
         contador_botones += 1
     
-    with st.expander("⚖️ Judicial", expanded=True):
+    # En modo compacto no se usan expanders con título de categoría (no tendría
+    # sentido mostrar "Judicial" en una barra angosta de solo íconos) — se
+    # listan los botones de cada categoría directamente, separados por una
+    # línea fina, conservando el mismo agrupamiento pero sin el encabezado.
+    if modo_compacto:
+        st.markdown("<hr style='margin:6px 0; border-color:#e0e4e8;'>", unsafe_allow_html=True)
         for opcion in GRUPO_JUDICIAL:
             if opcion in disponibles:
                 _boton_menu(opcion, contador_botones)
                 contador_botones += 1
-    
-    with st.expander("🗂️ Administrativo", expanded=True):
+        st.markdown("<hr style='margin:6px 0; border-color:#e0e4e8;'>", unsafe_allow_html=True)
         for opcion in GRUPO_ADMINISTRATIVO:
             if opcion in disponibles:
                 _boton_menu(opcion, contador_botones)
                 contador_botones += 1
-    
-    # La categoría de IA solo aparece para el plan Full: son las funciones más
-    # avanzadas (Redactor IA, Estrategia con IA), no incluidas en planes Básico/Medio.
-    if plan_actual not in ("Básico", "Medio"):
-        with st.expander("🤖 Inteligencia Artificial", expanded=True):
+        if plan_actual not in ("Básico", "Medio"):
+            st.markdown("<hr style='margin:6px 0; border-color:#e0e4e8;'>", unsafe_allow_html=True)
             for opcion in GRUPO_IA:
                 if opcion in disponibles:
                     _boton_menu(opcion, contador_botones)
                     contador_botones += 1
+    else:
+        with st.expander("⚖️ Judicial", expanded=True):
+            for opcion in GRUPO_JUDICIAL:
+                if opcion in disponibles:
+                    _boton_menu(opcion, contador_botones)
+                    contador_botones += 1
+        
+        with st.expander("🗂️ Administrativo", expanded=True):
+            for opcion in GRUPO_ADMINISTRATIVO:
+                if opcion in disponibles:
+                    _boton_menu(opcion, contador_botones)
+                    contador_botones += 1
+        
+        # La categoría de IA solo aparece para el plan Full: son las funciones más
+        # avanzadas (Redactor IA, Estrategia con IA), no incluidas en planes Básico/Medio.
+        if plan_actual not in ("Básico", "Medio"):
+            with st.expander("🤖 Inteligencia Artificial", expanded=True):
+                for opcion in GRUPO_IA:
+                    if opcion in disponibles:
+                        _boton_menu(opcion, contador_botones)
+                        contador_botones += 1
     
     if usuario_actual == "Narratia":
         st.markdown("---")
@@ -3022,55 +3077,58 @@ with st.sidebar:
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    with st.expander(f"✏️ Editar Mi Perfil"):
-        st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
-        with st.form("form_perfil"):
-            df_usr = leer_csv_local(ARCHIVO_USUARIOS)
-            # Mismo tipo de bug que ya vimos con Fecha_Inicio: si la columna quedó
-            # tipada como booleano/número (por ejemplo, todo "True"/"False" que
-            # pandas infiere como bool), asignar un string ahí revienta con
-            # TypeError. Forzamos texto antes de cualquier asignación.
-            for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
-                if _col_segura in df_usr.columns:
-                    df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
-            # Si por cualquier motivo la columna 'Correo' no existiera en la base
-            # (por ejemplo, una fila o archivo antiguo incompleto), se crea vacía
-            # en vez de reventar toda la barra lateral con un KeyError.
-            if 'Correo' not in df_usr.columns:
-                df_usr['Correo'] = ''
-            filas_usuario_actual = df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo']
-            mi_correo = str(filas_usuario_actual.values[0]) if not filas_usuario_actual.empty else ""
-            if mi_correo == "nan" or mi_correo == "pendiente": 
-                mi_correo = ""
+    with st.expander(f"✏️ Editar Mi Perfil" if not modo_compacto else "✏️"):
+        if modo_compacto:
+            st.caption("Expande el menú (botón » arriba) para editar tu perfil.")
+        else:
+            st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
+            with st.form("form_perfil"):
+                df_usr = leer_csv_local(ARCHIVO_USUARIOS)
+                # Mismo tipo de bug que ya vimos con Fecha_Inicio: si la columna quedó
+                # tipada como booleano/número (por ejemplo, todo "True"/"False" que
+                # pandas infiere como bool), asignar un string ahí revienta con
+                # TypeError. Forzamos texto antes de cualquier asignación.
+                for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
+                    if _col_segura in df_usr.columns:
+                        df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
+                # Si por cualquier motivo la columna 'Correo' no existiera en la base
+                # (por ejemplo, una fila o archivo antiguo incompleto), se crea vacía
+                # en vez de reventar toda la barra lateral con un KeyError.
+                if 'Correo' not in df_usr.columns:
+                    df_usr['Correo'] = ''
+                filas_usuario_actual = df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo']
+                mi_correo = str(filas_usuario_actual.values[0]) if not filas_usuario_actual.empty else ""
+                if mi_correo == "nan" or mi_correo == "pendiente": 
+                    mi_correo = ""
             
-            upd_correo = st.text_input("Correo de Recuperación", value=mi_correo, placeholder="ejemplo@correo.cl")
-            upd_clave = st.text_input("Nueva Contraseña", type="password", placeholder="Dejar en blanco para mantener actual")
+                upd_correo = st.text_input("Correo de Recuperación", value=mi_correo, placeholder="ejemplo@correo.cl")
+                upd_clave = st.text_input("Nueva Contraseña", type="password", placeholder="Dejar en blanco para mantener actual")
             
-            if st.form_submit_button("💾 Guardar Datos", use_container_width=True):
-                cambios = False
-                if upd_correo.strip() != "" and "@" in upd_correo:
-                    df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'] = upd_correo.strip().lower()
-                    cambios = True
-                if upd_clave.strip() != "":
-                    if len(upd_clave) >= 6:
-                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = hash_password(upd_clave)
+                if st.form_submit_button("💾 Guardar Datos", use_container_width=True):
+                    cambios = False
+                    if upd_correo.strip() != "" and "@" in upd_correo:
+                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Correo'] = upd_correo.strip().lower()
                         cambios = True
-                    else:
-                        st.error("La clave debe tener mínimo 6 caracteres")
+                    if upd_clave.strip() != "":
+                        if len(upd_clave) >= 6:
+                            df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Password'] = hash_password(upd_clave)
+                            cambios = True
+                        else:
+                            st.error("La clave debe tener mínimo 6 caracteres")
                 
-                if cambios:
-                    try:
-                        df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
-                        # BUGFIX: antes esto solo se guardaba en el archivo local, nunca
-                        # se sincronizaba con Google Sheets. Como el login verifica las
-                        # credenciales contra la copia de Sheets, un cambio de contraseña
-                        # hecho aquí podía "perderse" y la próxima vez pedir lo mismo de
-                        # nuevo, o directamente no dejar entrar con la clave nueva.
-                        guardar_en_nube(df_usr)
-                        st.success("¡Datos actualizados correctamente! Ya quedaron sincronizados en la nube.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
+                    if cambios:
+                        try:
+                            df_usr.loc[df_usr['Usuario'] == usuario_actual, 'Debe_Cambiar_Clave'] = 'False'
+                            # BUGFIX: antes esto solo se guardaba en el archivo local, nunca
+                            # se sincronizaba con Google Sheets. Como el login verifica las
+                            # credenciales contra la copia de Sheets, un cambio de contraseña
+                            # hecho aquí podía "perderse" y la próxima vez pedir lo mismo de
+                            # nuevo, o directamente no dejar entrar con la clave nueva.
+                            guardar_en_nube(df_usr)
+                            st.success("¡Datos actualizados correctamente! Ya quedaron sincronizados en la nube.")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"⚠️ No se pudo guardar. Detalle técnico: {e}")
 
 # --- CONTROLADOR DE PESTAÑAS ---
 
