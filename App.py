@@ -1144,6 +1144,9 @@ COLS_ENCARGOS = ['ID_Encargo', 'Nombre_Encargante', 'RUT_Encargante', 'Fecha_Enc
 COLS_PAGOS_HONORARIOS = ['ID_Pago', 'Fecha_Pago', 'Cliente', 'ROL', 'Monto_Cuota', 'Numero_Cuota', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
+COLS_DOCS = ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']
+COLS_ESTADO_DIARIO = ['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64', 'Doc_Drive_ID']
+COLS_MENSAJES = ['ID', 'Fecha', 'De', 'Para', 'Mensaje']
 @st.cache_data(ttl=900)
 def fetch_sheet_cached(worksheet_name):
     """Descarga de la nube y guarda en memoria RAM por 15 min para máxima velocidad.
@@ -2342,14 +2345,23 @@ if "cliente_id" in query_params:
     
     ARCHIVO_DOCS = "base_documentos_clientes.csv"
     if not os.path.exists(ARCHIVO_DOCS):
-        pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
+        # Antes esto creaba directamente un archivo local VACÍO cuando el sistema
+        # se reiniciaba, perdiendo de vista todos los documentos ya subidos por
+        # los clientes (aunque los archivos en sí seguían a salvo en Drive). Ahora
+        # primero intenta reconstruir el archivo local desde el respaldo en la
+        # nube, y solo si no hay nada ahí tampoco, parte con uno vacío de verdad.
+        df_docs_nube_inicial = safe_read_sheet("base_documentos_clientes", COLS_DOCS)
+        if not df_docs_nube_inicial.empty:
+            df_docs_nube_inicial.to_csv(ARCHIVO_DOCS, index=False)
+        else:
+            pd.DataFrame(columns=COLS_DOCS).to_csv(ARCHIVO_DOCS, index=False)
     else:
-        df_docs_migra = leer_csv_local(ARCHIVO_DOCS)
+        df_docs_migra = leer_csv_local(ARCHIVO_DOCS, COLS_DOCS)
         if 'Archivo_Drive_ID' not in df_docs_migra.columns:
             df_docs_migra['Archivo_Drive_ID'] = ''
             df_docs_migra.to_csv(ARCHIVO_DOCS, index=False)
         
-    df_docs = leer_csv_local(ARCHIVO_DOCS)
+    df_docs = leer_csv_local(ARCHIVO_DOCS, COLS_DOCS)
     mis_docs = df_docs[df_docs['Cliente_Token'] == token_cliente]
     if mis_docs.empty and not df_docs.empty:
         # Respaldo: si el token no calzó exacto (por ejemplo, un enlace generado antes
@@ -2573,7 +2585,7 @@ if not os.path.exists(ARCHIVO_BD):
     df_vacio_c = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Usuario_Propietario'])
     df_vacio_c.to_csv(ARCHIVO_BD, index=False)
 else:
-    df_c_check = leer_csv_local(ARCHIVO_BD)
+    df_c_check = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     ejecutar_guardado_check = False
     columnas_requeridas_bd = ['Cliente', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Fecha_Inicio']
     for col in columnas_requeridas_bd:
@@ -2599,7 +2611,7 @@ if not os.path.exists(ARCHIVO_CONTRATOS):
     df_vacio_co = pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario'])
     df_vacio_co.to_csv(ARCHIVO_CONTRATOS, index=False)
 else:
-    df_co_check = leer_csv_local(ARCHIVO_CONTRATOS)
+    df_co_check = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
     if 'Archivo_Drive_ID' not in df_co_check.columns:
         df_co_check['Archivo_Drive_ID'] = ''
         df_co_check.to_csv(ARCHIVO_CONTRATOS, index=False)
@@ -2608,7 +2620,7 @@ if not os.path.exists(ARCHIVO_TRAMITES):
     df_vacio_tr = pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario'])
     df_vacio_tr.to_csv(ARCHIVO_TRAMITES, index=False)
 else:
-    df_tr_check = leer_csv_local(ARCHIVO_TRAMITES)
+    df_tr_check = leer_csv_local(ARCHIVO_TRAMITES, COLS_TRAMITES)
     if 'Comprobante_Drive_ID' not in df_tr_check.columns:
         df_tr_check['Comprobante_Drive_ID'] = ''
         df_tr_check.to_csv(ARCHIVO_TRAMITES, index=False)
@@ -2617,7 +2629,7 @@ if not os.path.exists(ARCHIVO_ESTADO_DIARIO):
     df_vacio_ed = pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64', 'Doc_Drive_ID'])
     df_vacio_ed.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
 else:
-    df_ed_check = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
+    df_ed_check = leer_csv_local(ARCHIVO_ESTADO_DIARIO, COLS_ESTADO_DIARIO)
     if 'Doc_Drive_ID' not in df_ed_check.columns:
         df_ed_check['Doc_Drive_ID'] = ''
         df_ed_check.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
@@ -2655,7 +2667,7 @@ if st.session_state['logged_in']:
 # --- FUNCIÓN DE AUTOLIMPIEZA SISTEMA (15 DÍAS EXACTOS) ---
 def limpiar_documentos_estado_diario():
     if os.path.exists(ARCHIVO_ESTADO_DIARIO):
-        df_ed = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
+        df_ed = leer_csv_local(ARCHIVO_ESTADO_DIARIO, COLS_ESTADO_DIARIO)
         if not df_ed.empty:
             if 'Doc_Drive_ID' not in df_ed.columns:
                 df_ed['Doc_Drive_ID'] = ''
@@ -2943,7 +2955,7 @@ with st.sidebar:
     """, unsafe_allow_html=True)
 
     # --- SISTEMA DE PLANES Y PERMISOS ---
-    df_usuarios_plan = leer_csv_local(ARCHIVO_USUARIOS)
+    df_usuarios_plan = leer_csv_local(ARCHIVO_USUARIOS, COLS_USUARIOS)
     
     if 'Plan' not in df_usuarios_plan.columns:
         df_usuarios_plan['Plan'] = 'Full' 
@@ -3030,7 +3042,7 @@ with st.sidebar:
     with st.expander(f"✏️ Editar Mi Perfil"):
         st.markdown("<span style='font-size:13px; color:#6b778c;'>Configura tu correo de recuperación o cambia tu clave:</span>", unsafe_allow_html=True)
         with st.form("form_perfil"):
-            df_usr = leer_csv_local(ARCHIVO_USUARIOS)
+            df_usr = leer_csv_local(ARCHIVO_USUARIOS, COLS_USUARIOS)
             for _col_segura in ['Debe_Cambiar_Clave', 'Correo', 'Password']:
                 if _col_segura in df_usr.columns:
                     df_usr[_col_segura] = df_usr[_col_segura].astype(object).astype(str)
@@ -3073,7 +3085,7 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     st.write("Panel de control unificado. Aquí tienes un resumen de tu actividad judicial de la oficina.")
     st.write("<br>", unsafe_allow_html=True)
     
-    df_causas_totales = leer_csv_local(ARCHIVO_BD)
+    df_causas_totales = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     df_tareas_totales = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     
     cant_causas = len(df_causas_totales) if not df_causas_totales.empty else 0
@@ -3330,7 +3342,7 @@ elif st.session_state['menu_radio'] == "📝 Trámites":
     st.markdown("Registro estricto de dinero solicitado a clientes para pagos de Receptores Judiciales, Peritos, Notarios o Conservadores.")
     
     df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
-    df_tramites = leer_csv_local(ARCHIVO_TRAMITES)
+    df_tramites = leer_csv_local(ARCHIVO_TRAMITES, COLS_TRAMITES)
     
     tab_ingreso_t, tab_historial_t = st.tabs(["Ingresar Pago de Trámite", "Historial de Comprobantes"])
     with tab_ingreso_t:
@@ -3459,7 +3471,7 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                         st.write(f"Causa Rol: **{rol_cruce}** | Cliente: {fila.get('Cliente', '')}")
                         st.file_uploader(f"Subir PDF de Resolución ({rol_cruce})", key=f"res_{i}")
                     if st.form_submit_button("Guardar Resoluciones en Sistema", type="primary"):
-                        df_ed_hist = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
+                        df_ed_hist = leer_csv_local(ARCHIVO_ESTADO_DIARIO, COLS_ESTADO_DIARIO)
                         for i, fila in coincidencias.iterrows():
                             archivo_subido = st.session_state.get(f"res_{i}")
                             if archivo_subido:
@@ -3471,10 +3483,15 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
                                     'Doc_B64': b64_ed, 'Doc_Drive_ID': drive_id_ed
                                 }])], ignore_index=True)
                         df_ed_hist.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
+                        # Faltaba el respaldo en la nube: antes esto solo se guardaba en el
+                        # archivo local (que se borra cada vez que el sistema se reinicia),
+                        # sin ninguna copia en Google Sheets — por eso se perdía el historial.
+                        dn_ed = safe_read_sheet("base_estado_diario", COLS_ESTADO_DIARIO)
+                        safe_update_sheet("base_estado_diario", pd.concat([dn_ed, df_ed_hist[~df_ed_hist['ID_ED'].isin(dn_ed['ID_ED'] if not dn_ed.empty else [])]], ignore_index=True))
                         st.success("Resoluciones integradas y respaldadas en Google Drive."); st.rerun()
 
     st.markdown("### 🗄️ Historial de Resoluciones del Estado Diario")
-    df_hist_ed = leer_csv_local(ARCHIVO_ESTADO_DIARIO)
+    df_hist_ed = leer_csv_local(ARCHIVO_ESTADO_DIARIO, COLS_ESTADO_DIARIO)
     if df_hist_ed.empty:
         st.write("No registras documentos en las últimas dos semanas.")
     else:
@@ -3591,7 +3608,7 @@ elif st.session_state['menu_radio'] == "📊 Informes":
     st.title("📊 Asistente de Inteligencia Legal - Informes")
     st.markdown("Carga el historial de movimientos o Ebook del Poder Judicial. El sistema analizará el lenguaje técnico y redactará un informe ejecutivo comprensible para tu cliente.")
     
-    df_causas_ia = leer_csv_local(ARCHIVO_BD)
+    df_causas_ia = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     lista_roles_ia = [""] + df_causas_ia['ROL'].dropna().unique().tolist()
     
     with st.container(border=True):
@@ -4059,7 +4076,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
                         )
                         
-                        df_con = leer_csv_local(ARCHIVO_CONTRATOS)
+                        df_con = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"), 
                             'Cliente': cli_nom, 'Servicio': accion_final, 'Honorarios': hon_num_final, 'Archivo_B64': b64_docx,
@@ -4145,7 +4162,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
             st.download_button(label="📥 Descargar Documento (.docx)", data=st.session_state['contrato_generado'], file_name=st.session_state['nombre_archivo'], mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document", type="primary")
             
     with tab_reg:
-        df_contratos_reg = leer_csv_local(ARCHIVO_CONTRATOS)
+        df_contratos_reg = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
         if df_contratos_reg.empty: 
             st.info("No registras copias históricas guardadas.")
         else: 
@@ -4228,7 +4245,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         }
                         pd.concat([df_causas, pd.DataFrame([nuevo_cliente])], ignore_index=True).to_csv(ARCHIVO_BD, index=False)
                         
-                        df_con = leer_csv_local(ARCHIVO_CONTRATOS)
+                        df_con = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
                         nuevo_con = {
                             'ID': str(uuid.uuid4())[:8], 'Fecha': datetime.now().strftime("%d/%m/%Y"),
                             'Cliente': nombre_extraido, 'Servicio': datos_extraidos.get('servicio', 'Servicio Legal'), 'Honorarios': datos_extraidos.get('honorarios_total', 0),
@@ -4366,7 +4383,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             piezas_equipo = []
             for arch in archivos_causas_equipo:
                 propietario_arch = arch.replace("base_causas_", "").replace(".csv", "")
-                temp_causa_eq = leer_csv_local(arch)
+                temp_causa_eq = leer_csv_local(arch, COLS_CAUSAS)
                 if not temp_causa_eq.empty:
                     temp_causa_eq = temp_causa_eq.copy()
                     temp_causa_eq['Propietario_Vista'] = propietario_arch
@@ -4589,7 +4606,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             if not os.path.exists(destinatario_file):
                                 pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(destinatario_file, index=False)
                                 
-                            df_t_destino = leer_csv_local(destinatario_file)
+                            df_t_destino = leer_csv_local(destinatario_file, COLS_TAREAS)
                             nueva_t = {
                                 'ID_Tarea': str(uuid.uuid4())[:8], 
                                 'ROL': rol_actual, 
@@ -4767,7 +4784,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             if not os.path.exists(ARCHIVO_DOCS):
                                 pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS, index=False)
                             
-                            df_docs_db = leer_csv_local(ARCHIVO_DOCS)
+                            df_docs_db = leer_csv_local(ARCHIVO_DOCS, COLS_DOCS)
                             nuevo_registro_doc = {
                                 'ID_Req': str(uuid.uuid4())[:8],
                                 'Cliente_Token': token_para_link,
@@ -4785,7 +4802,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 st.markdown("### Estado de la Documentación Solicitada")
                 ARCHIVO_DOCS = "base_documentos_clientes.csv"
                 if os.path.exists(ARCHIVO_DOCS):
-                    df_docs_db = leer_csv_local(ARCHIVO_DOCS)
+                    df_docs_db = leer_csv_local(ARCHIVO_DOCS, COLS_DOCS)
                     docs_causa_actual = df_docs_db[df_docs_db['Cliente_Token'] == token_para_link]
                     
                     if docs_causa_actual.empty:
@@ -5069,7 +5086,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 del st.session_state["_csv_cache_" + ARCHIVO_MENSAJES]
             st.rerun()
     
-    df_msgs = leer_csv_local(ARCHIVO_MENSAJES)
+    df_msgs = leer_csv_local(ARCHIVO_MENSAJES, COLS_MENSAJES)
     
     # PRIVACIDAD: solo el administrador (Narratia) ve absolutamente todos los
     # mensajes del equipo. El resto de los usuarios solo ve las conversaciones
@@ -5110,7 +5127,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
         texto_mensaje = c_texto.text_input("Escribe tu mensaje...", label_visibility="collapsed", placeholder="Escribe un mensaje aquí...")
         if c_btn.form_submit_button("Enviar 🚀", type="primary", use_container_width=True):
             if texto_mensaje.strip() != "":
-                df_msgs_todos = leer_csv_local(ARCHIVO_MENSAJES)
+                df_msgs_todos = leer_csv_local(ARCHIVO_MENSAJES, COLS_MENSAJES)
                 nuevo_msj = {
                     'ID': str(uuid.uuid4())[:8],
                     'Fecha': datetime.now().strftime("%d/%m/%Y %H:%M"),
@@ -5147,7 +5164,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         if huerfanos.any():
             mapa_rut_dueno = {}
             for arch_causa_mig in glob.glob("base_causas_*.csv"):
-                t_mig = leer_csv_local(arch_causa_mig)
+                t_mig = leer_csv_local(arch_causa_mig, COLS_CAUSAS)
                 dueno_mig = arch_causa_mig.replace("base_causas_", "").replace(".csv", "")
                 if not t_mig.empty and 'RUT' in t_mig.columns:
                     for rut_mig in t_mig['RUT'].dropna().astype(str):
@@ -5192,7 +5209,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
             # detectarlo aunque el caso lo haya llevado otro compañero del estudio.
             piezas_conflicto = []
             for arch_conf in glob.glob("base_causas_*.csv"):
-                t_conf = leer_csv_local(arch_conf)
+                t_conf = leer_csv_local(arch_conf, COLS_CAUSAS)
                 if not t_conf.empty and 'RUT' in t_conf.columns:
                     propietario_conf = arch_conf.replace("base_causas_", "").replace(".csv", "")
                     t_conf = t_conf.copy()
@@ -5262,13 +5279,13 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
             df_causas_local = pd.DataFrame()
             piezas_causas_cli = []
             for arch_cli in glob.glob("base_causas_*.csv"):
-                t = leer_csv_local(arch_cli)
+                t = leer_csv_local(arch_cli, COLS_CAUSAS)
                 if not t.empty:
                     piezas_causas_cli.append(t)
             if piezas_causas_cli:
                 df_causas_local = pd.concat(piezas_causas_cli, ignore_index=True)
         else:
-            df_causas_local = leer_csv_local(ARCHIVO_BD)
+            df_causas_local = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
         
         filas_clientes = {}
         if not df_clientes.empty:
@@ -5353,7 +5370,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     dn_t = safe_read_sheet("base_tareas", COLS_TAREAS)
                     if not dn_t.empty and roles_a_borrar: safe_update_sheet("base_tareas", dn_t[~dn_t['ROL'].isin(roles_a_borrar)])
                     
-                    df_con_local = leer_csv_local(ARCHIVO_CONTRATOS)
+                    df_con_local = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
                     if not df_con_local.empty:
                         df_con_local = df_con_local[df_con_local['Cliente'] != nombre_borrar]
                         df_con_local.to_csv(ARCHIVO_CONTRATOS, index=False)
@@ -5469,7 +5486,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     
         with tab3:
             st.subheader("Contratos Vinculados")
-            df_con = leer_csv_local(ARCHIVO_CONTRATOS)
+            df_con = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
             if not df_con.empty:
                 st.dataframe(df_con[df_con['Cliente'] == datos_cli['Nombre']])
             else:
@@ -5490,7 +5507,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
         piezas_tareas_eq = []
         for arch_t in archivos_tareas_equipo:
             propietario_t = arch_t.replace("base_tareas_", "").replace(".csv", "")
-            temp_t_eq = leer_csv_local(arch_t)
+            temp_t_eq = leer_csv_local(arch_t, COLS_TAREAS)
             if not temp_t_eq.empty:
                 temp_t_eq = temp_t_eq.copy()
                 temp_t_eq['Propietario_Vista'] = propietario_t
@@ -5913,13 +5930,13 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
         # archivo de causas/tareas igual se detecta y se muestra aquí.
         for arch_c in glob.glob("base_causas_*.csv"):
             u = arch_c.replace("base_causas_", "").replace(".csv", "")
-            temp_c = leer_csv_local(arch_c)
+            temp_c = leer_csv_local(arch_c, COLS_CAUSAS)
             if not temp_c.empty:
                 temp_c['Usuario_Propietario'] = u 
                 todas_causas.append(temp_c)
         for arch_t in glob.glob("base_tareas_*.csv"):
             u = arch_t.replace("base_tareas_", "").replace(".csv", "")
-            temp_t = leer_csv_local(arch_t)
+            temp_t = leer_csv_local(arch_t, COLS_TAREAS)
             if not temp_t.empty:
                 temp_t['Usuario_Propietario'] = u
                 todas_tareas.append(temp_t)
