@@ -356,6 +356,24 @@ def calcular_posesion_efectiva_completa(df_herederos: pd.DataFrame, masa_heredit
 # =====================================================================
 # Verificado contra el texto vigente del Código de Procedimiento Civil.
 # Las 4 primeras son dilatorias; el resto, perentorias.
+# =====================================================================
+# ⚖️ INSTRUCCIÓN COMPARTIDA DE FUNDAMENTACIÓN JURÍDICA
+# =====================================================================
+# Se inserta en todos los prompts del sistema que redactan o analizan
+# (Excepciones, Escritos Judiciales, Estrategia, Redactor IA, Análisis de
+# Escrituras), para que la IA fundamente con la ley exacta y jurisprudencia
+# general bien establecida, PERO sin inventar citas específicas (números de
+# rol, fechas de sentencias, nombres de causas) que no pueda verificar — un
+# riesgo real y documentado de las IA en trabajo legal, que puede terminar
+# en un escrito con una cita falsa si no se controla explícitamente.
+INSTRUCCION_FUNDAMENTACION_JURIDICA = """
+INSTRUCCIONES DE FUNDAMENTACIÓN JURÍDICA (obligatorias):
+1. Cita SIEMPRE los artículos legales exactos que sustentan cada punto (Código Civil, Código de Procedimiento Civil, Código de Comercio, Código del Trabajo, Código Orgánico de Tribunales, leyes especiales, etc., según corresponda a la materia).
+2. Cuando exista un criterio jurisprudencial GENERAL y bien establecido en el derecho chileno (por ejemplo, "la jurisprudencia reiterada de nuestros tribunales superiores ha sostenido que..."), inclúyelo como refuerzo argumentativo, sin necesidad de un número de causa específico.
+3. NUNCA inventes ni completes de memoria una cita jurisprudencial específica (rol de causa, fecha exacta de sentencia, nombre de las partes) si no tienes certeza absoluta de que es correcta y real. Es preferible fundamentar solo con la norma legal y doctrina general antes que arriesgar una cita falsa.
+4. Si consideras que el caso amerita buscar una sentencia específica de respaldo, dilo explícitamente como una nota al abogado (ej: "(Sugerencia: verificar jurisprudencia reciente de la Corte Suprema sobre este punto específico antes de presentar)"), en vez de inventarla.
+"""
+
 CATALOGO_EXCEPCIONES_464 = {
     1: "La incompetencia del tribunal ante quien se haya presentado la demanda",
     2: "La falta de capacidad del demandante o de personería o representación legal del que comparezca en su nombre",
@@ -606,6 +624,9 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional=""):
 
     Para CADA UNA de las 18 excepciones, determina si es aplicable a este caso concreto según los documentos. Contexto adicional entregado por el abogado: {contexto_adicional if contexto_adicional.strip() else "(sin contexto adicional)"}
 
+    {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+    En el campo "fundamento" de cada excepción, además de los hechos, cita el o los artículos legales exactos que la sustentan (del CPC, Código Civil, Código de Comercio u otro cuerpo legal según corresponda) y, si existe, el criterio jurisprudencial general aplicable siguiendo las reglas anteriores.
+
     Responde EXCLUSIVAMENTE con un array JSON válido (nada de texto antes o después, sin usar bloques de código markdown), con un objeto por cada una de las 18 excepciones, con esta estructura exacta:
     [
       {{
@@ -613,7 +634,7 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional=""):
         "nombre": "Nulidad de la obligación",
         "aplica": true,
         "confianza": "Alta",
-        "fundamento": "Explicación detallada de por qué aplica o no aplica, citando hechos concretos de los documentos.",
+        "fundamento": "Explicación detallada de por qué aplica o no aplica, citando hechos concretos de los documentos, la norma legal exacta que la sustenta, y el criterio jurisprudencial general si corresponde.",
         "cita_textual": "Cita literal breve (máximo 40 palabras) extraída del documento que respalda el fundamento, o cadena vacía si no aplica."
       }}
     ]
@@ -642,7 +663,9 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
 
     Contexto y hechos entregados por el abogado: {contexto_adicional if contexto_adicional.strip() else "(sin contexto adicional escrito, básate solo en los documentos adjuntos)"}
 
-    Redacta el escrito completo, con lenguaje formal jurídico chileno, incluyendo su suma, comparecencia (usa placeholders genéricos como [NOMBRE], [ROL] si no tienes el dato exacto), fundamentos de hecho y de derecho citando las normas legales aplicables, y el petitorio final ("POR TANTO, RUEGO A US...").
+    {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+
+    Redacta el escrito completo, con lenguaje formal jurídico chileno, incluyendo su suma, comparecencia (usa placeholders genéricos como [NOMBRE], [ROL] si no tienes el dato exacto), fundamentos de hecho y de derecho lo más completos posible (citando las normas legales exactas aplicables y, cuando corresponda, el criterio jurisprudencial general según las reglas anteriores), y el petitorio final ("POR TANTO, RUEGO A US...").
     Estructura el texto en párrafos separados por doble salto de línea (\\n\\n), sin usar títulos markdown (nada de # ni **), solo texto plano formal, ya que se insertará directo en un documento Word.
     """
     if archivos_pdf_subidos:
@@ -905,6 +928,12 @@ def subir_archivo_drive(nombre_archivo: str, contenido_bytes: bytes, mime_type: 
         archivo = servicio.files().create(body=metadata, media_body=media, fields='id').execute()
         return archivo.get('id')
     except Exception as e:
+        # Antes este error solo se imprimía en los registros internos del
+        # servidor, invisibles para el usuario — quien solo veía un mensaje
+        # confuso hablando del límite de tamaño de Sheets (el respaldo), sin
+        # saber que el problema real era que Drive falló. Ahora queda
+        # guardado en session_state para poder mostrarlo en pantalla.
+        st.session_state['_ultimo_error_drive'] = str(e)
         print(f"Error subiendo a Drive: {e}")
         return None
 
@@ -2399,7 +2428,11 @@ if "cliente_id" in query_params:
                             with st.spinner("Guardando en la nube de JuriSync..."):
                                 drive_id, b64_file = guardar_archivo_adjunto(archivo.name, archivo_bytes, archivo.type or 'application/octet-stream')
                             if not drive_id and not b64_file:
-                                st.error(msg_tamano if not tamano_ok else "⚠️ No fue posible guardar el archivo. Intenta nuevamente.")
+                                error_drive_real = st.session_state.pop('_ultimo_error_drive', None)
+                                if error_drive_real:
+                                    st.error(f"⚠️ No se pudo guardar: Google Drive no está funcionando ahora mismo (detalle técnico: {error_drive_real}). Avisa a tu abogado para que revise la configuración de Drive.")
+                                else:
+                                    st.error(msg_tamano if not tamano_ok else "⚠️ No fue posible guardar el archivo. Intenta nuevamente.")
                             else:
                                 df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']] = ['✅ Completado', b64_file, drive_id, datetime.now().strftime("%d/%m/%Y")]
                                 df_docs.to_csv(ARCHIVO_DOCS, index=False)
@@ -2573,8 +2606,20 @@ ARCHIVO_MENSAJES = "base_mensajes_global.csv"
 
 # Verificación de archivos individuales para evitar pérdida de datos
 if not os.path.exists(ARCHIVO_TAREAS):
-    df_vacio_t = pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
-    df_vacio_t.to_csv(ARCHIVO_TAREAS, index=False)
+    # CRÍTICO: antes esto creaba directo un archivo vacío cuando el sistema
+    # se reiniciaba (el archivo local se borra en cada reinicio), perdiendo
+    # de vista TODAS las tareas reales, que seguían intactas en Google
+    # Sheets. Ahora primero intenta reconstruir el archivo local desde la
+    # nube (filtrando solo las tareas de este usuario), y solo si de verdad
+    # no hay nada ahí tampoco, parte con uno vacío.
+    df_tareas_nube_inicial = safe_read_sheet("base_tareas", COLS_TAREAS)
+    if not df_tareas_nube_inicial.empty and 'Usuario_Propietario' in df_tareas_nube_inicial.columns:
+        df_tareas_nube_inicial = df_tareas_nube_inicial[df_tareas_nube_inicial['Usuario_Propietario'] == usuario_actual]
+    if not df_tareas_nube_inicial.empty:
+        df_tareas_nube_inicial.to_csv(ARCHIVO_TAREAS, index=False)
+    else:
+        df_vacio_t = pd.DataFrame(columns=COLS_TAREAS)
+        df_vacio_t.to_csv(ARCHIVO_TAREAS, index=False)
 else:
     df_t_check = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     if 'Prioridad' not in df_t_check.columns:
@@ -2582,8 +2627,16 @@ else:
         df_t_check.to_csv(ARCHIVO_TAREAS, index=False)
 
 if not os.path.exists(ARCHIVO_BD):
-    df_vacio_c = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Usuario_Propietario'])
-    df_vacio_c.to_csv(ARCHIVO_BD, index=False)
+    # Mismo arreglo crítico que en Tareas: primero intenta reconstruir desde
+    # Google Sheets antes de partir con un archivo vacío de verdad.
+    df_causas_nube_inicial = safe_read_sheet("base_causas", COLS_CAUSAS)
+    if not df_causas_nube_inicial.empty and 'Usuario_Propietario' in df_causas_nube_inicial.columns:
+        df_causas_nube_inicial = df_causas_nube_inicial[df_causas_nube_inicial['Usuario_Propietario'] == usuario_actual]
+    if not df_causas_nube_inicial.empty:
+        df_causas_nube_inicial.to_csv(ARCHIVO_BD, index=False)
+    else:
+        df_vacio_c = pd.DataFrame(columns=['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Teléfono', 'Tipo_Negocio', 'Clave_unica', 'Correo', 'Direccion', 'SAC', 'Sucursal', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Usuario_Propietario'])
+        df_vacio_c.to_csv(ARCHIVO_BD, index=False)
 else:
     df_c_check = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     ejecutar_guardado_check = False
@@ -2608,8 +2661,14 @@ else:
         df_c_check.to_csv(ARCHIVO_BD, index=False)
 
 if not os.path.exists(ARCHIVO_CONTRATOS):
-    df_vacio_co = pd.DataFrame(columns=['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario'])
-    df_vacio_co.to_csv(ARCHIVO_CONTRATOS, index=False)
+    df_contratos_nube_inicial = safe_read_sheet("base_contratos", COLS_CONTRATOS)
+    if not df_contratos_nube_inicial.empty and 'Usuario_Propietario' in df_contratos_nube_inicial.columns:
+        df_contratos_nube_inicial = df_contratos_nube_inicial[df_contratos_nube_inicial['Usuario_Propietario'] == usuario_actual]
+    if not df_contratos_nube_inicial.empty:
+        df_contratos_nube_inicial.to_csv(ARCHIVO_CONTRATOS, index=False)
+    else:
+        df_vacio_co = pd.DataFrame(columns=COLS_CONTRATOS)
+        df_vacio_co.to_csv(ARCHIVO_CONTRATOS, index=False)
 else:
     df_co_check = leer_csv_local(ARCHIVO_CONTRATOS, COLS_CONTRATOS)
     if 'Archivo_Drive_ID' not in df_co_check.columns:
@@ -2617,8 +2676,14 @@ else:
         df_co_check.to_csv(ARCHIVO_CONTRATOS, index=False)
 
 if not os.path.exists(ARCHIVO_TRAMITES):
-    df_vacio_tr = pd.DataFrame(columns=['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario'])
-    df_vacio_tr.to_csv(ARCHIVO_TRAMITES, index=False)
+    df_tramites_nube_inicial = safe_read_sheet("base_tramites", COLS_TRAMITES)
+    if not df_tramites_nube_inicial.empty and 'Usuario_Propietario' in df_tramites_nube_inicial.columns:
+        df_tramites_nube_inicial = df_tramites_nube_inicial[df_tramites_nube_inicial['Usuario_Propietario'] == usuario_actual]
+    if not df_tramites_nube_inicial.empty:
+        df_tramites_nube_inicial.to_csv(ARCHIVO_TRAMITES, index=False)
+    else:
+        df_vacio_tr = pd.DataFrame(columns=COLS_TRAMITES)
+        df_vacio_tr.to_csv(ARCHIVO_TRAMITES, index=False)
 else:
     df_tr_check = leer_csv_local(ARCHIVO_TRAMITES, COLS_TRAMITES)
     if 'Comprobante_Drive_ID' not in df_tr_check.columns:
@@ -2626,8 +2691,12 @@ else:
         df_tr_check.to_csv(ARCHIVO_TRAMITES, index=False)
 
 if not os.path.exists(ARCHIVO_ESTADO_DIARIO):
-    df_vacio_ed = pd.DataFrame(columns=['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64', 'Doc_Drive_ID'])
-    df_vacio_ed.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
+    df_ed_nube_inicial = safe_read_sheet("base_estado_diario", COLS_ESTADO_DIARIO)
+    if not df_ed_nube_inicial.empty:
+        df_ed_nube_inicial.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
+    else:
+        df_vacio_ed = pd.DataFrame(columns=COLS_ESTADO_DIARIO)
+        df_vacio_ed.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
 else:
     df_ed_check = leer_csv_local(ARCHIVO_ESTADO_DIARIO, COLS_ESTADO_DIARIO)
     if 'Doc_Drive_ID' not in df_ed_check.columns:
@@ -2635,7 +2704,13 @@ else:
         df_ed_check.to_csv(ARCHIVO_ESTADO_DIARIO, index=False)
 
 if not os.path.exists(ARCHIVO_MENSAJES):
-    pd.DataFrame(columns=['ID', 'Fecha', 'De', 'Para', 'Mensaje']).to_csv(ARCHIVO_MENSAJES, index=False)
+    # Mensajes es una hoja global (no por usuario), así que aquí no se filtra
+    # por Usuario_Propietario, se reconstruye completa.
+    df_msgs_nube_inicial = safe_read_sheet("base_mensajes_global", COLS_MENSAJES)
+    if not df_msgs_nube_inicial.empty:
+        df_msgs_nube_inicial.to_csv(ARCHIVO_MENSAJES, index=False)
+    else:
+        pd.DataFrame(columns=COLS_MENSAJES).to_csv(ARCHIVO_MENSAJES, index=False)
 
 # --- NOTIFICADOR ESTILO OUTLOOK (TOAST + INSIGNIA PERSISTENTE EN EL MENÚ) ---
 BADGE_MENSAJES_NO_LEIDOS = 0
@@ -3719,10 +3794,12 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         TEXTO DEL DOCUMENTO ADJUNTO:
                         {texto_pdf}
                         
-                        Tu tarea es proponer una estrategia jurídica basándote estrictamente en la legislación chilena vigente.
+                        {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+                        
+                        Tu tarea es proponer una estrategia jurídica basándote estrictamente en la legislación chilena vigente, con fundamentos lo más completos posible.
                         Estructura tu respuesta en:
-                        1. **Análisis del Escenario:** Identifica riesgos y plazos procesales.
-                        2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer.
+                        1. **Análisis del Escenario:** Identifica riesgos y plazos procesales, citando las normas exactas que los rigen.
+                        2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer, con su fundamento legal (artículos exactos) y, cuando corresponda, el criterio jurisprudencial general aplicable.
                         3. **Siguientes Pasos:** Tareas inmediatas a ejecutar.
                         """
                         
@@ -5194,6 +5271,11 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
                 }
                 df_msgs_todos = pd.concat([df_msgs_todos, pd.DataFrame([nuevo_msj])], ignore_index=True)
                 df_msgs_todos.to_csv(ARCHIVO_MENSAJES, index=False)
+                # Faltaba esto: la Mensajería nunca se había estado guardando en
+                # Google Sheets, solo en el archivo local (que se borra en cada
+                # reinicio del sistema) — por eso los mensajes desaparecían.
+                dn_msgs = safe_read_sheet("base_mensajes_global", COLS_MENSAJES)
+                safe_update_sheet("base_mensajes_global", pd.concat([dn_msgs, pd.DataFrame([nuevo_msj])], ignore_index=True))
                 st.rerun()
 
 # 10. CLIENTES DIRECTOS (FICHA COMPLETA Y RELACIONAL)
@@ -6120,10 +6202,13 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         INSTRUCCIONES DE FONDO:
                         {instrucciones_red}
                         
+                        {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+                        (Para este escrito en particular: no agregues la nota sugerida en la regla 4 dentro del texto final, ya que debe quedar limpio y listo para copiar — solo aplica las reglas 1 a 3.)
+                        
                         Estructura requerida:
                         1. Suma(s) y Tribunal.
                         2. Individualización de la parte y personería.
-                        3. Cuerpo del escrito (hechos y derecho de forma persuasiva y técnica, citando la ley chilena).
+                        3. Cuerpo del escrito (hechos y derecho de forma persuasiva, técnica y lo más completa posible, citando la ley chilena exacta y, cuando corresponda, el criterio jurisprudencial general).
                         4. Petitorio claro ("POR TANTO: Ruego a S.S...").
                         5. Peticiones subsidiarias o un "Otrosí" si corresponde según las instrucciones.
                         
@@ -6281,7 +6366,10 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         
                         Contexto adicional entregado por el abogado: {contexto_adicional_esc if contexto_adicional_esc.strip() else "(sin contexto adicional)"}
                         
-                        Entrega el análisis estructurado en secciones claras con títulos, indicando en cada punto si CUMPLE, CUMPLE PARCIALMENTE o NO CUMPLE, seguido de la explicación y recomendación concreta.
+                        {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+                        En cada punto del análisis, cita el artículo exacto del Código Orgánico de Tribunales, Código Civil u otra norma aplicable que sustente la observación, siguiendo las reglas anteriores.
+                        
+                        Entrega el análisis estructurado en secciones claras con títulos, indicando en cada punto si CUMPLE, CUMPLE PARCIALMENTE o NO CUMPLE, seguido de la explicación, la norma legal que la sustenta, y recomendación concreta.
                         """
                         
                         todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
@@ -6348,8 +6436,14 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         
         ARCHIVO_DOCS_ESC = "base_documentos_clientes.csv"
         if not os.path.exists(ARCHIVO_DOCS_ESC):
-            pd.DataFrame(columns=['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']).to_csv(ARCHIVO_DOCS_ESC, index=False)
-        df_docs_esc = leer_csv_local(ARCHIVO_DOCS_ESC, ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida'])
+            # Mismo arreglo que en el portal del cliente: intenta reconstruir
+            # desde la nube antes de partir con un archivo vacío de verdad.
+            df_docs_esc_nube_inicial = safe_read_sheet("base_documentos_clientes", COLS_DOCS)
+            if not df_docs_esc_nube_inicial.empty:
+                df_docs_esc_nube_inicial.to_csv(ARCHIVO_DOCS_ESC, index=False)
+            else:
+                pd.DataFrame(columns=COLS_DOCS).to_csv(ARCHIVO_DOCS_ESC, index=False)
+        df_docs_esc = leer_csv_local(ARCHIVO_DOCS_ESC, COLS_DOCS)
         
         with st.form("form_solicitar_docs_escritura", clear_on_submit=True):
             nombre_cliente_esc_doc = st.text_input("Nombre completo del cliente (debe coincidir exactamente con el usado al generar la escritura)")
