@@ -1173,7 +1173,7 @@ COLS_ENCARGOS = ['ID_Encargo', 'Nombre_Encargante', 'RUT_Encargante', 'Fecha_Enc
 COLS_PAGOS_HONORARIOS = ['ID_Pago', 'Fecha_Pago', 'Cliente', 'ROL', 'Monto_Cuota', 'Numero_Cuota', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
-COLS_DOCS = ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']
+COLS_DOCS = ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida', 'Link_Externo']
 COLS_ESTADO_DIARIO = ['ID_ED', 'Fecha_Estado', 'ROL', 'Tribunal', 'Resolucion_Extracto', 'Doc_Nombre', 'Doc_B64', 'Doc_Drive_ID']
 COLS_MENSAJES = ['ID', 'Fecha', 'De', 'Para', 'Mensaje']
 @st.cache_data(ttl=900)
@@ -2430,9 +2430,26 @@ if "cliente_id" in query_params:
                             if not drive_id and not b64_file:
                                 error_drive_real = st.session_state.pop('_ultimo_error_drive', None)
                                 if error_drive_real:
-                                    st.error(f"⚠️ No se pudo guardar: Google Drive no está funcionando ahora mismo (detalle técnico: {error_drive_real}). Avisa a tu abogado para que revise la configuración de Drive.")
+                                    st.error(f"⚠️ No se pudo guardar automáticamente: Google Drive no está funcionando ahora mismo (detalle técnico: {error_drive_real}).")
                                 else:
                                     st.error(msg_tamano if not tamano_ok else "⚠️ No fue posible guardar el archivo. Intenta nuevamente.")
+                                
+                                # Alternativa simple mientras Drive no funcione: el archivo
+                                # es demasiado grande para guardarlo automáticamente, así
+                                # que se ofrece subirlo a tu PROPIO Google Drive personal
+                                # (gratis, sin configuración) y pegar el link acá, en vez
+                                # de quedar completamente bloqueado.
+                                st.info("💡 **Alternativa:** sube el archivo a tu propio Google Drive (Menú → Compartir → 'Cualquier persona con el enlace') y pega el link abajo.")
+                                link_externo_doc = st.text_input("Pega aquí el link de Google Drive", key=f"link_ext_{row['ID_Req']}")
+                                if st.button("💾 Guardar link", key=f"btn_link_ext_{row['ID_Req']}"):
+                                    if link_externo_doc.strip():
+                                        df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Link_Externo', 'Fecha_Subida']] = ['✅ Completado (link externo)', link_externo_doc.strip(), datetime.now().strftime("%d/%m/%Y")]
+                                        df_docs.to_csv(ARCHIVO_DOCS, index=False)
+                                        safe_update_sheet("base_documentos_clientes", df_docs)
+                                        st.success("¡Link guardado!")
+                                        st.rerun()
+                                    else:
+                                        st.error("Pega un link válido primero.")
                             else:
                                 df_docs.loc[df_docs['ID_Req'] == row['ID_Req'], ['Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida']] = ['✅ Completado', b64_file, drive_id, datetime.now().strftime("%d/%m/%Y")]
                                 df_docs.to_csv(ARCHIVO_DOCS, index=False)
@@ -4971,17 +4988,21 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     st.markdown(f"**{d_row['Documento_Nombre']}**")
                                     st.write(f"Fecha de carga: {d_row.get('Fecha_Subida', '--')}")
                                 with cd2:
-                                    if d_row['Estado'] == '✅ Completado':
+                                    if str(d_row['Estado']).startswith('✅ Completado'):
                                         st.markdown("<span style='color:#57a15a; font-weight:bold;'>✅ Recibido</span>", unsafe_allow_html=True)
                                     else:
                                         st.markdown("<span style='color:#ff5630; font-weight:bold;'>❌ Pendiente</span>", unsafe_allow_html=True)
                                 with cd3:
-                                    if d_row['Estado'] == '✅ Completado':
-                                        bytes_descarga = obtener_bytes_adjunto(d_row, 'Archivo_Drive_ID', 'Archivo_B64')
-                                        if bytes_descarga is not None:
-                                            st.download_button("📥 Descargar", data=bytes_descarga, file_name=f"{d_row['Documento_Nombre'].replace(' ', '_')}_{token_para_link}.pdf", key=f"dl_abog_{d_row['ID_Req']}")
+                                    if str(d_row['Estado']).startswith('✅ Completado'):
+                                        link_ext_doc = d_row.get('Link_Externo', '')
+                                        if pd.notna(link_ext_doc) and str(link_ext_doc).strip():
+                                            st.markdown(f"[🔗 Abrir link]({link_ext_doc})")
                                         else:
-                                            st.caption("⚠️ No se pudo recuperar el archivo.")
+                                            bytes_descarga = obtener_bytes_adjunto(d_row, 'Archivo_Drive_ID', 'Archivo_B64')
+                                            if bytes_descarga is not None:
+                                                st.download_button("📥 Descargar", data=bytes_descarga, file_name=f"{d_row['Documento_Nombre'].replace(' ', '_')}_{token_para_link}.pdf", key=f"dl_abog_{d_row['ID_Req']}")
+                                            else:
+                                                st.caption("⚠️ No se pudo recuperar el archivo.")
                                     else:
                                         if st.button("🗑️", key=f"del_req_{d_row['ID_Req']}"):
                                             df_docs_db = df_docs_db.drop(idx_d)
