@@ -911,9 +911,58 @@ def leer_csv_local(path, default_cols=None):
 # de vuelta al guardado en base64 (comportamiento anterior), respetando el
 # límite de tamaño de Sheets.
 
+# =====================================================================
+# 🔑 CONEXIÓN OAUTH CON EL DRIVE PERSONAL DEL ABOGADO
+# =====================================================================
+# Las cuentas de servicio NO tienen cuota de almacenamiento propia en Drive
+# (es una limitación real y documentada de Google), así que cualquier
+# subida a un Drive personal común (no una Unidad Compartida de Google
+# Workspace) falla con "storageQuotaExceeded". La solución que Google
+# recomienda para cuentas Gmail normales es autenticarse como el usuario
+# real (OAuth), usando SU cuota de 15GB gratis, en vez de la cuenta de
+# servicio. Esto requiere una autorización única (ver Panel Admin).
+def _url_autorizacion_drive_oauth():
+    """Genera la URL para que el abogado autorice el acceso a su Drive personal, y el objeto 'flow' para completar el intercambio después."""
+    from google_auth_oauthlib.flow import Flow
+    redirect_uri = st.secrets.get("APP_BASE_URL", "https://jurisyncs.streamlit.app")
+    client_config = {
+        "web": {
+            "client_id": st.secrets["GOOGLE_OAUTH_CLIENT_ID"],
+            "client_secret": st.secrets["GOOGLE_OAUTH_CLIENT_SECRET"],
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": [redirect_uri],
+        }
+    }
+    flow = Flow.from_client_config(client_config, scopes=['https://www.googleapis.com/auth/drive'], redirect_uri=redirect_uri)
+    auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline', include_granted_scopes='true')
+    return auth_url, flow
+
+def _intercambiar_codigo_oauth_drive(flow, codigo_autorizacion):
+    """Cambia el código de autorización (que llega en la URL tras autorizar) por un refresh_token permanente."""
+    flow.fetch_token(code=codigo_autorizacion)
+    return flow.credentials
+
 def _servicio_drive():
     SCOPES_DRIVE = ['https://www.googleapis.com/auth/drive']
-    creds = _obtener_credenciales_google(SCOPES_DRIVE)
+    # Prioridad 1: si ya se completó la autorización OAuth (hay un
+    # refresh_token guardado en Secrets), se usa la cuenta personal del
+    # abogado, que sí tiene cuota de almacenamiento propia.
+    if "GOOGLE_OAUTH_REFRESH_TOKEN" in st.secrets:
+        from google.oauth2.credentials import Credentials as OAuthCredentials
+        creds = OAuthCredentials(
+            token=None,
+            refresh_token=st.secrets["GOOGLE_OAUTH_REFRESH_TOKEN"],
+            client_id=st.secrets["GOOGLE_OAUTH_CLIENT_ID"],
+            client_secret=st.secrets["GOOGLE_OAUTH_CLIENT_SECRET"],
+            token_uri="https://oauth2.googleapis.com/token",
+            scopes=SCOPES_DRIVE,
+        )
+    else:
+        # Respaldo: la cuenta de servicio (falla con archivos grandes por la
+        # limitación de storageQuotaExceeded, pero sigue sirviendo para
+        # cuentas de Google Workspace con Unidad Compartida configurada).
+        creds = _obtener_credenciales_google(SCOPES_DRIVE)
     return build('drive', 'v3', credentials=creds)
 
 def subir_archivo_drive(nombre_archivo: str, contenido_bytes: bytes, mime_type: str = 'application/octet-stream'):
@@ -6049,7 +6098,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
     # Aseguramos cargar la base de usuarios actualizada desde la nube
     df_usuarios_admin = safe_read_sheet("base_usuarios", COLS_USUARIOS)
     
-    tab_crear, tab_editar, tab_vision, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Autorizar Planes", "👁️ Visión Global", "☢️ Zona de Peligro"])
+    tab_crear, tab_editar, tab_vision, tab_drive_oauth, tab_peligro = st.tabs(["➕ Crear Nuevo Usuario", "🔄 Autorizar Planes", "👁️ Visión Global", "🔑 Conectar Drive", "☢️ Zona de Peligro"])
     
     with tab_crear:
         with st.container(border=True):
@@ -6164,6 +6213,50 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                 st.dataframe(df_full_tareas[['Usuario_Propietario', 'Titulo', 'Estado', 'Fecha_Vencimiento']], use_container_width=True)
             else: st.info("No hay tareas creadas.")
             st.markdown("</div>", unsafe_allow_html=True)
+
+    with tab_drive_oauth:
+        st.subheader("🔑 Conectar tu Google Drive personal")
+        st.caption("Las cuentas de servicio no tienen cuota de almacenamiento propia en Drive (limitación real de Google). Esta conexión hace que los archivos grandes se guarden usando tu cuenta personal de Google (15GB gratis), en vez de la cuenta de servicio.")
+        
+        if "GOOGLE_OAUTH_REFRESH_TOKEN" in st.secrets:
+            st.success("✅ Ya tienes tu Drive personal conectado. Los archivos grandes deberían guardarse ahí automáticamente.")
+            st.caption("Si quieres reconectar (por ejemplo, con otra cuenta de Google), sigue los pasos de abajo de nuevo — la nueva autorización reemplaza a la anterior en Secrets.")
+        
+        if "GOOGLE_OAUTH_CLIENT_ID" not in st.secrets or "GOOGLE_OAUTH_CLIENT_SECRET" not in st.secrets:
+            st.warning("⚠️ Primero necesitas crear credenciales OAuth (paso único, distinto a la cuenta de servicio que ya tienes).")
+            st.markdown("""
+            **Cómo crearlas:**
+            1. Ve a [console.cloud.google.com](https://console.cloud.google.com), proyecto `jurisync-libre`.
+            2. Menú → "APIs y servicios" → "Credenciales" → "Crear credenciales" → **"ID de cliente de OAuth"**.
+            3. Tipo de aplicación: **"Aplicación web"**.
+            4. En "URI de redireccionamiento autorizados", agrega la URL exacta de tu app (ej: `https://jurisyncs.streamlit.app`).
+            5. Crea, y copia el **"ID de cliente"** y el **"Secreto del cliente"** que te muestra.
+            6. Agrégalos a tus Secrets de Streamlit:
+            ```
+            GOOGLE_OAUTH_CLIENT_ID = "tu_id_de_cliente"
+            GOOGLE_OAUTH_CLIENT_SECRET = "tu_secreto_de_cliente"
+            APP_BASE_URL = "https://jurisyncs.streamlit.app"
+            ```
+            7. Guarda los Secrets, espera a que la app se reinicie, y vuelve a esta pestaña.
+            """)
+        else:
+            # Ya hay credenciales OAuth configuradas: se puede iniciar la autorización.
+            parametros_url = st.query_params
+            if "code" in parametros_url:
+                st.info("🔄 Terminando la autorización...")
+                try:
+                    _, flow_pendiente = _url_autorizacion_drive_oauth()
+                    credenciales_obtenidas = _intercambiar_codigo_oauth_drive(flow_pendiente, parametros_url["code"])
+                    st.success("✅ ¡Autorización exitosa! Copia este código y pégalo en tus Secrets de Streamlit:")
+                    st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{credenciales_obtenidas.refresh_token}"', language="toml")
+                    st.warning("⚠️ Este código es una llave de acceso a tu Drive — trátalo como una contraseña. Después de copiarlo a Secrets, no lo compartas ni lo dejes visible en ningún otro lado.")
+                    st.query_params.clear()
+                except Exception as e:
+                    st.error(f"⚠️ No se pudo completar la autorización. Detalle técnico: {e}")
+            else:
+                url_auth, _ = _url_autorizacion_drive_oauth()
+                st.markdown(f"### [👉 Haz clic aquí para autorizar tu Drive personal]({url_auth})")
+                st.caption("Te va a llevar a una pantalla de Google pidiéndote iniciar sesión y dar permiso — es normal que Google muestre una advertencia de 'app no verificada' (porque es tu propia app, no una app pública), puedes continuar igual haciendo clic en 'Avanzado' → 'Ir a JuriSync (no seguro)'.")
 
     with tab_peligro:
         st.subheader("Borrón y Cuenta Nueva (Limpieza Estricta)")
