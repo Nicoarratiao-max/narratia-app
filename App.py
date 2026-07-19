@@ -3572,6 +3572,23 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
                         df_causas_enc.to_csv(ARCHIVO_BD, index=False)
                         dn_causa_encargo = safe_read_sheet("base_causas", COLS_CAUSAS)
                         safe_update_sheet("base_causas", pd.concat([dn_causa_encargo, pd.DataFrame([nueva_causa_encargo])], ignore_index=True))
+                        
+                        # Faltaba esto: crear también el registro del Cliente (no solo la
+                        # causa). Sin esto, la ficha del cliente no encontraba a nadie con
+                        # ese RUT y mostraba el nombre genérico de respaldo "Cliente
+                        # Histórico" en vez del nombre real de quien hizo el encargo.
+                        rut_encargo_limpio = re.sub(r'[^0-9kK]', '', rut_encargante).upper()
+                        if rut_encargo_limpio:
+                            df_clientes_enc = safe_read_sheet("base_clientes", COLS_CLIENTES)
+                            ya_existe_cliente_enc = (not df_clientes_enc.empty) and df_clientes_enc['RUT'].astype(str).apply(lambda r: re.sub(r'[^0-9kK]', '', r).upper()).eq(rut_encargo_limpio).any()
+                            if not ya_existe_cliente_enc:
+                                nuevo_cliente_enc = {
+                                    'RUT': rut_encargante.strip().upper(), 'Nombre': nombre_encargante.strip(),
+                                    'Telefono': '', 'Correo': '', 'Clave_unica': '', 'Direccion': '',
+                                    'Usuario_Propietario': usuario_actual
+                                }
+                                df_clientes_enc = pd.concat([df_clientes_enc, pd.DataFrame([nuevo_cliente_enc])], ignore_index=True)
+                                safe_update_sheet("base_clientes", df_clientes_enc)
                     
                     st.success("✅ Encargo registrado" + (" y reflejado en Contabilidad." if monto_limpio_encargo > 0 else "."))
                     st.rerun()
@@ -5409,7 +5426,17 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 # sin el filtro de privacidad antes de guardar, para no
                                 # borrar los clientes del resto del equipo.
                                 df_clientes_completo_edit = safe_read_sheet("base_clientes", COLS_CLIENTES)
-                                df_clientes_completo_edit.loc[df_clientes_completo_edit['RUT'] == rut_actual, ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                existe_fila_cliente = (not df_clientes_completo_edit.empty) and (df_clientes_completo_edit['RUT'] == rut_actual).any()
+                                if existe_fila_cliente:
+                                    df_clientes_completo_edit.loc[df_clientes_completo_edit['RUT'] == rut_actual, ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                else:
+                                    # No existía como registro real de Cliente todavía (por
+                                    # ejemplo, alguien creado solo a través de un Encargo o una
+                                    # causa antigua) — antes esto hacía que "Guardar" no
+                                    # guardara nada, en silencio, porque intentaba actualizar
+                                    # una fila que no existía. Ahora, si no existe, se crea.
+                                    fila_nueva_cliente = {'Nombre': n_nom, 'RUT': n_rut, 'Telefono': n_tel, 'Correo': n_cor, 'Clave_unica': n_cla, 'Direccion': n_dom, 'Usuario_Propietario': usuario_actual}
+                                    df_clientes_completo_edit = pd.concat([df_clientes_completo_edit, pd.DataFrame([fila_nueva_cliente])], ignore_index=True)
                                 safe_update_sheet("base_clientes", df_clientes_completo_edit)
                                 st.session_state['editando_cli'] = False
                                 st.rerun()
