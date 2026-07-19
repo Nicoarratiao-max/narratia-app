@@ -3163,6 +3163,20 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     df_causas_totales = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
     df_tareas_totales = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
     
+    # Si el archivo local está vacío (por ejemplo, justo después de un
+    # reinicio del sistema, antes de que se reconstruya solo), se revisa
+    # directo en Google Sheets antes de mostrar el panel como si no hubiera
+    # nada — para que Inicio nunca dependa de que el caché local ya se haya
+    # reconstruido a tiempo.
+    if df_causas_totales.empty:
+        df_causas_nube_inicio = safe_read_sheet("base_causas", COLS_CAUSAS)
+        if not df_causas_nube_inicio.empty and 'Usuario_Propietario' in df_causas_nube_inicio.columns:
+            df_causas_totales = df_causas_nube_inicio[df_causas_nube_inicio['Usuario_Propietario'] == usuario_actual]
+    if df_tareas_totales.empty:
+        df_tareas_nube_inicio = safe_read_sheet("base_tareas", COLS_TAREAS)
+        if not df_tareas_nube_inicio.empty and 'Usuario_Propietario' in df_tareas_nube_inicio.columns:
+            df_tareas_totales = df_tareas_nube_inicio[df_tareas_nube_inicio['Usuario_Propietario'] == usuario_actual]
+    
     cant_causas = len(df_causas_totales) if not df_causas_totales.empty else 0
     cant_clientes = len(df_causas_totales['Cliente'].dropna().unique()) if not df_causas_totales.empty and 'Cliente' in df_causas_totales.columns else 0
     
@@ -4368,6 +4382,14 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         ARCHIVO_TAREAS = f"base_tareas_{_propietario_vista}.csv"
     
     df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+    if df_causas.empty:
+        # Mismo respaldo que en Inicio y en la ficha del cliente: si el
+        # archivo local está vacío, se revisa la nube directamente antes de
+        # mostrar la lista de causas como si no hubiera ninguna.
+        _propietario_para_filtro = _propietario_vista if (ES_ADMIN_NARRATIA and _propietario_vista) else usuario_actual
+        df_causas_nube_causas = safe_read_sheet("base_causas", COLS_CAUSAS)
+        if not df_causas_nube_causas.empty and 'Usuario_Propietario' in df_causas_nube_causas.columns:
+            df_causas = df_causas_nube_causas[df_causas_nube_causas['Usuario_Propietario'] == _propietario_para_filtro]
     df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
     if not ES_ADMIN_NARRATIA and not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
         df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
@@ -5655,6 +5677,11 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
     st.markdown("<span style='color:#6b778c;'>Revisa y gestiona todas tus tareas</span>", unsafe_allow_html=True)
     
     df_t = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
+    if df_t.empty:
+        # Mismo respaldo que en Inicio, Causas y la ficha del cliente.
+        df_t_nube_tareas = safe_read_sheet("base_tareas", COLS_TAREAS)
+        if not df_t_nube_tareas.empty and 'Usuario_Propietario' in df_t_nube_tareas.columns:
+            df_t = df_t_nube_tareas[df_t_nube_tareas['Usuario_Propietario'] == usuario_actual]
     df_t['Propietario_Vista'] = usuario_actual
     
     ES_ADMIN_TAREAS = usuario_actual == "Narratia"
