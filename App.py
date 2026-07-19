@@ -3138,7 +3138,20 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
 # 2. CONTABILIDAD
 elif st.session_state['menu_radio'] == "💰 Contabilidad":
     st.title("💰 Panel de Honorarios y Contabilidad")
-    df_c = leer_csv_local(ARCHIVO_BD)
+    df_c = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+    
+    # Blindaje: si alguna causa tiene el campo de honorarios vacío o en un
+    # formato inconsistente (texto, vacío, etc.), antes esto podía romper
+    # TODA la pantalla de Contabilidad con un error de tipos (comparar texto
+    # contra un número), haciendo que pareciera que "se borró todo" cuando en
+    # realidad los datos seguían intactos, solo que la pantalla no cargaba.
+    # Ahora se fuerza a número de forma seguro antes de cualquier comparación.
+    if not df_c.empty:
+        for _col_num in ['Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas']:
+            if _col_num in df_c.columns:
+                df_c[_col_num] = pd.to_numeric(df_c[_col_num], errors='coerce').fillna(0)
+        if 'Estado_Honorarios' in df_c.columns:
+            df_c['Estado_Honorarios'] = df_c['Estado_Honorarios'].astype(str)
     
     ES_ADMIN_CONTA = usuario_actual == "Narratia"
     
@@ -3146,7 +3159,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
     
     # --- PESTAÑA: GESTIÓN POR CLIENTE (funcionalidad existente) ---
     with tab_conta_cliente:
-        df_activos = df_c[(df_c['Total_Honorarios'] > 0) & (df_c['Estado_Honorarios'] == "Pendientes")].copy()
+        df_activos = df_c[(df_c['Total_Honorarios'] > 0) & (df_c['Estado_Honorarios'] == "Pendientes")].copy() if not df_c.empty else pd.DataFrame()
         
         if df_activos.empty:
             st.info("No hay contratos activos con honorarios pendientes de pago.")
@@ -3257,8 +3270,9 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             for arch_conta in glob.glob("base_causas_*.csv"):
                 propietario_conta = arch_conta.replace("base_causas_", "").replace(".csv", "")
                 if propietario_conta != usuario_actual:
-                    t_conta = leer_csv_local(arch_conta)
+                    t_conta = leer_csv_local(arch_conta, COLS_CAUSAS)
                     if not t_conta.empty and 'Total_Honorarios' in t_conta.columns:
+                        t_conta['Total_Honorarios'] = pd.to_numeric(t_conta['Total_Honorarios'], errors='coerce').fillna(0)
                         df_todos_conta = pd.concat([df_todos_conta, t_conta[t_conta['Total_Honorarios'] > 0]], ignore_index=True)
             for arch_pago in glob.glob("base_pagos_honorarios_*.csv"):
                 propietario_pago = arch_pago.replace("base_pagos_honorarios_", "").replace(".csv", "")
