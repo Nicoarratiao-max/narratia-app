@@ -3106,7 +3106,10 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
             try:
                 lista_comentarios = json.loads(bloque_comentario)
                 for com in lista_comentarios:
-                    if "[📎 Archivo adjunto:" in com.get('texto', ''): 
+                    # Detecta tanto los adjuntos nuevos (guardados de verdad, con
+                    # Drive/base64) como el texto de los comentarios viejos de
+                    # antes de este arreglo, que solo tenían el nombre anotado.
+                    if com.get('archivo_drive_id') or com.get('archivo_b64') or "[📎 Archivo adjunto:" in com.get('texto', ''):
                         documentos_efectivos += 1
             except: 
                 pass
@@ -4713,14 +4716,40 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 with st.expander(f"💬 Comentarios ({len(comentarios_js)})", expanded=st.session_state.get(key_com_abiertos, False)):
                                     if not comentarios_js:
                                         st.caption("No hay comentarios todavía.")
-                                    for c in comentarios_js:
-                                        st.markdown(f"""
-                                        <div style='padding:8px 0; border-bottom:1px solid #f4f5f7;'>
-                                            <strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong>
-                                            <span style='color:#6b778c; font-size:12px;'> • {c['fecha']}</span><br>
-                                            <span style='color:#42526e; font-size:14px;'>{c['texto']}</span>
-                                        </div>
-                                        """, unsafe_allow_html=True)
+                                    for idx_com, c in enumerate(comentarios_js):
+                                        c_texto_col, c_borrar_col = st.columns([9, 1])
+                                        with c_texto_col:
+                                            st.markdown(f"""
+                                            <div style='padding:8px 0;'>
+                                                <strong style='color:#172b4d; font-size:14px;'>{c['autor']}</strong>
+                                                <span style='color:#6b778c; font-size:12px;'> • {c['fecha']}</span><br>
+                                                <span style='color:#42526e; font-size:14px;'>{c['texto']}</span>
+                                            </div>
+                                            """, unsafe_allow_html=True)
+                                            # Si el comentario tiene un archivo adjunto guardado de
+                                            # verdad (Drive o base64), se ofrece para descargar. Los
+                                            # comentarios viejos (de antes de este arreglo) solo
+                                            # tenían el nombre escrito como texto, sin archivo real
+                                            # detrás — para esos no aparece el botón, porque no hay
+                                            # nada que descargar.
+                                            if c.get('archivo_drive_id') or c.get('archivo_b64'):
+                                                bytes_com_adj = obtener_bytes_adjunto(c, 'archivo_drive_id', 'archivo_b64')
+                                                if bytes_com_adj is not None:
+                                                    st.download_button(f"📥 {c.get('archivo_nombre', 'archivo')}", data=bytes_com_adj,
+                                                                        file_name=c.get('archivo_nombre', 'archivo.docx'), key=f"dl_com_{tarea['ID_Tarea']}_{idx_com}")
+                                        with c_borrar_col:
+                                            st.markdown("<div style='padding-top:8px;'></div>", unsafe_allow_html=True)
+                                            if st.button("🗑️", key=f"del_com_{tarea['ID_Tarea']}_{idx_com}", help="Eliminar comentario"):
+                                                comentarios_js_actualizado = [x for j, x in enumerate(comentarios_js) if j != idx_com]
+                                                df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js_actualizado)
+                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
+                                                dn_del_com = safe_read_sheet("base_tareas", [])
+                                                if not dn_del_com.empty:
+                                                    dn_del_com.loc[dn_del_com['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js_actualizado)
+                                                    safe_update_sheet("base_tareas", dn_del_com)
+                                                st.session_state[key_com_abiertos] = True
+                                                st.rerun()
+                                        st.markdown("<hr style='margin:2px 0; border-color:#f4f5f7;'>", unsafe_allow_html=True)
                                     
                                     st.markdown("<div style='margin-top:10px;'></div>", unsafe_allow_html=True)
                                     
@@ -4750,8 +4779,19 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             st.rerun()
                                         elif enviar_click:
                                             if texto_com.strip() or adj_coment:
-                                                t_final = texto_com.strip() + (f" <br><em>[📎 Archivo adjunto: {adj_coment.name}]</em>" if adj_coment else "")
-                                                comentarios_js.append({"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": t_final})
+                                                nuevo_comentario = {"autor": nombre_real_usuario, "fecha": datetime.now().strftime("%d/%m/%Y %H:%M"), "texto": texto_com.strip()}
+                                                if adj_coment:
+                                                    # Antes solo se anotaba el nombre del archivo como
+                                                    # texto, sin guardar el archivo de verdad en ningún
+                                                    # lado — por eso nunca se podía descargar después.
+                                                    # Ahora se guarda igual que cualquier otro adjunto
+                                                    # del sistema (Drive, con respaldo en base64).
+                                                    drive_id_com, b64_com = guardar_archivo_adjunto(adj_coment.name, adj_coment.getvalue(), adj_coment.type or 'application/octet-stream')
+                                                    nuevo_comentario['archivo_nombre'] = adj_coment.name
+                                                    nuevo_comentario['archivo_drive_id'] = drive_id_com
+                                                    nuevo_comentario['archivo_b64'] = b64_com
+                                                    nuevo_comentario['texto'] = (texto_com.strip() + f" <br><em>[📎 {adj_coment.name}]</em>").strip()
+                                                comentarios_js.append(nuevo_comentario)
                                                 df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
                                                 df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
                                                 
