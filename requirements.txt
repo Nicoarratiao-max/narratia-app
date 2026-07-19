@@ -1,4 +1,3 @@
-
 streamlit>=1.34.0
 pandas
 openpyxl
@@ -9,6 +8,7 @@ beautifulsoup4
 lxml
 google-generativeai>=0.8.2
 google-genai
+google-auth-oauthlib
 PyPDF2
 st-gsheets-connection
 extra-streamlit-components
