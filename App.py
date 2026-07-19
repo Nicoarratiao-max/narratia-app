@@ -5605,6 +5605,14 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
 
                 st.subheader("Causas Asociadas Vigentes")
                 df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                if df_causas.empty:
+                    # Si el archivo local está vacío (por ejemplo, justo después de
+                    # un reinicio), se revisa directo en Google Sheets antes de
+                    # decir que "no hay causas" — para no depender de que el
+                    # archivo local ya se haya reconstruido.
+                    df_causas_nube_ficha = safe_read_sheet("base_causas", COLS_CAUSAS)
+                    if not df_causas_nube_ficha.empty and 'Usuario_Propietario' in df_causas_nube_ficha.columns:
+                        df_causas = df_causas_nube_ficha[df_causas_nube_ficha['Usuario_Propietario'] == usuario_actual]
                 if not df_causas.empty:
                     causas_cli = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
                     if causas_cli.empty:
