@@ -595,7 +595,85 @@ CODIGOS_BCN_IDNORMA = {
     "Código de Procedimiento Civil": "22740",
     "Código Orgánico de Tribunales": "25563",
     "Código Procesal Penal": "176595",
+    "Código Penal": "1984",
+    "Código de Comercio": "1974",
+    "Código Tributario": "6374",
+    # Ojo con este: el Código del Trabajo tuvo un texto refundido más
+    # reciente (2003) que reemplazó a uno anterior (1994, idNorma 3471,
+    # ya obsoleto). Se usa el idNorma correcto y vigente: 207436.
+    "Código del Trabajo": "207436",
 }
+
+def buscar_ley_bcn(termino_busqueda, max_resultados=10):
+    """
+    Busca CUALQUIER ley chilena por palabra clave o número, usando el motor
+    de búsqueda oficial de datos abiertos de BCN — en vivo, no una base
+    guardada. Guardar "todas las leyes" de antemano no es viable (son
+    decenas de miles, y quedarían desactualizadas apenas el Congreso
+    modifique algo); en cambio, esto consulta el catálogo real de BCN al
+    momento, y devuelve el idNorma exacto de las que coincidan, listas
+    para traer su texto completo con obtener_texto_norma_bcn().
+    """
+    import csv
+    try:
+        url = "https://nuevo.leychile.cl/servicios/Consulta/script/exportarBSimpleMetas"
+        params = {
+            "cadena": termino_busqueda, "exacta": "0", "itemsporpagina": str(max_resultados),
+            "npagina": "1", "orden": "2", "seleccionado": "0", "tipoviene": "1",
+        }
+        respuesta = requests.get(url, params=params, timeout=30)
+        respuesta.raise_for_status()
+        lector = csv.reader(io.StringIO(respuesta.text), delimiter=';', quotechar='"')
+        filas = list(lector)
+        if len(filas) < 2:
+            return []
+        encabezados = [h.strip() for h in filas[0]]
+        resultados = []
+        for fila in filas[1:max_resultados + 1]:
+            if len(fila) < len(encabezados):
+                continue
+            dic_fila = dict(zip(encabezados, fila))
+            id_norma_encontrado = dic_fila.get('Identificación de la Norma', '').strip()
+            if id_norma_encontrado:
+                resultados.append({
+                    'id_norma': id_norma_encontrado,
+                    'tipo_numero': dic_fila.get('Tipo/Número', ''),
+                    'titulo': dic_fila.get('Título de la Norma', ''),
+                    'fecha_publicacion': dic_fila.get('Fecha de Publicación', ''),
+                    'organismo': dic_fila.get('Organismos', ''),
+                })
+        return resultados
+    except Exception as e:
+        print(f"Error buscando en BCN: {e}")
+        return []
+
+def obtener_texto_norma_bcn(id_norma):
+    """
+    Trae el texto completo y vigente de CUALQUIER norma chilena (no solo
+    los códigos precargados) directo desde BCN, dado su idNorma exacto
+    (el que entrega buscar_ley_bcn). Misma API oficial de datos abiertos.
+    """
+    try:
+        import xml.etree.ElementTree as ET
+        respuesta = requests.get(f"https://www.leychile.cl/Consulta/obtxml?opt=7&idNorma={id_norma}", timeout=30)
+        respuesta.raise_for_status()
+        root = ET.fromstring(respuesta.content)
+        ns = "{http://www.leychile.cl/esquemas}"
+        partes_texto = []
+        for estructura in root.iter(f"{ns}EstructuraFuncional"):
+            texto_elem = estructura.find(f"{ns}Texto")
+            if texto_elem is not None and texto_elem.text:
+                partes_texto.append(texto_elem.text.strip())
+        if not partes_texto:
+            # Algunas normas simples no usan EstructuraFuncional (leyes cortas
+            # de un solo artículo); se intenta con el texto raíz directo.
+            texto_raiz = root.find(f"{ns}Texto")
+            if texto_raiz is not None and texto_raiz.text:
+                partes_texto.append(texto_raiz.text.strip())
+        return "\n\n".join(partes_texto) if partes_texto else None
+    except Exception as e:
+        print(f"Error obteniendo norma desde BCN: {e}")
+        return None
 
 def obtener_articulos_codigo_bcn(nombre_codigo):
     """
@@ -6664,7 +6742,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
     # --- PESTAÑA: CÓDIGOS DE LA REPÚBLICA (conexión real con BCN) ---
     with tab_codigos_bcn:
         st.caption("Texto vigente y actualizado, traído en vivo desde la API de datos abiertos de la Biblioteca del Congreso Nacional (BCN) — la fuente oficial, no una copia guardada que podría quedar desactualizada.")
-        st.info("ℹ️ Por ahora, solo están conectados los códigos cuyo identificador se verificó con certeza. Los demás (Código Penal, de Comercio, del Trabajo, Tributario) se agregarán más adelante una vez confirmados, para no arriesgarse a traer una ley equivocada.")
+        st.info("ℹ️ Hay 8 códigos conectados y verificados con certeza: Civil, Procedimiento Civil, Orgánico de Tribunales, Procesal Penal, Penal, de Comercio, Tributario y del Trabajo. Los demás (Aguas, Minería, Sanitario, etc.) se agregarán más adelante una vez verificados, para no arriesgarse a traer una ley equivocada.")
         
         codigo_elegido_bcn = st.selectbox("Código a consultar", list(CODIGOS_BCN_IDNORMA.keys()))
         termino_bcn = st.text_input("Buscar artículo o palabra clave", placeholder="Ej: 1545, o 'nulidad absoluta'")
@@ -6682,6 +6760,37 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                             st.markdown(texto_art.replace("\n", "  \n"))
                 else:
                     st.warning("No se encontraron coincidencias, o hubo un problema consultando BCN. Intenta con otro término.")
+        
+        st.markdown("---")
+        st.markdown("#### 🔎 Buscar cualquier otra ley (no solo los códigos)")
+        st.caption("Guardar 'todas las leyes' de antemano no es viable — son decenas de miles y quedarían desactualizadas. Esto busca en el catálogo real de BCN al momento, y trae el texto solo de la que elijas.")
+        termino_ley_general = st.text_input("Nombre, número o tema de la ley", placeholder="Ej: 'ley de divorcio', o 'ley 21719 protección de datos'", key="busqueda_ley_general_bcn")
+        
+        if st.button("🔎 Buscar Ley", key="btn_buscar_ley_general"):
+            if not termino_ley_general.strip():
+                st.error("⚠️ Escribe qué ley buscar.")
+            else:
+                with st.spinner("Consultando el catálogo de BCN..."):
+                    resultados_leyes = buscar_ley_bcn(termino_ley_general)
+                if resultados_leyes:
+                    st.session_state['resultados_leyes_bcn'] = resultados_leyes
+                else:
+                    st.warning("No se encontraron leyes con ese término. Prueba con otras palabras.")
+        
+        if st.session_state.get('resultados_leyes_bcn'):
+            st.caption(f"{len(st.session_state['resultados_leyes_bcn'])} ley(es) encontrada(s):")
+            for ley_res in st.session_state['resultados_leyes_bcn']:
+                with st.container(border=True):
+                    c1, c2 = st.columns([4, 1])
+                    c1.markdown(f"**{ley_res['tipo_numero']}** — {ley_res['titulo']}")
+                    c1.caption(f"{ley_res['organismo']} · Publicada: {ley_res['fecha_publicacion']}")
+                    if c2.button("📖 Ver texto", key=f"ver_ley_{ley_res['id_norma']}"):
+                        with st.spinner("Trayendo el texto completo desde BCN..."):
+                            texto_ley_completo = obtener_texto_norma_bcn(ley_res['id_norma'])
+                        if texto_ley_completo:
+                            st.session_state[f"texto_ley_{ley_res['id_norma']}"] = texto_ley_completo
+                    if st.session_state.get(f"texto_ley_{ley_res['id_norma']}"):
+                        st.text_area("Texto de la ley:", value=st.session_state[f"texto_ley_{ley_res['id_norma']}"], height=300, key=f"ta_ley_{ley_res['id_norma']}")
 
 # =====================================================================
 # 📜 MÓDULO: ESCRITURAS PÚBLICAS (3 pestañas)
