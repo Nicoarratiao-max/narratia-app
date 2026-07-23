@@ -6582,7 +6582,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         
                         Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resumen": "..."}}
                         """
-                        respuesta_juris_ia = generar_contenido_gemini(prompt_juris)
+                        respuesta_juris_ia = consultar_groq(prompt_juris)
                         datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia))
                         st.session_state['juris_ia_tribunal'] = datos_juris_ia.get('tribunal', '')
                         st.session_state['juris_ia_rol'] = datos_juris_ia.get('rol', '')
