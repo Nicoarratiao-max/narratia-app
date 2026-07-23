@@ -581,6 +581,66 @@ ARANCEL_COLEGIO_VALPARAISO = [
 ]
 
 
+# =====================================================================
+# 📖 CONEXIÓN CON LA API DE DATOS ABIERTOS DE BCN (LeyChile)
+# =====================================================================
+# BCN (Biblioteca del Congreso Nacional) SÍ ofrece una API pública y
+# documentada para su base de legislación (a diferencia de PJUD, que
+# bloquea el acceso automatizado). Solo se incluyen los códigos cuyo
+# identificador (idNorma) fue verificado con certeza contra fuentes
+# oficiales — para evitar el riesgo de traer, por error, el texto de una
+# ley distinta a la que se cree estar consultando.
+CODIGOS_BCN_IDNORMA = {
+    "Código Civil": "172986",
+    "Código de Procedimiento Civil": "22740",
+    "Código Orgánico de Tribunales": "25563",
+    "Código Procesal Penal": "176595",
+}
+
+def obtener_articulos_codigo_bcn(nombre_codigo):
+    """
+    Descarga el texto vigente y actualizado de un código legal chileno
+    directo desde la API oficial de datos abiertos de BCN. Devuelve una
+    lista de (tipo_de_parte, texto) por cada artículo/párrafo del código.
+    """
+    id_norma = CODIGOS_BCN_IDNORMA.get(nombre_codigo)
+    if not id_norma:
+        return None
+    try:
+        import xml.etree.ElementTree as ET
+        respuesta = requests.get(f"https://www.leychile.cl/Consulta/obtxml?opt=7&idNorma={id_norma}", timeout=30)
+        respuesta.raise_for_status()
+        root = ET.fromstring(respuesta.content)
+        ns = "{http://www.leychile.cl/esquemas}"
+        articulos = []
+        for estructura in root.iter(f"{ns}EstructuraFuncional"):
+            tipo_parte = estructura.get('tipoParte', '')
+            texto_elem = estructura.find(f"{ns}Texto")
+            if texto_elem is not None and texto_elem.text:
+                articulos.append((tipo_parte, texto_elem.text.strip()))
+        return articulos
+    except Exception as e:
+        print(f"Error obteniendo código desde BCN: {e}")
+        return None
+
+def buscar_en_codigo_bcn(nombre_codigo, termino_busqueda, max_resultados=5):
+    """
+    Busca un término (palabra clave o número de artículo) dentro del texto
+    fresco de un código legal, obtenido en vivo desde BCN — no una copia
+    guardada que podría quedar desactualizada si la ley cambia.
+    """
+    articulos = obtener_articulos_codigo_bcn(nombre_codigo)
+    if not articulos:
+        return []
+    resultados = []
+    termino_lower = termino_busqueda.lower().strip()
+    for tipo_parte, texto in articulos:
+        if termino_lower in texto.lower():
+            resultados.append(texto)
+        if len(resultados) >= max_resultados:
+            break
+    return resultados
+
 def buscar_jurisprudencia_relevante(texto_busqueda, top_n=3):
     """
     Busca en la biblioteca de jurisprudencia (sentencias que el propio
@@ -6491,7 +6551,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
     st.title("⚖️ Biblioteca de Jurisprudencia")
     st.caption("Sentencias reales de Corte Suprema, Cortes de Apelaciones y tribunales de primera instancia, cargadas por el equipo. El sistema las usa como referencia real al redactar y analizar, sin inventar citas.")
     
-    tab_juris_agregar, tab_juris_buscar = st.tabs(["➕ Agregar Sentencia", "🔍 Buscar en la Biblioteca"])
+    tab_juris_agregar, tab_juris_buscar, tab_codigos_bcn = st.tabs(["➕ Agregar Sentencia", "🔍 Buscar en la Biblioteca", "📖 Códigos de la República (BCN)"])
     
     # --- PESTAÑA: AGREGAR SENTENCIA ---
     with tab_juris_agregar:
@@ -6600,6 +6660,28 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                                 df_juris_del = df_juris_del[df_juris_del['ID'] != fila_juris['ID']]
                                 safe_update_sheet("base_jurisprudencia", df_juris_del)
                                 st.rerun()
+    
+    # --- PESTAÑA: CÓDIGOS DE LA REPÚBLICA (conexión real con BCN) ---
+    with tab_codigos_bcn:
+        st.caption("Texto vigente y actualizado, traído en vivo desde la API de datos abiertos de la Biblioteca del Congreso Nacional (BCN) — la fuente oficial, no una copia guardada que podría quedar desactualizada.")
+        st.info("ℹ️ Por ahora, solo están conectados los códigos cuyo identificador se verificó con certeza. Los demás (Código Penal, de Comercio, del Trabajo, Tributario) se agregarán más adelante una vez confirmados, para no arriesgarse a traer una ley equivocada.")
+        
+        codigo_elegido_bcn = st.selectbox("Código a consultar", list(CODIGOS_BCN_IDNORMA.keys()))
+        termino_bcn = st.text_input("Buscar artículo o palabra clave", placeholder="Ej: 1545, o 'nulidad absoluta'")
+        
+        if st.button("🔍 Buscar en BCN", type="primary", use_container_width=True):
+            if not termino_bcn.strip():
+                st.error("⚠️ Escribe un término o número de artículo a buscar.")
+            else:
+                with st.spinner("Consultando la API de BCN..."):
+                    resultados_bcn = buscar_en_codigo_bcn(codigo_elegido_bcn, termino_bcn)
+                if resultados_bcn:
+                    st.success(f"✅ {len(resultados_bcn)} resultado(s) encontrado(s) en {codigo_elegido_bcn}")
+                    for texto_art in resultados_bcn:
+                        with st.container(border=True):
+                            st.markdown(texto_art.replace("\n", "  \n"))
+                else:
+                    st.warning("No se encontraron coincidencias, o hubo un problema consultando BCN. Intenta con otro término.")
 
 # =====================================================================
 # 📜 MÓDULO: ESCRITURAS PÚBLICAS (3 pestañas)
