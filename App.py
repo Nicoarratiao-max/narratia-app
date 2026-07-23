@@ -581,6 +581,28 @@ ARANCEL_COLEGIO_VALPARAISO = [
 ]
 
 
+def buscar_jurisprudencia_relevante(texto_busqueda, top_n=3):
+    """
+    Busca en la biblioteca de jurisprudencia (sentencias que el propio
+    abogado ha ido cargando) las más relacionadas con el texto de un caso,
+    usando coincidencia de palabras clave sobre la Materia y el Resumen.
+    Solo encuentra sentencias REALES que el usuario cargó — nunca inventa
+    ninguna, evitando el riesgo de citas jurisprudenciales falsas.
+    """
+    df_juris = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
+    if df_juris.empty:
+        return []
+    palabras_busqueda = set(re.findall(r'\w{4,}', texto_busqueda.lower()))
+    resultados = []
+    for _, fila in df_juris.iterrows():
+        texto_fila = f"{fila.get('Materia','')} {fila.get('Resumen','')}"
+        palabras_fila = set(re.findall(r'\w{4,}', str(texto_fila).lower()))
+        interseccion = palabras_busqueda & palabras_fila
+        if interseccion:
+            resultados.append((len(interseccion), fila))
+    resultados.sort(key=lambda x: -x[0])
+    return [r[1] for r in resultados[:top_n] if r[0] > 0]
+
 def buscar_arancel_referencial(texto_busqueda, top_n=3):
     """
     Busca en el Arancel del Colegio de Abogados de Valparaíso las entradas
@@ -656,12 +678,24 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
     redactado, listo para pasar al generador de Word. Usa Gemini
     directamente (sin selección de motor: es la forma más simple).
     """
+    # Se busca en la biblioteca de jurisprudencia (sentencias reales que el
+    # propio abogado cargó) algo relacionado con este escrito. A diferencia
+    # de pedirle a la IA que "recuerde" jurisprudencia (con riesgo de que la
+    # invente), esto son sentencias REALES ya verificadas por el usuario.
+    sentencias_relevantes = buscar_jurisprudencia_relevante(f"{tipo_escrito} {instrucciones_tipo} {contexto_adicional}")
+    bloque_jurisprudencia_real = ""
+    if sentencias_relevantes:
+        bloque_jurisprudencia_real = "\n\nJURISPRUDENCIA REAL DISPONIBLE (de la biblioteca del estudio, verificada, puedes citarla con confianza si es pertinente):\n"
+        for s in sentencias_relevantes:
+            bloque_jurisprudencia_real += f"- {s.get('Tribunal','')}, Rol {s.get('Rol_Causa','')}, {s.get('Fecha_Sentencia','')}: {s.get('Resumen','')}\n"
+    
     prompt_base = f"""
     Actúa como un abogado chileno experto en litigación, redactando una presentación judicial de tipo: {tipo_escrito}.
 
     Instrucciones específicas para este tipo de escrito: {instrucciones_tipo}
 
     Contexto y hechos entregados por el abogado: {contexto_adicional if contexto_adicional.strip() else "(sin contexto adicional escrito, básate solo en los documentos adjuntos)"}
+    {bloque_jurisprudencia_real}
 
     {INSTRUCCION_FUNDAMENTACION_JURIDICA}
 
@@ -1297,6 +1331,8 @@ COLS_CITAS = ['ID_Cita', 'Fecha', 'Hora', 'RUT_Cliente', 'Nombre_Cliente', 'Tele
 COLS_ENCARGOS = ['ID_Encargo', 'Nombre_Encargante', 'RUT_Encargante', 'Fecha_Encargo', 'Fecha_Limite',
                  'Descripcion_Encargo', 'Monto', 'Estado', 'Usuario_Propietario']
 COLS_PAGOS_HONORARIOS = ['ID_Pago', 'Fecha_Pago', 'Cliente', 'ROL', 'Monto_Cuota', 'Numero_Cuota', 'Usuario_Propietario']
+COLS_JURISPRUDENCIA = ['ID', 'Tribunal', 'Rol_Causa', 'Fecha_Sentencia', 'Materia', 'Resumen', 'Archivo_Nombre',
+                        'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Carga', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
 COLS_DOCS = ['ID_Req', 'Cliente_Token', 'Documento_Nombre', 'Estado', 'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Subida', 'Link_Externo']
@@ -2742,6 +2778,7 @@ ARCHIVO_EXCEPCIONES = f"base_excepciones_{usuario_actual}.csv"
 ARCHIVO_CITAS = f"base_citas_{usuario_actual}.csv"
 ARCHIVO_ENCARGOS = f"base_encargos_{usuario_actual}.csv"
 ARCHIVO_PAGOS_HONORARIOS = f"base_pagos_honorarios_{usuario_actual}.csv"
+ARCHIVO_JURISPRUDENCIA = "base_jurisprudencia.csv"  # Compartida por todo el equipo, no por usuario (como Clientes)
 ARCHIVO_POSESION_EFECTIVA = f"base_posesion_efectiva_{usuario_actual}.csv"
 ARCHIVO_TRAMITES = f"base_tramites_{usuario_actual}.csv"
 ARCHIVO_ESTADO_DIARIO = f"base_estado_diario_{usuario_actual}.csv"
@@ -3202,7 +3239,7 @@ with st.sidebar:
                       "📜 Escrituras Públicas", "📋 Posesión Efectiva"]
     GRUPO_ADMINISTRATIVO = ["👥 Clientes", "📄 Contratos", "🗓️ Agenda de Asesorías", "💰 Contabilidad", "📝 Trámites",
                             "📇 Encargos", "📊 Informes", "📥 Excel"]
-    GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA"]  # Solo visibles para plan Full
+    GRUPO_IA = ["🧠 Estrategia", "📝 Redactor IA", "⚖️ Jurisprudencia"]  # Solo visibles para plan Full
     
     if plan_actual == "Básico":
         disponibles = {"🏠 Inicio", "📅 Calendario", "📋 Agenda", "☑️ Tareas", "💼 Causas", "👥 Clientes"}
@@ -6409,6 +6446,13 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                                     
                         modelo = genai.GenerativeModel(modelo_elegido)
                         
+                        sentencias_relevantes_red = buscar_jurisprudencia_relevante(f"{tipo_escrito} {instrucciones_red}")
+                        bloque_juris_redactor = ""
+                        if sentencias_relevantes_red:
+                            bloque_juris_redactor = "\n\nJURISPRUDENCIA REAL DISPONIBLE (de la biblioteca del estudio, verificada, puedes citarla con confianza si es pertinente):\n"
+                            for s in sentencias_relevantes_red:
+                                bloque_juris_redactor += f"- {s.get('Tribunal','')}, Rol {s.get('Rol_Causa','')}, {s.get('Fecha_Sentencia','')}: {s.get('Resumen','')}\n"
+                        
                         prompt_redactor = f"""
                         Actúa como un abogado litigante chileno con impecable ortografía y redacción procesal formal.
                         Debes redactar un escrito judicial completo con los siguientes datos:
@@ -6423,6 +6467,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         
                         INSTRUCCIONES DE FONDO (hechos y detalles concretos del caso, entregados por el abogado):
                         {instrucciones_red}
+                        {bloque_juris_redactor}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
                         (Para este escrito en particular: no agregues la nota sugerida en la regla 4 dentro del texto final, ya que debe quedar limpio y listo para copiar — solo aplica las reglas 1 a 3.)
@@ -6438,6 +6483,123 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         
                     except Exception as e:
                         st.error(f"❌ Hubo un error de conexión: {e}")
+
+# =====================================================================
+# ⚖️ MÓDULO: BIBLIOTECA DE JURISPRUDENCIA
+# =====================================================================
+elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
+    st.title("⚖️ Biblioteca de Jurisprudencia")
+    st.caption("Sentencias reales de Corte Suprema, Cortes de Apelaciones y tribunales de primera instancia, cargadas por el equipo. El sistema las usa como referencia real al redactar y analizar, sin inventar citas.")
+    
+    tab_juris_agregar, tab_juris_buscar = st.tabs(["➕ Agregar Sentencia", "🔍 Buscar en la Biblioteca"])
+    
+    # --- PESTAÑA: AGREGAR SENTENCIA ---
+    with tab_juris_agregar:
+        archivo_sentencia = st.file_uploader("Sube el PDF de la sentencia", type=["pdf"], key="juris_pdf_subir")
+        
+        texto_extraido_sentencia = ""
+        if archivo_sentencia:
+            try:
+                import PyPDF2
+                lector_sent = PyPDF2.PdfReader(archivo_sentencia)
+                texto_extraido_sentencia = "\n".join([p.extract_text() or "" for p in lector_sent.pages])
+            except Exception:
+                pass
+            
+            if texto_extraido_sentencia.strip() and st.button("🤖 Autocompletar datos con IA (opcional)", key="juris_autocompletar"):
+                with st.spinner("Analizando la sentencia..."):
+                    try:
+                        prompt_juris = f"""
+                        Analiza el siguiente texto de una sentencia judicial chilena y extrae:
+                        1. Tribunal que la dictó (Corte Suprema, Corte de Apelaciones de [ciudad], o Tribunal de Primera Instancia [tipo]).
+                        2. Rol de la causa (si aparece).
+                        3. Fecha de la sentencia (si aparece).
+                        4. Materia principal (en pocas palabras, ej: "Nulidad de contrato por vicio del consentimiento").
+                        5. Un resumen de 3-5 líneas del criterio jurídico central que resuelve, con la máxima fidelidad al texto real (sin inventar nada que no esté en el documento).
+                        
+                        TEXTO DE LA SENTENCIA:
+                        {texto_extraido_sentencia[:20000]}
+                        
+                        Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resumen": "..."}}
+                        """
+                        respuesta_juris_ia = generar_contenido_gemini(prompt_juris)
+                        datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia))
+                        st.session_state['juris_ia_tribunal'] = datos_juris_ia.get('tribunal', '')
+                        st.session_state['juris_ia_rol'] = datos_juris_ia.get('rol', '')
+                        st.session_state['juris_ia_fecha'] = datos_juris_ia.get('fecha', '')
+                        st.session_state['juris_ia_materia'] = datos_juris_ia.get('materia', '')
+                        st.session_state['juris_ia_resumen'] = datos_juris_ia.get('resumen', '')
+                        st.success("✅ Datos autocompletados abajo. Revísalos antes de guardar.")
+                    except Exception as e:
+                        st.error(f"⚠️ No se pudo autocompletar: {e}. Puedes llenar los datos a mano igual.")
+        
+        with st.form("form_agregar_jurisprudencia", clear_on_submit=True):
+            c1, c2 = st.columns(2)
+            tribunal_juris = c1.selectbox("Tribunal", ["Corte Suprema", "Corte de Apelaciones", "Tribunal de Primera Instancia"],
+                                          index=["Corte Suprema", "Corte de Apelaciones", "Tribunal de Primera Instancia"].index(st.session_state.get('juris_ia_tribunal')) if st.session_state.get('juris_ia_tribunal') in ["Corte Suprema", "Corte de Apelaciones", "Tribunal de Primera Instancia"] else 0)
+            rol_juris = c2.text_input("Rol de la causa", value=st.session_state.get('juris_ia_rol', ''))
+            fecha_juris = c1.text_input("Fecha de la sentencia", value=st.session_state.get('juris_ia_fecha', ''), placeholder="Ej: 15/03/2025")
+            materia_juris = c2.text_input("Materia principal", value=st.session_state.get('juris_ia_materia', ''), placeholder="Ej: Nulidad de contrato por vicio del consentimiento")
+            resumen_juris = st.text_area("Resumen del criterio jurídico", value=st.session_state.get('juris_ia_resumen', ''), height=120,
+                                          placeholder="Resumen del criterio central que resuelve la sentencia...")
+            
+            if st.form_submit_button("💾 Guardar en la Biblioteca", type="primary", use_container_width=True):
+                if not archivo_sentencia:
+                    st.error("⚠️ Debes subir el PDF de la sentencia.")
+                elif not materia_juris.strip():
+                    st.error("⚠️ Indica al menos la materia principal.")
+                else:
+                    drive_id_juris, b64_juris = guardar_archivo_adjunto(archivo_sentencia.name, archivo_sentencia.getvalue(), 'application/pdf')
+                    nueva_sentencia = {
+                        'ID': str(uuid.uuid4())[:8], 'Tribunal': tribunal_juris, 'Rol_Causa': rol_juris.strip(),
+                        'Fecha_Sentencia': fecha_juris.strip(), 'Materia': materia_juris.strip(), 'Resumen': resumen_juris.strip(),
+                        'Archivo_Nombre': archivo_sentencia.name, 'Archivo_B64': b64_juris, 'Archivo_Drive_ID': drive_id_juris,
+                        'Fecha_Carga': datetime.now().strftime("%d/%m/%Y"), 'Usuario_Propietario': usuario_actual
+                    }
+                    df_juris_guardar = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
+                    df_juris_guardar = pd.concat([df_juris_guardar, pd.DataFrame([nueva_sentencia])], ignore_index=True)
+                    safe_update_sheet("base_jurisprudencia", df_juris_guardar)
+                    for k in ['juris_ia_tribunal', 'juris_ia_rol', 'juris_ia_fecha', 'juris_ia_materia', 'juris_ia_resumen']:
+                        st.session_state.pop(k, None)
+                    st.success("✅ Sentencia agregada a la biblioteca.")
+                    st.rerun()
+    
+    # --- PESTAÑA: BUSCAR EN LA BIBLIOTECA ---
+    with tab_juris_buscar:
+        df_biblioteca_juris = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
+        
+        if df_biblioteca_juris.empty:
+            st.info("Todavía no hay sentencias cargadas en la biblioteca.")
+        else:
+            c_buscar, c_filtro_trib = st.columns([3, 1])
+            busqueda_juris = c_buscar.text_input("Buscar por materia, resumen o rol...", key="busqueda_juris_texto")
+            filtro_tribunal_juris = c_filtro_trib.selectbox("Tribunal", ["Todos", "Corte Suprema", "Corte de Apelaciones", "Tribunal de Primera Instancia"])
+            
+            df_mostrar_juris = df_biblioteca_juris.copy()
+            if filtro_tribunal_juris != "Todos":
+                df_mostrar_juris = df_mostrar_juris[df_mostrar_juris['Tribunal'] == filtro_tribunal_juris]
+            if busqueda_juris.strip():
+                mask_juris = df_mostrar_juris.astype(str).apply(lambda col: col.str.contains(busqueda_juris, case=False, na=False)).any(axis=1)
+                df_mostrar_juris = df_mostrar_juris[mask_juris]
+            
+            st.caption(f"{len(df_mostrar_juris)} sentencia(s) encontrada(s)")
+            for _, fila_juris in df_mostrar_juris.iloc[::-1].iterrows():
+                with st.container(border=True):
+                    c1, c2 = st.columns([5, 1.3])
+                    with c1:
+                        st.markdown(f"**{fila_juris['Tribunal']}** — Rol {fila_juris.get('Rol_Causa','—')} — {fila_juris.get('Fecha_Sentencia','—')}")
+                        st.markdown(f"*{fila_juris.get('Materia','')}*")
+                        st.caption(fila_juris.get('Resumen', ''))
+                    with c2:
+                        bytes_juris_desc = obtener_bytes_adjunto(fila_juris, 'Archivo_Drive_ID', 'Archivo_B64')
+                        if bytes_juris_desc is not None:
+                            st.download_button("📥 PDF", data=bytes_juris_desc, file_name=fila_juris.get('Archivo_Nombre', 'sentencia.pdf'), key=f"dl_juris_{fila_juris['ID']}")
+                        if usuario_actual == "Narratia" or fila_juris['Usuario_Propietario'] == usuario_actual:
+                            if st.button("🗑️", key=f"del_juris_{fila_juris['ID']}"):
+                                df_juris_del = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
+                                df_juris_del = df_juris_del[df_juris_del['ID'] != fila_juris['ID']]
+                                safe_update_sheet("base_jurisprudencia", df_juris_del)
+                                st.rerun()
 
 # =====================================================================
 # 📜 MÓDULO: ESCRITURAS PÚBLICAS (3 pestañas)
