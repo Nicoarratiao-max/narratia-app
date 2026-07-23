@@ -692,6 +692,83 @@ TIPOS_ESCRITOS_JUDICIALES = {
     "Otro tipo de presentación": "Redacta la presentación judicial exactamente según las instrucciones y el contexto que entregue el abogado, sin asumir un formato predeterminado.",
 }
 
+# =====================================================================
+# 📝 ESTRUCTURAS DETALLADAS POR TIPO DE ESCRITO — REDACTOR IA
+# =====================================================================
+# A diferencia del catálogo genérico de arriba (una línea por tipo), este es
+# específico para el Redactor IA: da la ESTRUCTURA PROCESAL exacta esperada
+# para cada tipo de escrito, distinguiendo entre escritos DE FONDO (largos,
+# con fundamentos extensos) y de MERA TRAMITACIÓN (cortos, directos al
+# punto, sin desarrollar fundamentos extensos innecesarios).
+ESTRUCTURAS_REDACTOR_IA = {
+    "Demanda (Ordinaria)": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO — extenso y fundamentado):
+    EN LO PRINCIPAL: Demanda [tipo de acción]; PRIMER OTROSÍ: Acompaña documentos; SEGUNDO OTROSÍ: Patrocinio y poder.
+    Cuerpo: I. LOS HECHOS (relato cronológico y detallado de los antecedentes fácticos); II. EL DERECHO (fundamentos jurídicos: la acción, los requisitos legales que la configuran, doctrina y normativa aplicable); III. LA CUANTÍA (si corresponde).
+    Petitorio: "POR TANTO, en mérito de lo expuesto y lo dispuesto en los artículos [citar], a US. RUEGO tener por interpuesta demanda de [tipo] en contra de [demandado], ya individualizado, admitirla a tramitación, y en definitiva, acogerla en todas sus partes, condenando al demandado a [petición concreta], con expresa condena en costas."
+    """,
+    "Demanda Ejecutiva": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO):
+    EN LO PRINCIPAL: Demanda Ejecutiva; PRIMER OTROSÍ: Acompaña título ejecutivo y documentos; SEGUNDO OTROSÍ: Forma de notificación si corresponde; TERCER OTROSÍ: Patrocinio y poder.
+    Cuerpo: identificación exacta del título ejecutivo (tipo, fecha, monto, exigibilidad), verificación de que la obligación es líquida, actualmente exigible y no prescrita (Art. 434 y ss. CPC).
+    Petitorio: "POR TANTO, RUEGO A US.: tener por interpuesta demanda ejecutiva en autos, despachar mandamiento de ejecución y embargo en contra de [demandado] por la suma de [monto] más intereses y costas, ordenando trabar embargo sobre bienes suficientes."
+    """,
+    "Contestación de Demanda (Evacúa Traslado)": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO):
+    EN LO PRINCIPAL: Contesta demanda; OTROSÍ: si corresponde, demanda reconvencional o acompaña documentos.
+    Cuerpo: I. Excepciones dilatorias (si las hay, se oponen primero y se resuelven antes que el fondo); II. Contestación al fondo: pronunciamiento punto por punto sobre cada hecho alegado por el demandante (afirmar, negar, o allanarse a cada uno — nunca dejar hechos sin pronunciamiento expreso); III. Los hechos según la parte demandada (versión propia); IV. El derecho (fundamentos jurídicos de la defensa).
+    Petitorio: "POR TANTO, RUEGO A US.: tener por contestada la demanda, rechazarla en todas sus partes, con expresa condenación en costas."
+    """,
+    "Réplica": """
+    ESTRUCTURA ESPERADA (escrito breve, de FONDO pero acotado):
+    Ratifica los fundamentos de la demanda, se hace cargo específicamente de las alegaciones y excepciones opuestas en la contestación, sin repetir todo lo ya dicho — solo profundiza o rebate lo nuevo que introdujo la contraria.
+    Petitorio: "POR TANTO, RUEGO A US.: tener por evacuado el trámite de réplica, y estarse a lo pedido en la demanda."
+    """,
+    "Dúplica": """
+    ESTRUCTURA ESPERADA (escrito breve, de FONDO pero acotado):
+    Ratifica los fundamentos de la contestación, rebate lo nuevo introducido en la réplica.
+    Petitorio: "POR TANTO, RUEGO A US.: tener por evacuado el trámite de dúplica, y estarse a lo pedido en la contestación."
+    """,
+    "Oposición de Excepciones (Art. 464 CPC)": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO): usa preferentemente el módulo especializado "⚖️ Excepciones Ejecutivas" (analiza los 18 números del Art. 464 CPC con IA). Si igual se redacta aquí:
+    EN LO PRINCIPAL: Opone excepciones; OTROSÍ: acompaña documentos.
+    Cuerpo: cada excepción opuesta, numerada según el Art. 464 CPC, con su fundamento de hecho y de derecho específico.
+    Petitorio: "POR TANTO, RUEGO A US.: tener por opuestas las excepciones del artículo 464 N°[...] ya fundamentadas, acogerlas, y rechazar la ejecución con costas."
+    """,
+    "Recurso de Reposición": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO, pero puede ser breve según la complejidad):
+    EN LO PRINCIPAL: Repone; OTROSÍ: Apela en subsidio (si corresponde, y casi siempre conviene incluirlo para no perder la vía de alzada).
+    Cuerpo: identifica la resolución exacta que se impugna (fecha, contenido), expone el error de hecho o de derecho en que incurrió el tribunal, y por qué debe modificarse.
+    Petitorio: "POR TANTO, RUEGO A US.: tener por interpuesto recurso de reposición en contra de la resolución de fecha [...], acogerlo, dejarla sin efecto y resolver conforme a lo pedido; y en subsidio, para el caso de ser rechazada esta reposición, apelar de dicha resolución para ante la Iltma. Corte de Apelaciones respectiva."
+    """,
+    "Recurso de Apelación": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO):
+    EN LO PRINCIPAL: Apela.
+    Cuerpo: identifica la resolución apelada (fecha, tribunal, contenido), expone los agravios que causa (por qué es errónea o injusta), fundamentos de hecho y de derecho de por qué debe revocarse o modificarse.
+    Petitorio: "POR TANTO, RUEGO A US.: tener por interpuesto recurso de apelación en contra de la resolución de fecha [...], concederlo, y elevar estos autos a la Iltma. Corte de Apelaciones de [...] para que, conociendo del recurso, la revoque [o modifique] en el sentido de [...], con costas."
+    """,
+    "Incidente de Nulidad Procesal": """
+    ESTRUCTURA ESPERADA (escrito DE FONDO):
+    EN LO PRINCIPAL: Promueve incidente de nulidad procesal.
+    Cuerpo: identifica el vicio concreto (qué norma de procedimiento se infringió), acredita el perjuicio reparable solo con la declaración de nulidad (Art. 83 CPC — no basta el vicio, debe haber perjuicio real), y que se promueve dentro de plazo (5 días desde que se tuvo conocimiento del vicio, salvo excepciones).
+    Petitorio: "POR TANTO, RUEGO A US.: tener por promovido el incidente de nulidad procesal, acogerlo, y declarar la nulidad de [actuación específica], retrotrayendo el procedimiento al estado de [...]."
+    """,
+    "Solicitud de Abandono del Procedimiento": """
+    ESTRUCTURA ESPERADA (escrito DE MERA TRAMITACIÓN — corto y directo):
+    Señala la fecha de la última gestión útil realizada por CUALQUIERA de las partes, constata que ha transcurrido el plazo legal (6 meses, Art. 152 CPC) sin actividad, y que no se trata de excepciones legales al abandono (juicios de familia, ejecutivos en ciertos casos, etc.).
+    Petitorio breve: "POR TANTO, RUEGO A US.: declarar el abandono del procedimiento en estos autos, con costas."
+    """,
+    "Escrito de Mera Tramitación (Téngase Presente / Acompaña Documentos / Otro trámite simple)": """
+    ESTRUCTURA ESPERADA (CORTO Y DIRECTO — nunca extenderse innecesariamente):
+    Estos escritos NO llevan desarrollo extenso de "Hechos" ni "Derecho" — van directo al punto, en 1 a 3 párrafos como máximo.
+    Ejemplos de este tipo: "Téngase Presente", "Acompaña Documentos (con o sin citación)", "Solicita se Despache Mandamiento de Ejecución y Embargo", "Solicita Certificado de Ejecutoria", "Solicita Notificación por Avisos o por Cédula", "Solicita Alzamiento de Medida Precautoria", "Solicita Hora para Comparendo", "Confiere Patrocinio y Poder", "Solicita Copias Autorizadas", "Solicita se Oficie a [institución]".
+    Estructura: EN LO PRINCIPAL (lo que se pide, en una frase clara) + cuerpo breve explicando el motivo puntual + petitorio directo ("POR TANTO, RUEGO A US.: acceder a lo solicitado").
+    """,
+    "Otro (Especificar en instrucciones)": """
+    No hay una estructura predeterminada — sigue estrictamente las instrucciones específicas que entregue el abogado más abajo, usando buen juicio procesal chileno para el formato (suma, comparecencia, cuerpo, petitorio) según lo que se pida.
+    """,
+}
+
 def crear_escrito_judicial_generico_word(tipo_escrito, texto_redactado, datos_causa=None):
     """
     Genera en Word cualquier tipo de escrito judicial (no solo excepciones),
@@ -6305,14 +6382,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
     
     with st.container(border=True):
         col_r1, col_r2 = st.columns(2)
-        tipo_escrito = col_r1.selectbox("Tipo de Escrito", [
-            "Oposición de Excepciones (Ejecutivo)", 
-            "Contesta Demanda (General)", 
-            "Incidente de Nulidad", 
-            "Recurso de Reposición", 
-            "Solicitud de Abandono del Procedimiento",
-            "Otro (Especificar en instrucciones)"
-        ])
+        tipo_escrito = col_r1.selectbox("Tipo de Escrito", list(ESTRUCTURAS_REDACTOR_IA.keys()))
         tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)", key="redactor_trib_key")
         
         rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026", key="redactor_rol_key")
@@ -6348,18 +6418,16 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         Rol: {rol_red}
                         Caratulado: {caratula_red}
                         
-                        INSTRUCCIONES DE FONDO:
+                        ESTRUCTURA ESPECÍFICA A SEGUIR PARA ESTE TIPO DE ESCRITO (obligatoria, no te desvíes de ella):
+                        {ESTRUCTURAS_REDACTOR_IA.get(tipo_escrito, "")}
+                        
+                        INSTRUCCIONES DE FONDO (hechos y detalles concretos del caso, entregados por el abogado):
                         {instrucciones_red}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
                         (Para este escrito en particular: no agregues la nota sugerida en la regla 4 dentro del texto final, ya que debe quedar limpio y listo para copiar — solo aplica las reglas 1 a 3.)
                         
-                        Estructura requerida:
-                        1. Suma(s) y Tribunal.
-                        2. Individualización de la parte y personería.
-                        3. Cuerpo del escrito (hechos y derecho de forma persuasiva, técnica y lo más completa posible, citando la ley chilena exacta y, cuando corresponda, el criterio jurisprudencial general).
-                        4. Petitorio claro ("POR TANTO: Ruego a S.S...").
-                        5. Peticiones subsidiarias o un "Otrosí" si corresponde según las instrucciones.
+                        IMPORTANTE sobre la extensión: si la estructura de arriba indica que es un escrito "DE MERA TRAMITACIÓN", redáctalo CORTO y directo (1 a 3 párrafos), sin inflar con desarrollo de "Hechos" y "Derecho" innecesario. Si es un escrito "DE FONDO", desarrolla los fundamentos con la extensión y profundidad que corresponda.
                         
                         Usa el lenguaje propio del Código de Procedimiento Civil chileno. No agregues notas explicativas para mí, entrégame SOLO el texto del escrito listo para copiar.
                         """
