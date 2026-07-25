@@ -6575,7 +6575,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
 # 15. REDACTOR AUTOMÁTICO IA
 elif st.session_state['menu_radio'] == "📝 Redactor IA":
     st.title("📝 Redactor Automático de Escritos")
-    st.markdown("La IA redactará el borrador del escrito judicial con el formato y lenguaje formal de los tribunales chilenos, listo para revisar y presentar.")
+    st.markdown("La IA primero analiza el caso completo con los documentos que le entregues, te recomienda qué escrito presentar, y solo después de tu aprobación redacta el borrador — que puedes editar libremente antes de descargarlo.")
     
     # AUTOCOMPLETADO CONTEXTUAL: si llegaste aquí desde el botón "Redactar Escrito"
     # de una causa, se precargan el Rol/Tribunal/Caratulado de esa causa, para no
@@ -6587,48 +6587,105 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
         st.session_state['redactor_carat_key'] = _prefill_redactor.get('caratulado', '')
         st.info(f"✅ Datos de la causa **{_prefill_redactor.get('rol','')}** cargados automáticamente.")
     
-    with st.container(border=True):
-        col_r1, col_r2 = st.columns(2)
-        tipo_escrito = col_r1.selectbox("Tipo de Escrito", list(ESTRUCTURAS_REDACTOR_IA.keys()))
-        tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)", key="redactor_trib_key")
-        
-        rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026", key="redactor_rol_key")
-        caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO", key="redactor_carat_key")
-        
-        instrucciones_red = st.text_area("Instrucciones específicas para el escrito:", height=150, placeholder="Ej: Tengo un pagaré donde la mora es el 15/03/2024. La demanda se presentó el 02/06/2024. Redactar excepción de prescripción.")
-        
-        documentos_red = st.file_uploader(
-            "📎 Documentos de respaldo (opcional): resoluciones, el expediente, actuaciones de Receptor, el pagaré, etc.",
-            type=["pdf"], accept_multiple_files=True, key="redactor_docs_key"
-        )
-        st.caption("La IA lee el contenido de estos documentos y los usa como base real para redactar — mientras más contexto real le des (fechas exactas, montos, lo que dice cada resolución), más preciso y ajustado a tu caso queda el borrador.")
-        
-        if st.button("✍️ Generar Borrador del Escrito", type="primary", use_container_width=True):
-            if not instrucciones_red.strip() and not documentos_red:
-                st.error("⚠️ Debes darle las instrucciones jurídicas a la IA, o adjuntar al menos un documento.")
-            else:
+    if 'redactor_etapa' not in st.session_state:
+        st.session_state['redactor_etapa'] = 'analisis'
+    
+    def _modelo_gemini_activo():
+        import google.generativeai as genai
+        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+        modelo_elegido = "gemini-1.0-pro"
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                md_name = m.name.replace("models/", "")
+                if 'flash' in md_name:
+                    modelo_elegido = md_name
+                    break
+        return genai.GenerativeModel(modelo_elegido)
+    
+    # --- ETAPA 1: ANÁLISIS DEL CASO ---
+    if st.session_state['redactor_etapa'] == 'analisis':
+        with st.container(border=True):
+            col_r1, col_r2 = st.columns(2)
+            tribunal_red = col_r2.text_input("Tribunal (Para la suma)", placeholder="Ej: S.J.L. en lo Civil (1°)", key="redactor_trib_key")
+            rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026", key="redactor_rol_key")
+            caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO", key="redactor_carat_key")
+            
+            instrucciones_red = st.text_area("Cuéntame el caso (hechos, fechas, montos, lo que sepas):", height=150,
+                                              placeholder="Ej: Tengo un pagaré donde la mora es el 15/03/2024. La demanda se presentó el 02/06/2024...",
+                                              key="redactor_instrucciones_key")
+            documentos_red = st.file_uploader(
+                "📎 Documentos de respaldo (opcional): resoluciones, el expediente, actuaciones de Receptor, el pagaré, etc.",
+                type=["pdf"], accept_multiple_files=True, key="redactor_docs_key"
+            )
+            st.caption("Mientras más contexto real le des (documentos y/o hechos por escrito), más preciso queda tanto el análisis como el borrador final.")
+            
+            if st.button("🔍 Analizar Caso y Recomendar Escrito", type="primary", use_container_width=True):
+                if not instrucciones_red.strip() and not documentos_red:
+                    st.error("⚠️ Cuéntame al menos algo del caso, o adjunta un documento.")
+                else:
+                    with st.spinner("⚖️ Analizando el caso..."):
+                        try:
+                            texto_documentos_red = extraer_texto_pdfs(documentos_red) if documentos_red else ""
+                            modelo = _modelo_gemini_activo()
+                            
+                            lista_tipos_texto = "\n".join([f"- {k}" for k in ESTRUCTURAS_REDACTOR_IA.keys()])
+                            prompt_analisis = f"""
+                            Actúa como un abogado chileno experto en litigación, revisando un caso para decidir qué presentar.
+                            
+                            ANTECEDENTES ENTREGADOS POR EL ABOGADO:
+                            {instrucciones_red if instrucciones_red.strip() else "(sin texto adicional, básate en los documentos)"}
+                            
+                            TEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:
+                            {texto_documentos_red[:45000] if texto_documentos_red else "(no se adjuntaron documentos)"}
+                            
+                            TIPOS DE ESCRITO DISPONIBLES EN EL SISTEMA:
+                            {lista_tipos_texto}
+                            
+                            Analiza el caso y responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown):
+                            {{"analisis": "resumen de 3-6 líneas de tu lectura del caso: qué etapa procesal parece tener, plazos relevantes si los detectas, riesgos u oportunidades", "tipo_recomendado": "el nombre EXACTO de uno de los tipos de la lista de arriba", "razon_recomendacion": "por qué ese es el escrito adecuado ahora, en 2-4 líneas"}}
+                            """
+                            respuesta_analisis = modelo.generate_content(prompt_analisis)
+                            datos_analisis = json.loads(_limpiar_json_ia(respuesta_analisis.text))
+                            
+                            st.session_state['redactor_analisis'] = datos_analisis.get('analisis', '')
+                            st.session_state['redactor_tipo_recomendado'] = datos_analisis.get('tipo_recomendado', list(ESTRUCTURAS_REDACTOR_IA.keys())[0])
+                            st.session_state['redactor_razon'] = datos_analisis.get('razon_recomendacion', '')
+                            st.session_state['redactor_instrucciones_guardadas'] = instrucciones_red
+                            st.session_state['redactor_texto_docs_guardado'] = texto_documentos_red
+                            st.session_state['redactor_etapa'] = 'recomendacion'
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Hubo un error al analizar: {e}")
+    
+    # --- ETAPA 2: RECOMENDACIÓN Y APROBACIÓN ---
+    elif st.session_state['redactor_etapa'] == 'recomendacion':
+        with st.container(border=True):
+            st.markdown("#### 🧠 Análisis del caso")
+            st.info(st.session_state.get('redactor_analisis', ''))
+            
+            st.markdown(f"#### 💡 Escrito recomendado: **{st.session_state.get('redactor_tipo_recomendado', '')}**")
+            st.caption(st.session_state.get('redactor_razon', ''))
+            
+            tipo_escrito = st.selectbox(
+                "Confirma el tipo de escrito a redactar (puedes cambiarlo si no estás de acuerdo con la recomendación):",
+                list(ESTRUCTURAS_REDACTOR_IA.keys()),
+                index=list(ESTRUCTURAS_REDACTOR_IA.keys()).index(st.session_state['redactor_tipo_recomendado']) if st.session_state.get('redactor_tipo_recomendado') in ESTRUCTURAS_REDACTOR_IA else 0
+            )
+            
+            c_vol, c_gen = st.columns([1, 2])
+            if c_vol.button("🔙 Volver a analizar", use_container_width=True):
+                st.session_state['redactor_etapa'] = 'analisis'
+                st.rerun()
+            
+            if c_gen.button(f"✍️ Redactar «{tipo_escrito}»", type="primary", use_container_width=True):
                 with st.spinner("⚖️ Redactando escrito en lenguaje procesal chileno..."):
                     try:
-                        import google.generativeai as genai
-                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        
-                        modelo_elegido = "gemini-1.0-pro"
-                        for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods:
-                                md_name = m.name.replace("models/", "")
-                                if 'flash' in md_name:
-                                    modelo_elegido = md_name
-                                    break
-                                    
-                        modelo = genai.GenerativeModel(modelo_elegido)
-                        
-                        # Se extrae el texto real de los documentos adjuntos (resoluciones,
-                        # expediente, actuaciones de Receptor, el pagaré, etc.) para que la
-                        # IA redacte con base en hechos y fechas reales, no solo lo que el
-                        # abogado alcance a resumir a mano.
-                        texto_documentos_red = ""
-                        if documentos_red:
-                            texto_documentos_red = extraer_texto_pdfs(documentos_red)
+                        modelo = _modelo_gemini_activo()
+                        instrucciones_red = st.session_state.get('redactor_instrucciones_guardadas', '')
+                        texto_documentos_red = st.session_state.get('redactor_texto_docs_guardado', '')
+                        rol_red = st.session_state.get('redactor_rol_key', '')
+                        tribunal_red = st.session_state.get('redactor_trib_key', '')
+                        caratula_red = st.session_state.get('redactor_carat_key', '')
                         
                         sentencias_relevantes_red = buscar_jurisprudencia_relevante(f"{tipo_escrito} {instrucciones_red}")
                         bloque_juris_redactor = ""
@@ -6663,27 +6720,49 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         
                         Usa el lenguaje propio del Código de Procedimiento Civil chileno. No agregues notas explicativas para mí, entrégame SOLO el texto del escrito listo para copiar.
                         """
-                        
                         respuesta_escrito = modelo.generate_content(prompt_redactor)
-                        st.success("✅ Borrador redactado. Revísalo, y descárgalo en Word ya formateado, o cópialo directo.")
-                        st.text_area("Escrito Generado:", value=respuesta_escrito.text, height=500)
-                        
-                        if DOCX_READY:
-                            doc_redactor = crear_escrito_judicial_generico_word(
-                                tipo_escrito, respuesta_escrito.text,
-                                datos_causa={'rol': rol_red, 'caratulado': caratula_red, 'tribunal': tribunal_red}
-                            )
-                            if doc_redactor:
-                                buffer_redactor = io.BytesIO()
-                                doc_redactor.save(buffer_redactor)
-                                st.download_button(
-                                    "📥 Descargar en Word", data=buffer_redactor.getvalue(),
-                                    file_name=f"{tipo_escrito.replace(' ', '_')[:40]}_{rol_red or 'borrador'}.docx",
-                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                                )
-                        
+                        st.session_state['redactor_texto_borrador'] = respuesta_escrito.text
+                        st.session_state['redactor_tipo_final'] = tipo_escrito
+                        st.session_state['redactor_etapa'] = 'borrador'
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Hubo un error de conexión: {e}")
+                        st.error(f"❌ Hubo un error al redactar: {e}")
+    
+    # --- ETAPA 3: BORRADOR EDITABLE ---
+    elif st.session_state['redactor_etapa'] == 'borrador':
+        with st.container(border=True):
+            st.success("✅ Borrador redactado. Puedes editarlo libremente abajo antes de descargarlo — el Word se genera con el texto tal como quede aquí.")
+            texto_editado = st.text_area("Escrito Generado (editable):", value=st.session_state.get('redactor_texto_borrador', ''), height=500, key="redactor_texto_editable")
+            
+            c_reg, c_desc, c_nuevo = st.columns(3)
+            if c_reg.button("🔄 Volver a la recomendación", use_container_width=True):
+                st.session_state['redactor_etapa'] = 'recomendacion'
+                st.rerun()
+            
+            if DOCX_READY:
+                rol_red = st.session_state.get('redactor_rol_key', '')
+                tribunal_red = st.session_state.get('redactor_trib_key', '')
+                caratula_red = st.session_state.get('redactor_carat_key', '')
+                tipo_escrito_final = st.session_state.get('redactor_tipo_final', 'Escrito')
+                doc_redactor = crear_escrito_judicial_generico_word(
+                    tipo_escrito_final, texto_editado,
+                    datos_causa={'rol': rol_red, 'caratulado': caratula_red, 'tribunal': tribunal_red}
+                )
+                if doc_redactor:
+                    buffer_redactor = io.BytesIO()
+                    doc_redactor.save(buffer_redactor)
+                    c_desc.download_button(
+                        "📥 Descargar en Word", data=buffer_redactor.getvalue(),
+                        file_name=f"{tipo_escrito_final.replace(' ', '_')[:40]}_{rol_red or 'borrador'}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        use_container_width=True
+                    )
+            
+            if c_nuevo.button("🆕 Empezar caso nuevo", use_container_width=True):
+                for k in ['redactor_etapa', 'redactor_analisis', 'redactor_tipo_recomendado', 'redactor_razon',
+                          'redactor_instrucciones_guardadas', 'redactor_texto_docs_guardado', 'redactor_texto_borrador', 'redactor_tipo_final']:
+                    st.session_state.pop(k, None)
+                st.rerun()
 
 # =====================================================================
 # ⚖️ MÓDULO: BIBLIOTECA DE JURISPRUDENCIA
