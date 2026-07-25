@@ -616,9 +616,20 @@ def buscar_ley_bcn(termino_busqueda, max_resultados=10):
     """
     import csv
     try:
+        # El título de una ley en BCN casi nunca contiene literalmente la
+        # palabra "ley" ni el número con puntos (ej: el título real es algo
+        # como "ESTABLECE EL DELITO DE PHISHING", no "Ley 20.009") — buscar
+        # la frase completa como la escribe el usuario no encontraba nada.
+        # Se limpia a solo el número o las palabras clave reales.
+        termino_limpio = re.sub(r'\bn[°ºo]?\s*', '', termino_busqueda, flags=re.IGNORECASE)
+        termino_limpio = re.sub(r'\bley(es)?\b', '', termino_limpio, flags=re.IGNORECASE)
+        termino_limpio = termino_limpio.replace('.', '').strip()
+        if not termino_limpio:
+            termino_limpio = termino_busqueda
+        
         url = "https://nuevo.leychile.cl/servicios/Consulta/script/exportarBSimpleMetas"
         params = {
-            "cadena": termino_busqueda, "exacta": "0", "itemsporpagina": str(max_resultados),
+            "cadena": termino_limpio, "exacta": "0", "itemsporpagina": str(max_resultados),
             "npagina": "1", "orden": "2", "seleccionado": "0", "tipoviene": "1",
         }
         respuesta = requests.get(url, params=params, timeout=30)
@@ -626,6 +637,7 @@ def buscar_ley_bcn(termino_busqueda, max_resultados=10):
         lector = csv.reader(io.StringIO(respuesta.text), delimiter=';', quotechar='"')
         filas = list(lector)
         if len(filas) < 2:
+            st.session_state['_ultimo_error_bcn'] = f"BCN respondió pero sin resultados para '{termino_limpio}' (búsqueda limpiada de '{termino_busqueda}'). Respuesta cruda (primeros 300 caracteres): {respuesta.text[:300]}"
             return []
         encabezados = [h.strip() for h in filas[0]]
         resultados = []
@@ -644,6 +656,7 @@ def buscar_ley_bcn(termino_busqueda, max_resultados=10):
                 })
         return resultados
     except Exception as e:
+        st.session_state['_ultimo_error_bcn'] = f"Error de conexión con BCN: {e}"
         print(f"Error buscando en BCN: {e}")
         return []
 
@@ -953,21 +966,22 @@ def crear_escrito_judicial_generico_word(tipo_escrito, texto_redactado, datos_ca
     
     doc = Document()
     style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
-    style.paragraph_format.line_spacing = 1.5
-    style.paragraph_format.space_after = Pt(6)
+    style.font.name = CONFIG_FORMATO_ESCRITOS['fuente']
+    style.font.size = Pt(CONFIG_FORMATO_ESCRITOS['tamano_pt'])
+    style.paragraph_format.line_spacing = CONFIG_FORMATO_ESCRITOS['interlineado']
+    style.paragraph_format.space_after = Pt(CONFIG_FORMATO_ESCRITOS['espacio_despues_pt'])
+    _alineacion = WD_ALIGN_PARAGRAPH.JUSTIFY if CONFIG_FORMATO_ESCRITOS['justificado'] else WD_ALIGN_PARAGRAPH.LEFT
     
     if datos_causa:
         p_meta = doc.add_paragraph()
-        p_meta.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        p_meta.alignment = _alineacion
         p_meta.add_run(f"{tipo_escrito.upper()} — Causa Rol {datos_causa.get('rol','')}, \"{datos_causa.get('caratulado','')}\", {datos_causa.get('tribunal','')}").bold = True
     
     for bloque in texto_redactado.split("\n\n"):
         bloque_limpio = bloque.strip().replace("**", "").replace("#", "")
         if bloque_limpio:
             p = doc.add_paragraph()
-            p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            p.alignment = _alineacion
             p.add_run(bloque_limpio)
     
     return doc
@@ -1579,6 +1593,24 @@ try:
     DOCX_READY = True
 except ImportError:
     DOCX_READY = False
+
+# =====================================================================
+# ✍️ CONFIGURACIÓN CENTRALIZADA DE FORMATO PARA ESCRITOS GENERADOS
+# =====================================================================
+# Un solo lugar para ajustar el formato de TODOS los escritos que genera
+# el sistema (fuente, tamaño, interlineado, justificación) — antes estaba
+# repetido de forma independiente en 5 funciones distintas. Cuando Nicolás
+# entregue sus modelos reales, esto se ajusta una sola vez acá y aplica a
+# todo el sistema, sin tener que buscar cada función por separado.
+# Pendiente de definir con los modelos reales: reglas exactas de cuándo
+# usar negrita (ej: solo comparecencia y peticiones, o también títulos).
+CONFIG_FORMATO_ESCRITOS = {
+    'fuente': 'Calibri',
+    'tamano_pt': 11,
+    'interlineado': 1.5,
+    'espacio_despues_pt': 6,
+    'justificado': True,
+}
 
 # --- CONFIGURACIÓN DE PÁGINA ---
 st.set_page_config(
@@ -6563,11 +6595,17 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
         rol_red = col_r1.text_input("Causa Rol", placeholder="Ej: C-1234-2026", key="redactor_rol_key")
         caratula_red = col_r2.text_input("Caratulado", placeholder="Ej: PEREZ / BANCO", key="redactor_carat_key")
         
-        instrucciones_red = st.text_area("Instrucciones específicas para el escrito:", height=150, placeholder="Ej: Redactar excepción N° 17 de prescripción. La deuda se hizo exigible en marzo de 2024 y notificaron recién ayer. Alega también costas.")
+        instrucciones_red = st.text_area("Instrucciones específicas para el escrito:", height=150, placeholder="Ej: Tengo un pagaré donde la mora es el 15/03/2024. La demanda se presentó el 02/06/2024. Redactar excepción de prescripción.")
+        
+        documentos_red = st.file_uploader(
+            "📎 Documentos de respaldo (opcional): resoluciones, el expediente, actuaciones de Receptor, el pagaré, etc.",
+            type=["pdf"], accept_multiple_files=True, key="redactor_docs_key"
+        )
+        st.caption("La IA lee el contenido de estos documentos y los usa como base real para redactar — mientras más contexto real le des (fechas exactas, montos, lo que dice cada resolución), más preciso y ajustado a tu caso queda el borrador.")
         
         if st.button("✍️ Generar Borrador del Escrito", type="primary", use_container_width=True):
-            if not instrucciones_red.strip():
-                st.error("⚠️ Debes darle las instrucciones jurídicas a la IA.")
+            if not instrucciones_red.strip() and not documentos_red:
+                st.error("⚠️ Debes darle las instrucciones jurídicas a la IA, o adjuntar al menos un documento.")
             else:
                 with st.spinner("⚖️ Redactando escrito en lenguaje procesal chileno..."):
                     try:
@@ -6583,6 +6621,14 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                                     break
                                     
                         modelo = genai.GenerativeModel(modelo_elegido)
+                        
+                        # Se extrae el texto real de los documentos adjuntos (resoluciones,
+                        # expediente, actuaciones de Receptor, el pagaré, etc.) para que la
+                        # IA redacte con base en hechos y fechas reales, no solo lo que el
+                        # abogado alcance a resumir a mano.
+                        texto_documentos_red = ""
+                        if documentos_red:
+                            texto_documentos_red = extraer_texto_pdfs(documentos_red)
                         
                         sentencias_relevantes_red = buscar_jurisprudencia_relevante(f"{tipo_escrito} {instrucciones_red}")
                         bloque_juris_redactor = ""
@@ -6605,6 +6651,9 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         
                         INSTRUCCIONES DE FONDO (hechos y detalles concretos del caso, entregados por el abogado):
                         {instrucciones_red}
+                        
+                        TEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS (resoluciones, expediente, actuaciones de Receptor, títulos, etc. — usa estos hechos y fechas REALES como base, no los inventes ni los cambies):
+                        {texto_documentos_red[:45000] if texto_documentos_red else "(no se adjuntaron documentos, básate solo en las instrucciones de arriba)"}
                         {bloque_juris_redactor}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
@@ -6616,8 +6665,22 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         """
                         
                         respuesta_escrito = modelo.generate_content(prompt_redactor)
-                        st.success("✅ Borrador redactado. Cópialo, revísalo y pásalo a Word.")
+                        st.success("✅ Borrador redactado. Revísalo, y descárgalo en Word ya formateado, o cópialo directo.")
                         st.text_area("Escrito Generado:", value=respuesta_escrito.text, height=500)
+                        
+                        if DOCX_READY:
+                            doc_redactor = crear_escrito_judicial_generico_word(
+                                tipo_escrito, respuesta_escrito.text,
+                                datos_causa={'rol': rol_red, 'caratulado': caratula_red, 'tribunal': tribunal_red}
+                            )
+                            if doc_redactor:
+                                buffer_redactor = io.BytesIO()
+                                doc_redactor.save(buffer_redactor)
+                                st.download_button(
+                                    "📥 Descargar en Word", data=buffer_redactor.getvalue(),
+                                    file_name=f"{tipo_escrito.replace(' ', '_')[:40]}_{rol_red or 'borrador'}.docx",
+                                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                                )
                         
                     except Exception as e:
                         st.error(f"❌ Hubo un error de conexión: {e}")
@@ -6775,7 +6838,11 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                 if resultados_leyes:
                     st.session_state['resultados_leyes_bcn'] = resultados_leyes
                 else:
-                    st.warning("No se encontraron leyes con ese término. Prueba con otras palabras.")
+                    st.warning("No se encontraron leyes con ese término. Prueba con otras palabras (por ejemplo, solo el número, sin la palabra 'ley').")
+                    error_bcn_real = st.session_state.pop('_ultimo_error_bcn', None)
+                    if error_bcn_real:
+                        with st.expander("Ver detalle técnico"):
+                            st.code(error_bcn_real)
         
         if st.session_state.get('resultados_leyes_bcn'):
             st.caption(f"{len(st.session_state['resultados_leyes_bcn'])} ley(es) encontrada(s):")
