@@ -439,7 +439,13 @@ def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
     que casi siempre el límite se libera solo en unos segundos.
     """
     headers = {"Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", "Content-Type": "application/json"}
-    body = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
+    # Se usa "llama-3.1-8b-instant" en vez del modelo más grande (70B) porque
+    # el plan gratuito le da un límite diario de tokens MUCHO mayor
+    # (500.000 tokens/día, contra solo 100.000 del modelo de 70B) — con
+    # documentos legales largos, el modelo de 70B se quedaba sin cupo
+    # diario después de solo un puñado de análisis, y eso no se arregla
+    # esperando unos minutos (el cupo diario recién se repone al otro día).
+    body = {"model": "llama-3.1-8b-instant", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
     
     import time
     intentos_maximos = 4
@@ -451,7 +457,7 @@ def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
                 time.sleep(tiempo_espera)
                 continue
             else:
-                raise Exception("El sistema de IA gratuito (Groq) está saturado de consultas ahora mismo — es un límite compartido por todo el equipo, no un error del sistema. Espera 1-2 minutos y vuelve a intentarlo.")
+                raise Exception("El sistema de IA gratuito (Groq) está saturado ahora mismo — es un límite compartido por todo el equipo. Si esto sigue pasando incluso esperando varios minutos, probablemente sea el cupo diario del plan gratuito (se repone recién al día siguiente), no algo momentáneo.")
         respuesta.raise_for_status()
         return respuesta.json()["choices"][0]["message"]["content"]
 
