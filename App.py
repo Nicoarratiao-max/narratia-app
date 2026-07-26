@@ -3304,23 +3304,30 @@ st.markdown("""
     .task-status-rechazada { background:#ffebe6 !important; color:#bf2600 !important; }
     .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; }
     /* Los selectbox modernos de Streamlit no usan la etiqueta <select> de
-       toda la vida, sino un componente propio — la regla de arriba nunca
-       les aplicaba, por eso se veían mezclados con el fondo y no parecían
-       un menú desplegable. Esta es la que sí les llega. */
-    /* Los selectbox modernos de Streamlit no usan la etiqueta <select> de
-       toda la vida, sino un componente propio — la regla de arriba nunca
-       les aplicaba, por eso se veían mezclados con el fondo y no parecían
-       un menú desplegable. El primer intento (fondo blanco) se notaba muy
-       poco porque el fondo de la página ya es un gris casi blanco — ahora
-       se usa un tinte de color bien diferenciado, para que no haya dudas
-       de que es un menú desplegable.
+       toda la vida, sino un componente propio (BaseWeb), cuya estructura
+       interna exacta puede variar. Los dos intentos anteriores apuntaban a
+       una sola capa específica que no era la correcta. Esta vez se cubren
+       varias capas posibles a la vez (el contenedor que Streamlit sí
+       garantiza — [data-testid="stSelectbox"] — y las capas internas de
+       BaseWeb), para que el color llegue sin importar cuál sea la que
+       realmente dibuja el borde visible.
        ======================================================================== */
-    [data-baseweb="select"] > div {
-        background-color: #e3f2f1 !important;
+    [data-testid="stSelectbox"] {
         border: 2px solid #0e6b74 !important;
         border-radius: 6px !important;
+        background-color: #e3f2f1 !important;
+        padding: 2px !important;
     }
-    [data-baseweb="select"] > div:hover {
+    [data-testid="stSelectbox"] > div,
+    [data-testid="stSelectbox"] > div > div,
+    [data-testid="stSelectbox"] [data-baseweb="select"],
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    [data-testid="stSelectbox"] [data-baseweb="select"] div[role="button"] {
+        background-color: #e3f2f1 !important;
+        border-color: #0e6b74 !important;
+        border-radius: 6px !important;
+    }
+    [data-testid="stSelectbox"]:hover {
         background-color: #d0e9e7 !important;
         border-color: #0a4d54 !important;
     }
