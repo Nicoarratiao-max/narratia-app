@@ -4232,20 +4232,44 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
         materia = st.selectbox("Rama del Derecho", ["Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Comercial y Societario", "Tributario", "Administrativo", "Constitucional", "Del Consumidor", "Inmobiliario", "Migratorio y Extranjería", "Ambiental", "Bancario y Ejecutivo Hipotecario", "Policía Local / Tránsito"])
         caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
         
-        archivo_legal = st.file_uploader("📎 Adjuntar PDF del caso (Demanda, contrato, resolución)", type=['pdf'])
+        archivos_legales = st.file_uploader(
+            "📎 Adjuntar documentos del caso (varios PDFs sueltos, o un .zip con muchos documentos adentro)",
+            type=['pdf', 'zip'], accept_multiple_files=True
+        )
         
         if st.button("💡 Analizar y Generar Propuesta", type="primary", use_container_width=True):
-            if not caso_texto.strip() and not archivo_legal:
-                st.error("⚠️ Debes escribir los antecedentes o adjuntar un PDF.")
+            if not caso_texto.strip() and not archivos_legales:
+                st.error("⚠️ Debes escribir los antecedentes o adjuntar al menos un documento.")
             else:
                 with st.spinner("🧠 Leyendo documentos y buscando jurisprudencia/normativa aplicable..."):
                     try:
+                        import PyPDF2, zipfile
+                        
+                        def _extraer_texto_de_un_pdf(archivo_pdf_individual):
+                            texto_uno = ""
+                            try:
+                                lector_uno = PyPDF2.PdfReader(archivo_pdf_individual)
+                                for pagina_uno in lector_uno.pages:
+                                    texto_uno += (pagina_uno.extract_text() or "") + "\n"
+                            except Exception:
+                                pass
+                            return texto_uno
+                        
                         texto_pdf = ""
-                        if archivo_legal:
-                            import PyPDF2
-                            lector = PyPDF2.PdfReader(archivo_legal)
-                            for pagina in lector.pages:
-                                texto_pdf += pagina.extract_text() + "\n"
+                        for archivo_subido in (archivos_legales or []):
+                            if archivo_subido.name.lower().endswith(".zip"):
+                                # Se abre el ZIP y se procesa cada PDF que tenga adentro, uno
+                                # por uno — así se pueden analizar muchos documentos de una
+                                # sola vez sin tener que subirlos todos sueltos.
+                                with zipfile.ZipFile(archivo_subido) as zip_abierto:
+                                    for nombre_interno in zip_abierto.namelist():
+                                        if nombre_interno.lower().endswith(".pdf") and not nombre_interno.startswith("__MACOSX"):
+                                            with zip_abierto.open(nombre_interno) as pdf_interno:
+                                                texto_pdf += f"\n--- {nombre_interno} (dentro del ZIP {archivo_subido.name}) ---\n"
+                                                texto_pdf += _extraer_texto_de_un_pdf(io.BytesIO(pdf_interno.read()))
+                            else:
+                                texto_pdf += f"\n--- {archivo_subido.name} ---\n"
+                                texto_pdf += _extraer_texto_de_un_pdf(archivo_subido)
                         
                         import google.generativeai as genai
                         genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
@@ -4267,8 +4291,9 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         RELATO DEL ABOGADO:
                         {caso_texto}
                         
-                        TEXTO DEL DOCUMENTO ADJUNTO:
-                        {texto_pdf}
+                        TEXTO DE LOS DOCUMENTOS ADJUNTOS:
+                        {texto_pdf[:90000]}
+                        {"\n(NOTA: había más contenido de los documentos adjuntos que no cupo aquí por su tamaño total; se truncó a las primeras páginas/documentos.)" if len(texto_pdf) > 90000 else ""}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
                         
