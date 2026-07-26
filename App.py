@@ -407,7 +407,7 @@ def extraer_texto_pdfs(archivos_pdf_subidos):
             texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
     return texto_total
 
-def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2) -> str:
+def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2, prompt_completo_gemini: str = None) -> str:
     """
     Motor de IA "inteligente" usado en todo el sistema: intenta en cadena,
     UNO POR UNO, varias IA gratuitas/pagadas hasta que alguna responda —
@@ -422,10 +422,17 @@ def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2) -> str:
        grande de todos, sin tarjeta, registro instantáneo).
     4° Mistral (gratis, con un cupo MENSUAL enorme — 1.000 millones de
        tokens/mes — pero más lento, 2 consultas por minuto).
+    
+    Si se entrega 'prompt_completo_gemini', Gemini intenta con esa versión
+    SIN RECORTAR (Gemini tiene espacio de sobra para documentos largos) —
+    el 'prompt' recortado normal solo se usa para los motores de respaldo
+    gratuitos, que sí tienen límites de tamaño más chicos. Así, un
+    documento largo no se recorta innecesariamente cuando Gemini sí podría
+    leerlo completo.
     """
     errores_acumulados = []
     for nombre_motor, funcion_motor in [
-        ("Gemini", lambda: generar_contenido_gemini(prompt)),
+        ("Gemini", lambda: generar_contenido_gemini(prompt_completo_gemini if prompt_completo_gemini else prompt)),
         ("Groq", lambda: consultar_groq(prompt, temperatura)),
         ("Cerebras", lambda: consultar_cerebras(prompt, temperatura)),
         ("Mistral", lambda: consultar_mistral(prompt, temperatura)),
@@ -1002,6 +1009,27 @@ CODIGOS_BREVES_ESCRITOS = {
     "Solicitud de Cúmplase / Cumplimiento Incidental": "CUMPL",
     "Otro tipo de presentación": "OTRO",
 }
+
+def _texto_priorizando_final(texto, limite=20000):
+    """
+    Para textos largos que hay que recortar antes de mandar a la IA: en vez
+    de cortar solo desde el principio (que dejaría afuera el final del
+    documento), reparte el límite entre el INICIO (contexto/antecedentes) y
+    el FINAL (donde las sentencias chilenas ponen el fallo real — "SE
+    RESUELVE" / "RESUELVO" — casi siempre al final del documento). Sin
+    esto, un documento largo podía hacer que la IA "adivinara" mal el
+    resultado (acogida/rechazada) porque nunca llegó a leer la parte
+    resolutiva real.
+    """
+    if len(texto) <= limite:
+        return texto
+    mitad_inicio = int(limite * 0.55)
+    mitad_final = limite - mitad_inicio
+    return (
+        texto[:mitad_inicio]
+        + "\n\n[...omitido por extensión, continúa hacia el final del documento (donde suele estar la parte resolutiva)...]\n\n"
+        + texto[-mitad_final:]
+    )
 
 def obtener_codigo_breve(tipo_escrito):
     """
@@ -7196,7 +7224,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
             if texto_extraido_sentencia.strip() and st.button("🤖 Autocompletar datos con IA (opcional)", key="juris_autocompletar"):
                 with st.spinner("Analizando la sentencia..."):
                     try:
-                        prompt_juris = f"""
+                        _plantilla_prompt_juris = """
                         Actúa como un abogado chileno experto en análisis de jurisprudencia, revisando esta sentencia con ojo crítico y profundo — no un resumen superficial.
                         
                         Analiza el siguiente texto de una sentencia judicial chilena y extrae:
@@ -7204,15 +7232,21 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         2. Rol de la causa (si aparece).
                         3. Fecha de la sentencia (si aparece).
                         4. Materia principal (en pocas palabras, ej: "Nulidad de contrato por vicio del consentimiento").
-                        5. Resultado: si la acción, recurso o excepción fue ACOGIDA, RECHAZADA, o ACOGIDA PARCIALMENTE — sé preciso, esto no es opcional.
+                        5. Resultado: si la acción, recurso o excepción fue ACOGIDA, RECHAZADA, o ACOGIDA PARCIALMENTE. Para determinarlo, busca específicamente la PARTE RESOLUTIVA del fallo (normalmente encabezada con "SE RESUELVE", "SE DECLARA", "RESUELVO" o similar, casi siempre al final del documento) — NO lo infieras solo de los argumentos discutidos en los "considerandos", ya que un fallo puede discutir extensamente los argumentos de la parte que finalmente PIERDE antes de resolver en su contra (o a su favor). Si no encuentras una parte resolutiva clara en el texto que tienes, dilo explícitamente en vez de adivinar.
                         6. Fundamentos de fondo (esto es lo más importante — profundiza de verdad, no un resumen genérico): explica CON DETALLE el razonamiento real del tribunal — qué argumentos de la parte que ganó fueron acogidos y por qué, qué argumentos de la parte que perdió fueron desechados y con qué fundamento jurídico exacto (cita los "considerandos" relevantes si el texto los numera), qué normas legales aplicó el tribunal para llegar a esa conclusión, y si hubo votos disidentes o prevenciones, menciónalos. Esto debe permitirle a un abogado entender EXACTAMENTE por qué se falló así, no solo que se falló así. Extensión: 8-12 líneas mínimo, con la máxima fidelidad al texto real (sin inventar nada que no esté en el documento — si algo no aparece explícito, dilo así en vez de inventarlo).
                         
                         TEXTO DE LA SENTENCIA:
-                        {texto_extraido_sentencia[:20000]}
+                        {texto}
                         
                         Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resultado": "Acogida/Rechazada/Acogida Parcialmente", "resumen": "...(los fundamentos de fondo detallados del punto 6)..."}}
                         """
-                        respuesta_juris_ia = consultar_ia_inteligente(prompt_juris)
+                        # A Gemini se le manda el texto COMPLETO sin recortar (tiene
+                        # espacio de sobra); a los motores de respaldo gratuitos
+                        # (Groq/Cerebras/Mistral), la versión recortada priorizando
+                        # el final del documento (donde está el fallo real).
+                        prompt_juris = _plantilla_prompt_juris.format(texto=_texto_priorizando_final(texto_extraido_sentencia))
+                        prompt_juris_completo = _plantilla_prompt_juris.format(texto=texto_extraido_sentencia)
+                        respuesta_juris_ia = consultar_ia_inteligente(prompt_juris, prompt_completo_gemini=prompt_juris_completo)
                         datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia), strict=False)
                         st.session_state['juris_ia_tribunal'] = datos_juris_ia.get('tribunal', '')
                         st.session_state['juris_ia_rol'] = datos_juris_ia.get('rol', '')
@@ -7297,13 +7331,15 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                                         import PyPDF2
                                         lector_re = PyPDF2.PdfReader(io.BytesIO(bytes_juris_desc))
                                         texto_re = "\n".join([p.extract_text() or "" for p in lector_re.pages])
-                                        prompt_reanalisis = f"""
+                                        _plantilla_reanalisis = """
                                         Actúa como un abogado chileno experto en análisis de jurisprudencia, revisando esta sentencia con ojo crítico y profundo — no un resumen superficial.
-                                        Analiza el siguiente texto y extrae: Resultado (Acogida/Rechazada/Acogida Parcialmente) y, sobre todo, los Fundamentos de fondo: explica CON DETALLE el razonamiento real del tribunal — qué argumentos fueron acogidos y por qué, cuáles fueron desechados y con qué fundamento jurídico exacto (cita los "considerandos" relevantes si el texto los numera), qué normas legales aplicó, y si hubo votos disidentes menciónalos. Extensión: 8-12 líneas mínimo, con la máxima fidelidad al texto real.
-                                        TEXTO: {texto_re[:20000]}
+                                        Analiza el siguiente texto y extrae: Resultado (Acogida/Rechazada/Acogida Parcialmente — busca específicamente la PARTE RESOLUTIVA del fallo, normalmente encabezada con "SE RESUELVE", "SE DECLARA" o "RESUELVO", casi siempre al final del documento; NO lo infieras solo de los argumentos discutidos en los considerandos, ya que un fallo puede discutir extensamente los argumentos de la parte que finalmente pierde antes de resolver en su contra) y, sobre todo, los Fundamentos de fondo: explica CON DETALLE el razonamiento real del tribunal — qué argumentos fueron acogidos y por qué, cuáles fueron desechados y con qué fundamento jurídico exacto (cita los "considerandos" relevantes si el texto los numera), qué normas legales aplicó, y si hubo votos disidentes menciónalos. Extensión: 8-12 líneas mínimo, con la máxima fidelidad al texto real.
+                                        TEXTO: {texto}
                                         Responde EXCLUSIVAMENTE con un JSON válido: {{"resultado": "...", "resumen": "..."}}
                                         """
-                                        resp_re = consultar_ia_inteligente(prompt_reanalisis)
+                                        prompt_reanalisis = _plantilla_reanalisis.format(texto=_texto_priorizando_final(texto_re))
+                                        prompt_reanalisis_completo = _plantilla_reanalisis.format(texto=texto_re)
+                                        resp_re = consultar_ia_inteligente(prompt_reanalisis, prompt_completo_gemini=prompt_reanalisis_completo)
                                         datos_re = json.loads(_limpiar_json_ia(resp_re), strict=False)
                                         df_juris_upd = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
                                         df_juris_upd.loc[df_juris_upd['ID'] == fila_juris['ID'], ['Resultado', 'Resumen']] = [datos_re.get('resultado', ''), datos_re.get('resumen', '')]
