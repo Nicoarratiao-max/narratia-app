@@ -6549,6 +6549,13 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                     st.query_params.clear()
                 except Exception as e:
                     st.error(f"⚠️ No se pudo completar la autorización. Detalle técnico: {e}")
+                    # Si no se limpia acá también, el código ya usado (y ahora
+                    # inválido) se queda pegado en la URL para siempre, y cada
+                    # vez que se refresca la página se vuelve a intentar con
+                    # ese mismo código muerto, fallando siempre con el mismo
+                    # error — dando la sensación de que "no se actualiza".
+                    st.query_params.clear()
+                    st.warning("La página se limpió. Genera un link de autorización nuevo (recarga esta pestaña) e inténtalo de nuevo desde cero.")
             else:
                 url_auth, _ = _url_autorizacion_drive_oauth()
                 st.markdown(f"### [👉 Haz clic aquí para autorizar tu Drive personal]({url_auth})")
