@@ -6496,13 +6496,24 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         with tab2:
             st.subheader("Estado Financiero Global")
             if not df_causas.empty:
-                causas_economicas = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
+                causas_economicas = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)].copy()
                 if causas_economicas.empty:
                     st.write("Sin registros financieros.")
                 else:
+                    # Mismo blindaje que ya se hizo en el módulo general de
+                    # Contabilidad: si el honorario de alguna causa viene en un
+                    # formato inconsistente (texto en vez de número), esto podía
+                    # romper esta pantalla en silencio (el ":,.0f" no funciona
+                    # sobre texto) — antes esto pasaba desapercibido porque el
+                    # módulo general sí tenía la protección, pero esta pestaña
+                    # específica de la ficha del cliente no.
+                    if 'Total_Honorarios' in causas_economicas.columns:
+                        causas_economicas['Total_Honorarios'] = pd.to_numeric(causas_economicas['Total_Honorarios'], errors='coerce').fillna(0)
+                    if 'Cuotas_Pagadas' in causas_economicas.columns:
+                        causas_economicas['Cuotas_Pagadas'] = pd.to_numeric(causas_economicas['Cuotas_Pagadas'], errors='coerce').fillna(0)
                     for _, ce in causas_economicas.iterrows():
                         st.write(f"🔹 **Causa Rol {ce['ROL']}:** {ce.get('Estado_Honorarios', 'Sin fijar')}")
-                        st.write(f"Pactado: ${ce.get('Total_Honorarios',0):,.0f} | Cuotas Pagadas: {ce.get('Cuotas_Pagadas',0)}")
+                        st.write(f"Pactado: ${ce.get('Total_Honorarios',0):,.0f} | Cuotas Pagadas: {ce.get('Cuotas_Pagadas',0):,.0f}")
                         st.write("---")
             else:
                 st.write("Sin registros financieros.")
