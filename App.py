@@ -409,21 +409,64 @@ def extraer_texto_pdfs(archivos_pdf_subidos):
 
 def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2) -> str:
     """
-    Motor de IA "inteligente" usado en todo el sistema: intenta PRIMERO con
-    Gemini (la cuenta de pago del usuario, vía generar_contenido_gemini,
-    que ya prueba Vertex AI y luego la API directa), y SOLO si eso falla
-    por cualquier motivo (facturación, clave inválida, etc.), cae
-    automáticamente a Groq (gratis) como respaldo — sin que el usuario
-    tenga que elegir nada ni quedarse sin poder usar el sistema mientras
-    se resuelve cualquier problema del lado de Google.
+    Motor de IA "inteligente" usado en todo el sistema: intenta en cadena,
+    UNO POR UNO, varias IA gratuitas/pagadas hasta que alguna responda —
+    así, si una está saturada o con problemas de facturación, el sistema
+    prueba con la siguiente automáticamente, sin que el usuario tenga que
+    elegir nada ni quedarse sin poder trabajar.
+    
+    Orden de la cadena:
+    1° Gemini (la cuenta de pago del usuario, vía generar_contenido_gemini).
+    2° Groq (gratis, rápido, pero con cupo diario de tokens más ajustado).
+    3° Cerebras (gratis, 1 millón de tokens al día — el cupo diario más
+       grande de todos, sin tarjeta, registro instantáneo).
+    4° Mistral (gratis, con un cupo MENSUAL enorme — 1.000 millones de
+       tokens/mes — pero más lento, 2 consultas por minuto).
     """
-    try:
-        return generar_contenido_gemini(prompt)
-    except Exception as error_gemini:
+    errores_acumulados = []
+    for nombre_motor, funcion_motor in [
+        ("Gemini", lambda: generar_contenido_gemini(prompt)),
+        ("Groq", lambda: consultar_groq(prompt, temperatura)),
+        ("Cerebras", lambda: consultar_cerebras(prompt, temperatura)),
+        ("Mistral", lambda: consultar_mistral(prompt, temperatura)),
+    ]:
+        # Si un motor no tiene su clave configurada en Secrets todavía, se
+        # salta directo al siguiente en vez de fallar (para que agregar
+        # cada uno sea opcional, no obligatorio).
+        clave_necesaria = {"Gemini": "GEMINI_API_KEY", "Groq": "GROQ_API_KEY", "Cerebras": "CEREBRAS_API_KEY", "Mistral": "MISTRAL_API_KEY"}[nombre_motor]
+        if clave_necesaria not in st.secrets and nombre_motor != "Gemini":
+            continue
         try:
-            return consultar_groq(prompt, temperatura)
-        except Exception as error_groq:
-            raise Exception(f"Gemini falló ({error_gemini}) y el respaldo Groq también falló ({error_groq}).")
+            return funcion_motor()
+        except Exception as error_motor:
+            errores_acumulados.append(f"{nombre_motor} falló ({error_motor})")
+    raise Exception(" · ".join(errores_acumulados) if errores_acumulados else "Ningún motor de IA está configurado en Secrets.")
+
+def consultar_cerebras(prompt: str, temperatura: float = 0.2) -> str:
+    """
+    Consulta la API de Cerebras (plan gratuito: 1.000.000 de tokens AL DÍA,
+    sin tarjeta de crédito, registro instantáneo en cloud.cerebras.ai). Es
+    el cupo diario más generoso de todos los motores gratuitos de esta
+    cadena. Formato de solicitud compatible con OpenAI.
+    """
+    headers = {"Authorization": f"Bearer {st.secrets['CEREBRAS_API_KEY']}", "Content-Type": "application/json"}
+    body = {"model": "llama-3.3-70b", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
+    respuesta = requests.post("https://api.cerebras.ai/v1/chat/completions", headers=headers, json=body, timeout=180)
+    respuesta.raise_for_status()
+    return respuesta.json()["choices"][0]["message"]["content"]
+
+def consultar_mistral(prompt: str, temperatura: float = 0.2) -> str:
+    """
+    Consulta la API de Mistral AI (plan gratuito "Experiment": ~1.000
+    millones de tokens al mes, sin tarjeta de crédito, solo verificación
+    de teléfono al crear la cuenta en console.mistral.ai). Formato de
+    solicitud compatible con OpenAI, igual que Groq.
+    """
+    headers = {"Authorization": f"Bearer {st.secrets['MISTRAL_API_KEY']}", "Content-Type": "application/json"}
+    body = {"model": "mistral-small-latest", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
+    respuesta = requests.post("https://api.mistral.ai/v1/chat/completions", headers=headers, json=body, timeout=180)
+    respuesta.raise_for_status()
+    return respuesta.json()["choices"][0]["message"]["content"]
 
 def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
     """
