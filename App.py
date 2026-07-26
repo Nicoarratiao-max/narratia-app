@@ -3313,9 +3313,9 @@ st.markdown("""
        realmente dibuja el borde visible.
        ======================================================================== */
     [data-testid="stSelectbox"] {
-        border: 2px solid #0e6b74 !important;
+        border: 1px solid #cbd2d9 !important;
         border-radius: 6px !important;
-        background-color: #e3f2f1 !important;
+        background-color: #ffffff !important;
         padding: 2px !important;
     }
     [data-testid="stSelectbox"] > div,
@@ -3323,13 +3323,12 @@ st.markdown("""
     [data-testid="stSelectbox"] [data-baseweb="select"],
     [data-testid="stSelectbox"] [data-baseweb="select"] > div,
     [data-testid="stSelectbox"] [data-baseweb="select"] div[role="button"] {
-        background-color: #e3f2f1 !important;
-        border-color: #0e6b74 !important;
+        background-color: #ffffff !important;
+        border-color: #cbd2d9 !important;
         border-radius: 6px !important;
     }
     [data-testid="stSelectbox"]:hover {
-        background-color: #d0e9e7 !important;
-        border-color: #0a4d54 !important;
+        border-color: #0e6b74 !important;
     }
     .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0e6b74 !important; box-shadow: 0 0 0 1px #0e6b74 !important; }
     ::placeholder { color: #6b778c !important; opacity: 1; }
