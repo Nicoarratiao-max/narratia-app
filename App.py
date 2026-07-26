@@ -6903,6 +6903,72 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
         st.markdown("**Resumen de Usuarios Activos**")
         st.dataframe(df_usuarios_admin[['Usuario', 'Nombre_Real', 'Plan', 'Correo']], use_container_width=True)
 
+        with st.container(border=True):
+            st.subheader("✏️ Cambiar Nombre de Usuario (login)")
+            st.caption("Esto cambia el nombre con el que la persona inicia sesión — se actualiza automáticamente en TODAS sus causas, tareas, contratos, etc. (no queda nada huérfano). El 'Nombre Real' que se muestra en pantalla es un campo aparte y no se ve afectado por esto.")
+            usuario_renombrar = st.selectbox("Usuario a renombrar", lista_usuarios, key="sel_renombrar_usr")
+            nuevo_nombre_usr = st.text_input("Nuevo nombre de usuario (login)", key="nuevo_nombre_usr_input", placeholder="Ej: fsagredo")
+            if st.button("✏️ Renombrar Usuario", key="btn_renombrar_usr"):
+                nuevo_nombre_limpio = nuevo_nombre_usr.strip()
+                if not nuevo_nombre_limpio:
+                    st.error("⚠️ Escribe el nuevo nombre de usuario.")
+                elif nuevo_nombre_limpio in lista_usuarios:
+                    st.error("⚠️ Ya existe un usuario con ese nombre.")
+                else:
+                    with st.spinner(f"Renombrando '{usuario_renombrar}' a '{nuevo_nombre_limpio}' en todo el sistema..."):
+                        # 1. El propio registro de usuario.
+                        df_usr_renom = safe_read_sheet("base_usuarios", [])
+                        df_usr_renom.loc[df_usr_renom['Usuario'] == usuario_renombrar, 'Usuario'] = nuevo_nombre_limpio
+                        safe_update_sheet("base_usuarios", df_usr_renom)
+                    
+                        # 2. Las hojas compartidas en la nube: cambiar Usuario_Propietario
+                        # de todos los registros que le pertenecían a este usuario.
+                        for hoja_renom, cols_renom in [
+                            ("base_causas", COLS_CAUSAS), ("base_tareas", COLS_TAREAS), ("base_contratos", COLS_CONTRATOS),
+                            ("base_tramites", COLS_TRAMITES), ("base_citas", COLS_CITAS), ("base_encargos", COLS_ENCARGOS),
+                            ("base_pagos_honorarios", COLS_PAGOS_HONORARIOS), ("base_clientes", COLS_CLIENTES),
+                            ("base_excepciones", COLS_EXCEPCIONES), ("base_jurisprudencia", COLS_JURISPRUDENCIA),
+                        ]:
+                            df_hoja_renom = safe_read_sheet(hoja_renom, cols_renom)
+                            if not df_hoja_renom.empty and 'Usuario_Propietario' in df_hoja_renom.columns:
+                                if (df_hoja_renom['Usuario_Propietario'] == usuario_renombrar).any():
+                                    df_hoja_renom.loc[df_hoja_renom['Usuario_Propietario'] == usuario_renombrar, 'Usuario_Propietario'] = nuevo_nombre_limpio
+                                    safe_update_sheet(hoja_renom, df_hoja_renom)
+                    
+                        # 3. Los archivos locales (por si existen en este momento en el
+                        # servidor) — se renombran para que sigan encontrándose bajo
+                        # el nombre nuevo.
+                        for prefijo_archivo in ["base_causas_", "base_tareas_", "base_contratos_", "base_tramites_",
+                                                 "base_estado_diario_", "base_citas_", "base_encargos_", "base_pagos_honorarios_"]:
+                            archivo_viejo = f"{prefijo_archivo}{usuario_renombrar}.csv"
+                            archivo_nuevo = f"{prefijo_archivo}{nuevo_nombre_limpio}.csv"
+                            if os.path.exists(archivo_viejo):
+                                os.rename(archivo_viejo, archivo_nuevo)
+                    
+                        st.success(f"✅ '{usuario_renombrar}' ahora inicia sesión como **'{nuevo_nombre_limpio}'** — sus causas, tareas y demás datos se actualizaron automáticamente. Avísale del nuevo nombre para su próximo ingreso.")
+                        import time; time.sleep(0.5); st.rerun()
+    
+        with st.container(border=True):
+            st.subheader("🔑 Restablecer Contraseña de un Usuario")
+            st.caption(
+                "⚠️ Importante: las contraseñas se guardan encriptadas (\"hash\"), de un solo sentido — "
+                "ni siquiera el sistema puede leer o mostrar la contraseña real que cada quien puso, ni tú, ni yo. "
+                "No es un descuido a corregir, es justamente lo que hace que el sistema sea seguro. "
+                "Si alguien perdió su contraseña, esta es la forma correcta de solucionarlo: asígnale una temporal, "
+                "y el sistema lo obligará a cambiarla por una propia en su próximo ingreso."
+            )
+            usuario_reset_clave = st.selectbox("Usuario", lista_usuarios, key="sel_reset_clave")
+            clave_temporal_nueva = st.text_input("Contraseña temporal nueva", key="clave_temporal_input", placeholder="Mínimo 6 caracteres")
+            if st.button("🔑 Restablecer Contraseña", key="btn_reset_clave"):
+                if len(clave_temporal_nueva) < 6:
+                    st.error("⚠️ La contraseña temporal debe tener al menos 6 caracteres.")
+                else:
+                    df_usr_reset = safe_read_sheet("base_usuarios", [])
+                    df_usr_reset.loc[df_usr_reset['Usuario'] == usuario_reset_clave, 'Password'] = hash_password(clave_temporal_nueva)
+                    df_usr_reset.loc[df_usr_reset['Usuario'] == usuario_reset_clave, 'Debe_Cambiar_Clave'] = 'True'
+                    safe_update_sheet("base_usuarios", df_usr_reset)
+                    st.success(f"✅ Contraseña temporal asignada a **{usuario_reset_clave}**. Se le va a pedir cambiarla por una propia apenas inicie sesión.")
+
     with tab_vision:
         st.subheader("Monitoreo Absoluto de la Oficina")
         
