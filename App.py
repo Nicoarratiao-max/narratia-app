@@ -3841,12 +3841,28 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
     col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1: 
         st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CAUSAS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_causas}</h2></div>", unsafe_allow_html=True)
+        if st.button("Ver Causas →", key="ir_causas_inicio", use_container_width=True):
+            st.session_state['menu_radio'] = "💼 Causas"
+            resetear_vistas()
+            st.rerun()
     with col_m2: 
         st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>CLIENTES</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{cant_clientes}</h2></div>", unsafe_allow_html=True)
+        if st.button("Ver Clientes →", key="ir_clientes_inicio", use_container_width=True):
+            st.session_state['menu_radio'] = "👥 Clientes"
+            resetear_vistas()
+            st.rerun()
     with col_m3: 
         st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>TAREAS HOY</h3><h2 style='margin:0; font-size:28px; color:#ff5630;'>{tareas_del_dia}</h2></div>", unsafe_allow_html=True)
+        if st.button("Ver Tareas →", key="ir_tareas_inicio", use_container_width=True):
+            st.session_state['menu_radio'] = "☑️ Tareas"
+            resetear_vistas()
+            st.rerun()
     with col_m4: 
         st.markdown(f"<div class='dash-card'><h3 style='margin:0; font-size:14px; color:#6b778c;'>DOCUMENTOS</h3><h2 style='margin:0; font-size:28px; color:#172b4d;'>{documentos_efectivos}</h2></div>", unsafe_allow_html=True)
+        if st.button("Ver Tareas →", key="ir_docs_inicio", use_container_width=True):
+            st.session_state['menu_radio'] = "☑️ Tareas"
+            resetear_vistas()
+            st.rerun()
 
     st.write("<br>", unsafe_allow_html=True)
     grid_izq, grid_der = st.columns([1.2, 1])
@@ -6185,37 +6201,41 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
     if not ES_ADMIN_CLIENTES_TOP and not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
         df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
 
-    with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
-        rut_conflicto = st.text_input("RUT a verificar", placeholder="Ej: 12.345.678-9", key="buscar_conflicto_rut")
-        if rut_conflicto.strip():
-            rut_normalizado = re.sub(r'[^0-9kK]', '', rut_conflicto).upper()
-            
-            # Se revisa en TODAS las causas que existan en el disco (de todos los
-            # abogados, no solo las tuyas), porque un conflicto de interés hay que
-            # detectarlo aunque el caso lo haya llevado otro compañero del estudio.
-            piezas_conflicto = []
-            for arch_conf in glob.glob("base_causas_*.csv"):
-                t_conf = leer_csv_local(arch_conf, COLS_CAUSAS)
-                if not t_conf.empty and 'RUT' in t_conf.columns:
-                    propietario_conf = arch_conf.replace("base_causas_", "").replace(".csv", "")
-                    t_conf = t_conf.copy()
-                    t_conf['Propietario_Vista'] = propietario_conf
-                    piezas_conflicto.append(t_conf)
-            df_todas_causas_conf = pd.concat(piezas_conflicto, ignore_index=True) if piezas_conflicto else pd.DataFrame()
-            
-            resultados_conflicto = pd.DataFrame()
-            if not df_todas_causas_conf.empty:
-                mascara_rut = df_todas_causas_conf['RUT'].astype(str).apply(lambda x: re.sub(r'[^0-9kK]', '', x).upper() == rut_normalizado)
-                resultados_conflicto = df_todas_causas_conf[mascara_rut]
-            
-            if resultados_conflicto.empty:
-                st.success("✅ No se encontraron causas asociadas a este RUT en todo el estudio. No hay conflicto de interés detectado.")
-            else:
-                st.warning(f"⚠️ Este RUT aparece en {len(resultados_conflicto)} causa(s) del estudio — revisa antes de aceptar un caso nuevo:")
-                for _, fila_conf in resultados_conflicto.iterrows():
-                    nombre_resp = NOMBRES_REALES.get(fila_conf.get('Propietario_Vista'), fila_conf.get('Propietario_Vista'))
-                    st.markdown(f"- **{fila_conf.get('ROL','--')}** — {fila_conf.get('CARATULADO','--')} · Cliente: {fila_conf.get('Cliente','--')} · Responsable: {nombre_resp}")
-            st.caption("Este buscador revisa por coincidencia exacta de RUT en las causas registradas. No reemplaza el criterio profesional del abogado.")
+    if ES_ADMIN_CLIENTES_TOP:
+        with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
+            rut_conflicto = st.text_input("RUT a verificar", placeholder="Ej: 12.345.678-9", key="buscar_conflicto_rut")
+            if rut_conflicto.strip():
+                rut_normalizado = re.sub(r'[^0-9kK]', '', rut_conflicto).upper()
+                
+                # Se revisa en TODAS las causas que existan en el disco (de todos los
+                # abogados, no solo las tuyas), porque un conflicto de interés hay que
+                # detectarlo aunque el caso lo haya llevado otro compañero del estudio.
+                # Restringido solo al administrador: antes cualquier usuario podía ver
+                # aquí el nombre del cliente, la causa y el responsable de OTROS
+                # abogados del equipo — una filtración real de privacidad entre sesiones.
+                piezas_conflicto = []
+                for arch_conf in glob.glob("base_causas_*.csv"):
+                    t_conf = leer_csv_local(arch_conf, COLS_CAUSAS)
+                    if not t_conf.empty and 'RUT' in t_conf.columns:
+                        propietario_conf = arch_conf.replace("base_causas_", "").replace(".csv", "")
+                        t_conf = t_conf.copy()
+                        t_conf['Propietario_Vista'] = propietario_conf
+                        piezas_conflicto.append(t_conf)
+                df_todas_causas_conf = pd.concat(piezas_conflicto, ignore_index=True) if piezas_conflicto else pd.DataFrame()
+                
+                resultados_conflicto = pd.DataFrame()
+                if not df_todas_causas_conf.empty:
+                    mascara_rut = df_todas_causas_conf['RUT'].astype(str).apply(lambda x: re.sub(r'[^0-9kK]', '', x).upper() == rut_normalizado)
+                    resultados_conflicto = df_todas_causas_conf[mascara_rut]
+                
+                if resultados_conflicto.empty:
+                    st.success("✅ No se encontraron causas asociadas a este RUT en todo el estudio. No hay conflicto de interés detectado.")
+                else:
+                    st.warning(f"⚠️ Este RUT aparece en {len(resultados_conflicto)} causa(s) del estudio — revisa antes de aceptar un caso nuevo:")
+                    for _, fila_conf in resultados_conflicto.iterrows():
+                        nombre_resp = NOMBRES_REALES.get(fila_conf.get('Propietario_Vista'), fila_conf.get('Propietario_Vista'))
+                        st.markdown(f"- **{fila_conf.get('ROL','--')}** — {fila_conf.get('CARATULADO','--')} · Cliente: {fila_conf.get('Cliente','--')} · Responsable: {nombre_resp}")
+                st.caption("Este buscador revisa por coincidencia exacta de RUT en las causas registradas. No reemplaza el criterio profesional del abogado.")
 
     if st.session_state['cliente_seleccionado'] is None:
         if st.button("➕ Crear Nuevo Cliente", type="primary"):
@@ -6306,23 +6326,22 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                 ]
             
             with st.container(border=True):
-                ch1, ch2, ch3, ch4, ch5 = st.columns([2.5, 1.5, 2.5, 2.5, 1])
+                ch1, ch2, ch3, ch4 = st.columns([2.5, 1.5, 2.5, 2.5])
                 ch1.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CLIENTE</span>", unsafe_allow_html=True)
                 ch2.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>TELÉFONO</span>", unsafe_allow_html=True)
                 ch3.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>CORREO</span>", unsafe_allow_html=True)
                 ch4.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>RUT</span>", unsafe_allow_html=True)
-                ch5.markdown("<span style='color:#6b778c; font-weight:800; font-size:13px;'>ACCIONES</span>", unsafe_allow_html=True)
                 st.markdown("<hr style='margin: 5px 0px 10px 0px; border-top: 2px solid #e0e4e8;'>", unsafe_allow_html=True)
                 
                 for _, fila_cli in df_directorio.iterrows():
-                    r1, r2, r3, r4, r5 = st.columns([2.5, 1.5, 2.5, 2.5, 1])
-                    r1.markdown(f"<span style='color:#172b4d; font-weight:600; font-size:14px;'>👤 {fila_cli['Cliente']}</span>", unsafe_allow_html=True)
+                    r1, r2, r3, r4 = st.columns([2.5, 1.5, 2.5, 2.5])
+                    with r1:
+                        if st.button(f"👤 {fila_cli['Cliente']}", key=f"ver_cli_{fila_cli['RUT']}_{fila_cli['Cliente']}", use_container_width=True):
+                            st.session_state['cliente_seleccionado'] = fila_cli['RUT']
+                            st.rerun()
                     r2.markdown(f"<span style='color:#172b4d; font-size:14px;'>{fila_cli['Teléfono']}</span>", unsafe_allow_html=True)
                     r3.markdown(f"<span style='color:#172b4d; font-size:14px;'>{fila_cli['Correo']}</span>", unsafe_allow_html=True)
                     r4.markdown(f"<span style='color:#6b778c; font-size:13px;'>{fila_cli['RUT']}</span>", unsafe_allow_html=True)
-                    if r5.button("👁️", key=f"ver_cli_{fila_cli['RUT']}_{fila_cli['Cliente']}", use_container_width=True):
-                        st.session_state['cliente_seleccionado'] = fila_cli['RUT']
-                        st.rerun()
                     st.markdown("<hr style='margin: 8px 0px 8px 0px; border-top: 1px dashed #e0e4e8;'>", unsafe_allow_html=True)
     else:
         rut_actual = st.session_state['cliente_seleccionado']
