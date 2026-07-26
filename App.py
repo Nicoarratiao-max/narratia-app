@@ -413,12 +413,29 @@ def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
     compatible con OpenAI). Se usa como motor de IA principal del sistema,
     en reemplazo de Gemini, cuya cuenta tiene un problema de facturación
     todavía sin resolver por parte de Google.
+    
+    El plan gratuito de Groq tiene un límite real de consultas por minuto
+    (compartido entre todo el equipo, ya que todos usan la misma clave) —
+    si se supera, Groq responde "429 Too Many Requests". En vez de fallar
+    de inmediato, se reintenta un par de veces con una breve espera, ya
+    que casi siempre el límite se libera solo en unos segundos.
     """
     headers = {"Authorization": f"Bearer {st.secrets['GROQ_API_KEY']}", "Content-Type": "application/json"}
     body = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
-    respuesta = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=body, timeout=180)
-    respuesta.raise_for_status()
-    return respuesta.json()["choices"][0]["message"]["content"]
+    
+    import time
+    intentos_maximos = 3
+    for intento in range(intentos_maximos):
+        respuesta = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=body, timeout=180)
+        if respuesta.status_code == 429:
+            if intento < intentos_maximos - 1:
+                tiempo_espera = 8 * (intento + 1)  # 8s, luego 16s
+                time.sleep(tiempo_espera)
+                continue
+            else:
+                raise Exception("El sistema de IA gratuito (Groq) está saturado de consultas ahora mismo — es un límite compartido por todo el equipo, no un error del sistema. Espera 1-2 minutos y vuelve a intentarlo.")
+        respuesta.raise_for_status()
+        return respuesta.json()["choices"][0]["message"]["content"]
 
 # =====================================================================
 # 💰 ARANCEL DE HONORARIOS — COLEGIO DE ABOGADOS DE VALPARAÍSO
