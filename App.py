@@ -3218,6 +3218,33 @@ def nav_clientes():
     st.session_state.menu_radio = "👥 Clientes"
     resetear_vistas()
 
+def _actualizar_campo_tarea(id_tarea, propietario_tarea, campo, valor):
+    """
+    Actualiza un campo de una tarea en el archivo de su DUEÑO REAL (no
+    siempre el usuario que está mirando la pantalla) — necesario porque
+    la vista de tareas de una causa junta tareas de todo el equipo, y cada
+    una vive en el archivo de la persona a la que se le asignó.
+    """
+    archivo_t = f"base_tareas_{propietario_tarea}.csv"
+    df_t = leer_csv_local(archivo_t, COLS_TAREAS)
+    df_t.loc[df_t['ID_Tarea'] == id_tarea, campo] = valor
+    df_t.to_csv(archivo_t, index=False)
+    dn_t = safe_read_sheet("base_tareas", COLS_TAREAS)
+    if not dn_t.empty:
+        dn_t.loc[dn_t['ID_Tarea'] == id_tarea, campo] = valor
+        safe_update_sheet("base_tareas", dn_t)
+
+def _eliminar_tarea_por_id(id_tarea, propietario_tarea):
+    """Elimina una tarea del archivo de su dueño real, tanto local como en la nube."""
+    archivo_t = f"base_tareas_{propietario_tarea}.csv"
+    df_t = leer_csv_local(archivo_t, COLS_TAREAS)
+    df_t = df_t[df_t['ID_Tarea'] != id_tarea]
+    df_t.to_csv(archivo_t, index=False)
+    dn_t = safe_read_sheet("base_tareas", COLS_TAREAS)
+    if not dn_t.empty:
+        dn_t = dn_t[dn_t['ID_Tarea'] != id_tarea]
+        safe_update_sheet("base_tareas", dn_t)
+
 def ir_a_expediente(rol_causa, propietario=None): 
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = rol_causa
@@ -4830,7 +4857,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
     
     @st.dialog("Editar tarea")
-    def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado):
+    def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado, tarea_propietario):
         st.write(f"Modificando plazos para: **{tarea_titulo}**")
         st.text_input("Usuario", value=nombre_real_usuario, disabled=True)
         
@@ -4844,14 +4871,12 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         nuevo_estado = st.selectbox("Estado", opciones_estado, index=opciones_estado.index(tarea_estado) if tarea_estado in opciones_estado else 0)
         
         if st.button("Guardar", type="primary", use_container_width=True):
-            df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
-            df_t_local.loc[df_t_local['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
-            df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-            
-            dn = safe_read_sheet("base_tareas", [])
-            if not dn.empty:
-                dn.loc[dn['ID_Tarea'] == tarea_id, ['Fecha_Vencimiento', 'Estado']] = [nueva_fecha.strftime("%d/%m/%Y"), nuevo_estado]
-                safe_update_sheet("base_tareas", dn)
+            # Se guarda en el archivo del dueño REAL de la tarea (que puede
+            # ser un colega, si se delegó), no siempre el archivo de quien
+            # está editando — antes esto fallaba en silencio si la tarea
+            # era de otra persona.
+            _actualizar_campo_tarea(tarea_id, tarea_propietario, 'Fecha_Vencimiento', nueva_fecha.strftime("%d/%m/%Y"))
+            _actualizar_campo_tarea(tarea_id, tarea_propietario, 'Estado', nuevo_estado)
                 
             st.session_state['editando_tarea'] = None
             st.success("✅ Tarea actualizada correctamente.")
@@ -5195,11 +5220,27 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.success("✅ Tarea registrada exitosamente.")
                             st.rerun()
                             
-                df_t_local = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
+                # Antes esto solo leía el archivo del usuario actual — si la
+                # tarea se delegó a un colega (con el multiselector de
+                # arriba), se guardaba en el archivo de ESA persona, y por
+                # eso no aparecía acá aunque sí en el menú general de Tareas
+                # (que si eres admin, junta todos los archivos). Ahora se
+                # busca la causa en TODOS los archivos de tareas del equipo,
+                # para que se vea sin importar a quién se le haya asignado.
+                piezas_tareas_causa = []
+                for arch_tareas_causa in glob.glob("base_tareas_*.csv"):
+                    t_causa_tareas = leer_csv_local(arch_tareas_causa, COLS_TAREAS)
+                    if not t_causa_tareas.empty:
+                        piezas_tareas_causa.append(t_causa_tareas)
+                df_t_local = pd.concat(piezas_tareas_causa, ignore_index=True) if piezas_tareas_causa else leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
                 # Las tareas más recientes van primero, independiente de su estado
                 # (aprobada/rechazada), en vez del orden de creación original que
                 # las dejaba siempre al final de la lista.
                 tareas_de_esta_causa = df_t_local[df_t_local['ROL'] == rol_actual].iloc[::-1]
+                # Al mezclar archivos de distintas personas, puede haber ID_Tarea
+                # repetidos si algo quedó duplicado — nos quedamos con una sola
+                # copia de cada tarea para no mostrarla dos veces.
+                tareas_de_esta_causa = tareas_de_esta_causa.drop_duplicates(subset=['ID_Tarea'])
                 
                 if tareas_de_esta_causa.empty:
                     st.info("Esta causa no registra tareas en progreso.")
@@ -5210,7 +5251,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.markdown(f"<div style='height: 5px; background-color: {b_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                             
                             if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
-                                modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'])
+                                modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'], tarea['Usuario_Propietario'])
                             else:
                                 autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
                                 nro_tarea_corto = str(tarea['ID_Tarea']).upper()
@@ -5228,13 +5269,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     if tarea['Estado'] == 'En progreso':
                                         bcols = st.columns([1.3, 1.3, 0.9, 0.9] if usuario_actual == "Narratia" else [1.3, 1.3, 0.9])
                                         if bcols[0].button("❌ Rechazar", key=f"rech_{tarea['ID_Tarea']}", use_container_width=True): 
-                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Rechazada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                            _actualizar_campo_tarea(tarea['ID_Tarea'], tarea['Usuario_Propietario'], 'Estado', 'Rechazada'); st.rerun()
                                         if bcols[1].button("✅ Aprobar", key=f"apr_{tarea['ID_Tarea']}", use_container_width=True): 
-                                            df_t_local.at[idx_tarea_bd, 'Estado'] = 'Aprobada'; df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                            _actualizar_campo_tarea(tarea['ID_Tarea'], tarea['Usuario_Propietario'], 'Estado', 'Aprobada'); st.rerun()
                                         if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}", help="Editar tarea", use_container_width=True):
                                             st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
                                         if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
-                                            df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                            _eliminar_tarea_por_id(tarea['ID_Tarea'], tarea['Usuario_Propietario']); st.rerun()
                                         st.markdown("<div class='task-status-chip task-status-progreso' style='margin-top:8px; text-align:right; float:right;'>En progreso</div>", unsafe_allow_html=True)
                                     else:
                                         clase_estado = "task-status-aprobada" if tarea['Estado'] == 'Aprobada' else "task-status-rechazada"
@@ -5243,7 +5284,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             st.markdown(f"<div style='text-align:right;'><span class='task-status-chip {clase_estado}'>{tarea['Estado']}</span></div>", unsafe_allow_html=True)
                                         with c_del:
                                             if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
-                                                df_t_local = df_t_local.drop(idx_tarea_bd); df_t_local.to_csv(ARCHIVO_TAREAS, index=False); st.rerun()
+                                                _eliminar_tarea_por_id(tarea['ID_Tarea'], tarea['Usuario_Propietario']); st.rerun()
 
                                 st.markdown(f"<p style='font-size: 15px; color: #172b4d; margin-top:12px; margin-bottom: 5px;'>{tarea['Descripcion']}</p>", unsafe_allow_html=True)
                                 
@@ -5281,12 +5322,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                             st.markdown("<div style='padding-top:8px;'></div>", unsafe_allow_html=True)
                                             if st.button("🗑️", key=f"del_com_{tarea['ID_Tarea']}_{idx_com}", help="Eliminar comentario"):
                                                 comentarios_js_actualizado = [x for j, x in enumerate(comentarios_js) if j != idx_com]
-                                                df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js_actualizado)
-                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                                dn_del_com = safe_read_sheet("base_tareas", [])
-                                                if not dn_del_com.empty:
-                                                    dn_del_com.loc[dn_del_com['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js_actualizado)
-                                                    safe_update_sheet("base_tareas", dn_del_com)
+                                                _actualizar_campo_tarea(tarea['ID_Tarea'], tarea['Usuario_Propietario'], 'Comentarios', json.dumps(comentarios_js_actualizado))
                                                 st.session_state[key_com_abiertos] = True
                                                 st.rerun()
                                         st.markdown("<hr style='margin:2px 0; border-color:#f4f5f7;'>", unsafe_allow_html=True)
@@ -5332,13 +5368,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                                     nuevo_comentario['archivo_b64'] = b64_com
                                                     nuevo_comentario['texto'] = (texto_com.strip() + f" <br><em>[📎 {adj_coment.name}]</em>").strip()
                                                 comentarios_js.append(nuevo_comentario)
-                                                df_t_local.at[idx_tarea_bd, 'Comentarios'] = json.dumps(comentarios_js)
-                                                df_t_local.to_csv(ARCHIVO_TAREAS, index=False)
-                                                
-                                                dn = safe_read_sheet("base_tareas", [])
-                                                if not dn.empty:
-                                                    dn.loc[dn['ID_Tarea'] == tarea['ID_Tarea'], 'Comentarios'] = json.dumps(comentarios_js)
-                                                    safe_update_sheet("base_tareas", dn)
+                                                _actualizar_campo_tarea(tarea['ID_Tarea'], tarea['Usuario_Propietario'], 'Comentarios', json.dumps(comentarios_js))
                                                 st.session_state[key_toggle_adj] = False
                                                 st.session_state[key_com_abiertos] = True
                                                 st.rerun()
@@ -6201,6 +6231,19 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                     st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']} | Vence: {row['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
                 with c3:
                     st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
+                    if fila_tarea_propia or usuario_actual == "Narratia":
+                        if st.button("🗑️ Eliminar", key=f"global_del_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", use_container_width=True):
+                            propietario_borrar = row.get('Propietario_Vista', usuario_actual)
+                            archivo_borrar_tarea = f"base_tareas_{propietario_borrar}.csv"
+                            df_tareas_borrar = leer_csv_local(archivo_borrar_tarea, COLS_TAREAS)
+                            df_tareas_borrar = df_tareas_borrar[df_tareas_borrar['ID_Tarea'] != row['ID_Tarea']]
+                            df_tareas_borrar.to_csv(archivo_borrar_tarea, index=False)
+                            dn_tareas_borrar = safe_read_sheet("base_tareas", COLS_TAREAS)
+                            if not dn_tareas_borrar.empty:
+                                dn_tareas_borrar = dn_tareas_borrar[dn_tareas_borrar['ID_Tarea'] != row['ID_Tarea']]
+                                safe_update_sheet("base_tareas", dn_tareas_borrar)
+                            st.success("Tarea eliminada.")
+                            st.rerun()
 
 # 11.5 AGENDA DE CITAS (agendamiento de asesorías a clientes)
 elif st.session_state['menu_radio'] == "🗓️ Agenda de Asesorías":
