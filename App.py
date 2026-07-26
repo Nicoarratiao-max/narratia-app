@@ -816,7 +816,7 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional=""):
     """
     
     texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
-    prompt_final = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:45000]}"
+    prompt_final = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:25000]}"
     texto_respuesta = consultar_groq(prompt_final)
     return json.loads(_limpiar_json_ia(texto_respuesta))
 
@@ -855,7 +855,7 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
     """
     if archivos_pdf_subidos:
         texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
-        prompt_base += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:45000]}"
+        prompt_base += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:25000]}"
     return consultar_groq(prompt_base)
 
 # =====================================================================
@@ -4236,6 +4236,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
             "📎 Adjuntar documentos del caso (varios PDFs sueltos, o un .zip con muchos documentos adentro)",
             type=['pdf', 'zip'], accept_multiple_files=True
         )
+        st.caption("⚠️ Si el total de texto de todos los documentos es muy grande, el sistema toma solo la primera parte (equivalente a unas 15-20 páginas de texto en total) — para casos con muchísimos documentos, prioriza los más relevantes para el análisis (la demanda, el título, la resolución clave) en vez de adjuntar el expediente completo.")
         
         if st.button("💡 Analizar y Generar Propuesta", type="primary", use_container_width=True):
             if not caso_texto.strip() and not archivos_legales:
@@ -4279,8 +4280,8 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         {caso_texto}
                         
                         TEXTO DE LOS DOCUMENTOS ADJUNTOS:
-                        {texto_pdf[:90000]}
-                        {"\n(NOTA: había más contenido de los documentos adjuntos que no cupo aquí por su tamaño total; se truncó a las primeras páginas/documentos.)" if len(texto_pdf) > 90000 else ""}
+                        {texto_pdf[:25000]}
+                        {"\n(NOTA: había más contenido de los documentos adjuntos que no cupo aquí por su tamaño total; se truncó a las primeras páginas/documentos.)" if len(texto_pdf) > 25000 else ""}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
                         
@@ -6863,7 +6864,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                             {instrucciones_red if instrucciones_red.strip() else "(sin texto adicional, básate en los documentos)"}
                             
                             TEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:
-                            {texto_documentos_red[:45000] if texto_documentos_red else "(no se adjuntaron documentos)"}
+                            {texto_documentos_red[:25000] if texto_documentos_red else "(no se adjuntaron documentos)"}
                             
                             TIPOS DE ESCRITO DISPONIBLES EN EL SISTEMA:
                             {lista_tipos_texto}
@@ -6938,7 +6939,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         {instrucciones_red}
                         
                         TEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS (resoluciones, expediente, actuaciones de Receptor, títulos, etc. — usa estos hechos y fechas REALES como base, no los inventes ni los cambies):
-                        {texto_documentos_red[:45000] if texto_documentos_red else "(no se adjuntaron documentos, básate solo en las instrucciones de arriba)"}
+                        {texto_documentos_red[:25000] if texto_documentos_red else "(no se adjuntaron documentos, básate solo en las instrucciones de arriba)"}
                         {bloque_juris_redactor}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
@@ -7318,7 +7319,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         
                         todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
                         texto_extraido_esc = extraer_texto_pdfs(todos_archivos_esc)
-                        prompt_final_esc = prompt_analisis_esc + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_extraido_esc[:45000]}"
+                        prompt_final_esc = prompt_analisis_esc + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_extraido_esc[:25000]}"
                         texto_resultado_esc = consultar_groq(prompt_final_esc)
                         
                         st.success("✅ Análisis completado.")
