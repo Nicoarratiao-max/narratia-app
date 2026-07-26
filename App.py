@@ -1184,40 +1184,45 @@ def leer_csv_local(path, default_cols=None):
 # recomienda para cuentas Gmail normales es autenticarse como el usuario
 # real (OAuth), usando SU cuota de 15GB gratis, en vez de la cuenta de
 # servicio. Esto requiere una autorización única (ver Panel Admin).
-def _construir_flow_oauth_drive():
-    """Crea el objeto 'flow' de OAuth sin generar una URL de autorización nueva (para no pisar el code_verifier ya guardado al momento de intercambiar el código)."""
-    from google_auth_oauthlib.flow import Flow
-    redirect_uri = st.secrets.get("APP_BASE_URL", "https://jurisyncs.streamlit.app")
-    client_config = {
-        "web": {
-            "client_id": st.secrets["GOOGLE_OAUTH_CLIENT_ID"],
-            "client_secret": st.secrets["GOOGLE_OAUTH_CLIENT_SECRET"],
-            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-            "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [redirect_uri],
-        }
-    }
-    return Flow.from_client_config(client_config, scopes=['https://www.googleapis.com/auth/drive'], redirect_uri=redirect_uri)
-
 def _url_autorizacion_drive_oauth():
-    """Genera la URL para que el abogado autorice el acceso a su Drive personal, y el objeto 'flow' para completar el intercambio después."""
-    flow = _construir_flow_oauth_drive()
-    # CRÍTICO: session_state de Streamlit NO sobrevive el viaje completo a
-    # la pantalla de Google y de vuelta (es una redirección a un dominio
-    # externo, y Streamlit pierde la sesión anterior). Por eso, en vez de
-    # guardar la "llave de verificación" (PKCE code_verifier) en
-    # session_state, se manda como el parámetro "state" de OAuth — que está
-    # hecho justo para esto: Google lo devuelve intacto en la URL de
-    # vuelta, así que sobrevive el viaje completo sin depender de la sesión.
-    auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline', include_granted_scopes='true', state=flow.code_verifier)
-    return auth_url, flow
+    """
+    Genera la URL para que el abogado autorice el acceso a su Drive
+    personal. Construida a mano (sin la librería google_auth_oauthlib),
+    porque esa librería fuerza automáticamente una capa de seguridad
+    extra (PKCE) que está pensada para apps que NO pueden guardar un
+    secreto de forma segura (como una app de celular) — esta app SÍ
+    guarda su client_secret de forma segura (en Secrets, del lado del
+    servidor), así que no la necesita, y esa capa extra fue la causa de
+    varios errores ("Invalid code verifier") en los intentos anteriores.
+    """
+    redirect_uri = st.secrets.get("APP_BASE_URL", "https://jurisyncs.streamlit.app")
+    params = {
+        "client_id": st.secrets["GOOGLE_OAUTH_CLIENT_ID"],
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "https://www.googleapis.com/auth/drive",
+        "access_type": "offline",
+        "prompt": "consent",
+        "include_granted_scopes": "true",
+    }
+    auth_url = "https://accounts.google.com/o/oauth2/auth?" + "&".join(f"{k}={requests.utils.quote(v)}" for k, v in params.items())
+    return auth_url
 
-def _intercambiar_codigo_oauth_drive(codigo_autorizacion, code_verifier_recibido):
-    """Cambia el código de autorización (que llega en la URL tras autorizar) por un refresh_token permanente. Construye su propio 'flow' y le reinyecta el code_verifier recibido de vuelta en el parámetro 'state'."""
-    flow = _construir_flow_oauth_drive()
-    flow.code_verifier = code_verifier_recibido
-    flow.fetch_token(code=codigo_autorizacion)
-    return flow.credentials
+def _intercambiar_codigo_oauth_drive(codigo_autorizacion):
+    """Cambia el código de autorización (que llega en la URL tras autorizar) por un refresh_token permanente, con una petición directa al servidor de tokens de Google."""
+    redirect_uri = st.secrets.get("APP_BASE_URL", "https://jurisyncs.streamlit.app")
+    respuesta = requests.post("https://oauth2.googleapis.com/token", data={
+        "code": codigo_autorizacion,
+        "client_id": st.secrets["GOOGLE_OAUTH_CLIENT_ID"],
+        "client_secret": st.secrets["GOOGLE_OAUTH_CLIENT_SECRET"],
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }, timeout=30)
+    respuesta.raise_for_status()
+    datos_token = respuesta.json()
+    if "refresh_token" not in datos_token:
+        raise Exception(f"Google no devolvió un refresh_token. Respuesta completa: {datos_token}")
+    return datos_token["refresh_token"]
 
 def _servicio_drive():
     SCOPES_DRIVE = ['https://www.googleapis.com/auth/drive']
@@ -3391,12 +3396,12 @@ st.markdown("""
 # proceso — por eso antes no se veía nada. Este chequeo va al nivel más
 # alto del script, antes de cualquier menú, para que funcione sin importar
 # en qué pantalla caiga el usuario al volver.
-if "code" in st.query_params and "state" in st.query_params and st.session_state.get('username') == "Narratia":
+if "code" in st.query_params and st.session_state.get('username') == "Narratia":
     st.title("🔑 Completando la conexión con tu Drive personal...")
     try:
-        credenciales_obtenidas_global = _intercambiar_codigo_oauth_drive(st.query_params["code"], st.query_params.get("state", ""))
+        refresh_token_obtenido = _intercambiar_codigo_oauth_drive(st.query_params["code"])
         st.success("✅ ¡Autorización exitosa! Copia este código y pégalo en tus Secrets de Streamlit:")
-        st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{credenciales_obtenidas_global.refresh_token}"', language="toml")
+        st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{refresh_token_obtenido}"', language="toml")
         st.warning("⚠️ Este código es una llave de acceso a tu Drive — trátalo como una contraseña. Después de copiarlo a Secrets, no lo compartas ni lo dejes visible en ningún otro lado.")
     except Exception as e:
         st.error(f"⚠️ No se pudo completar la autorización. Detalle técnico: {e}")
@@ -6559,13 +6564,17 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
             """)
         else:
             # Ya hay credenciales OAuth configuradas: se puede iniciar la autorización.
+            # NOTA: en la práctica, el chequeo global de arriba en el script
+            # (antes de cargar el menú) ya intercepta el regreso de Google
+            # antes de llegar hasta acá — esto queda como respaldo por si
+            # alguna vez se llega a este punto con un código en la URL.
             parametros_url = st.query_params
             if "code" in parametros_url:
                 st.info("🔄 Terminando la autorización...")
                 try:
-                    credenciales_obtenidas = _intercambiar_codigo_oauth_drive(parametros_url["code"], parametros_url.get("state", ""))
+                    refresh_token_obtenido_panel = _intercambiar_codigo_oauth_drive(parametros_url["code"])
                     st.success("✅ ¡Autorización exitosa! Copia este código y pégalo en tus Secrets de Streamlit:")
-                    st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{credenciales_obtenidas.refresh_token}"', language="toml")
+                    st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{refresh_token_obtenido_panel}"', language="toml")
                     st.warning("⚠️ Este código es una llave de acceso a tu Drive — trátalo como una contraseña. Después de copiarlo a Secrets, no lo compartas ni lo dejes visible en ningún otro lado.")
                     st.query_params.clear()
                 except Exception as e:
@@ -6578,7 +6587,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                     st.query_params.clear()
                     st.warning("La página se limpió. Genera un link de autorización nuevo (recarga esta pestaña) e inténtalo de nuevo desde cero.")
             else:
-                url_auth, _ = _url_autorizacion_drive_oauth()
+                url_auth = _url_autorizacion_drive_oauth()
                 st.markdown(f"### [👉 Haz clic aquí para autorizar tu Drive personal]({url_auth})")
                 st.caption("Te va a llevar a una pantalla de Google pidiéndote iniciar sesión y dar permiso — es normal que Google muestre una advertencia de 'app no verificada' (porque es tu propia app, no una app pública), puedes continuar igual haciendo clic en 'Avanzado' → 'Ir a JuriSync (no seguro)'.")
 
