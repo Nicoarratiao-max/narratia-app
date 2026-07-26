@@ -1631,7 +1631,7 @@ COLS_CITAS = ['ID_Cita', 'Fecha', 'Hora', 'RUT_Cliente', 'Nombre_Cliente', 'Tele
 COLS_ENCARGOS = ['ID_Encargo', 'Nombre_Encargante', 'RUT_Encargante', 'Fecha_Encargo', 'Fecha_Limite',
                  'Descripcion_Encargo', 'Monto', 'Estado', 'Usuario_Propietario']
 COLS_PAGOS_HONORARIOS = ['ID_Pago', 'Fecha_Pago', 'Cliente', 'ROL', 'Monto_Cuota', 'Numero_Cuota', 'Usuario_Propietario']
-COLS_JURISPRUDENCIA = ['ID', 'Tribunal', 'Rol_Causa', 'Fecha_Sentencia', 'Materia', 'Resumen', 'Archivo_Nombre',
+COLS_JURISPRUDENCIA = ['ID', 'Tribunal', 'Rol_Causa', 'Fecha_Sentencia', 'Materia', 'Resultado', 'Resumen', 'Archivo_Nombre',
                         'Archivo_B64', 'Archivo_Drive_ID', 'Fecha_Carga', 'Usuario_Propietario']
 COLS_POSESION_EFECTIVA = ['ID', 'Fecha', 'Causante', 'RUT_Causante', 'Fecha_Defuncion', 'Herederos_JSON', 'Bienes_JSON', 'Cliente_Solicitante', 'RUT_Cliente', 'Estado', 'Valor_UTM', 'Masa_Hereditaria', 'Impuesto_Total', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_TRAMITES = ['ID_Tramite', 'ROL', 'Fecha_Pago', 'Tipo_Auxiliar', 'Monto', 'Comprobante_Nombre', 'Comprobante_B64', 'Comprobante_Drive_ID', 'Registrado_Por', 'Usuario_Propietario']
@@ -7197,17 +7197,20 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                 with st.spinner("Analizando la sentencia..."):
                     try:
                         prompt_juris = f"""
+                        Actúa como un abogado chileno experto en análisis de jurisprudencia, revisando esta sentencia con ojo crítico y profundo — no un resumen superficial.
+                        
                         Analiza el siguiente texto de una sentencia judicial chilena y extrae:
                         1. Tribunal que la dictó (Corte Suprema, Corte de Apelaciones de [ciudad], o Tribunal de Primera Instancia [tipo]).
                         2. Rol de la causa (si aparece).
                         3. Fecha de la sentencia (si aparece).
                         4. Materia principal (en pocas palabras, ej: "Nulidad de contrato por vicio del consentimiento").
-                        5. Un resumen de 3-5 líneas del criterio jurídico central que resuelve, con la máxima fidelidad al texto real (sin inventar nada que no esté en el documento).
+                        5. Resultado: si la acción, recurso o excepción fue ACOGIDA, RECHAZADA, o ACOGIDA PARCIALMENTE — sé preciso, esto no es opcional.
+                        6. Fundamentos de fondo (esto es lo más importante — profundiza de verdad, no un resumen genérico): explica CON DETALLE el razonamiento real del tribunal — qué argumentos de la parte que ganó fueron acogidos y por qué, qué argumentos de la parte que perdió fueron desechados y con qué fundamento jurídico exacto (cita los "considerandos" relevantes si el texto los numera), qué normas legales aplicó el tribunal para llegar a esa conclusión, y si hubo votos disidentes o prevenciones, menciónalos. Esto debe permitirle a un abogado entender EXACTAMENTE por qué se falló así, no solo que se falló así. Extensión: 8-12 líneas mínimo, con la máxima fidelidad al texto real (sin inventar nada que no esté en el documento — si algo no aparece explícito, dilo así en vez de inventarlo).
                         
                         TEXTO DE LA SENTENCIA:
                         {texto_extraido_sentencia[:20000]}
                         
-                        Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resumen": "..."}}
+                        Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resultado": "Acogida/Rechazada/Acogida Parcialmente", "resumen": "...(los fundamentos de fondo detallados del punto 6)..."}}
                         """
                         respuesta_juris_ia = consultar_ia_inteligente(prompt_juris)
                         datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia), strict=False)
@@ -7215,6 +7218,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         st.session_state['juris_ia_rol'] = datos_juris_ia.get('rol', '')
                         st.session_state['juris_ia_fecha'] = datos_juris_ia.get('fecha', '')
                         st.session_state['juris_ia_materia'] = datos_juris_ia.get('materia', '')
+                        st.session_state['juris_ia_resultado'] = datos_juris_ia.get('resultado', '')
                         st.session_state['juris_ia_resumen'] = datos_juris_ia.get('resumen', '')
                         st.success("✅ Datos autocompletados abajo. Revísalos antes de guardar.")
                     except Exception as e:
@@ -7227,8 +7231,10 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
             rol_juris = c2.text_input("Rol de la causa", value=st.session_state.get('juris_ia_rol', ''))
             fecha_juris = c1.text_input("Fecha de la sentencia", value=st.session_state.get('juris_ia_fecha', ''), placeholder="Ej: 15/03/2025")
             materia_juris = c2.text_input("Materia principal", value=st.session_state.get('juris_ia_materia', ''), placeholder="Ej: Nulidad de contrato por vicio del consentimiento")
-            resumen_juris = st.text_area("Resumen del criterio jurídico", value=st.session_state.get('juris_ia_resumen', ''), height=120,
-                                          placeholder="Resumen del criterio central que resuelve la sentencia...")
+            resultado_juris = c1.selectbox("Resultado", ["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"],
+                                            index=["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"].index(st.session_state.get('juris_ia_resultado')) if st.session_state.get('juris_ia_resultado') in ["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"] else 0)
+            resumen_juris = st.text_area("Fundamentos de fondo (por qué se falló así)", value=st.session_state.get('juris_ia_resumen', ''), height=200,
+                                          placeholder="Explicación detallada del razonamiento del tribunal: qué argumentos acogió, cuáles rechazó y por qué, qué normas aplicó...")
             
             if st.form_submit_button("💾 Guardar en la Biblioteca", type="primary", use_container_width=True):
                 if not archivo_sentencia:
@@ -7239,14 +7245,14 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                     drive_id_juris, b64_juris = guardar_archivo_adjunto(archivo_sentencia.name, archivo_sentencia.getvalue(), 'application/pdf')
                     nueva_sentencia = {
                         'ID': str(uuid.uuid4())[:8], 'Tribunal': tribunal_juris, 'Rol_Causa': rol_juris.strip(),
-                        'Fecha_Sentencia': fecha_juris.strip(), 'Materia': materia_juris.strip(), 'Resumen': resumen_juris.strip(),
+                        'Fecha_Sentencia': fecha_juris.strip(), 'Materia': materia_juris.strip(), 'Resultado': resultado_juris, 'Resumen': resumen_juris.strip(),
                         'Archivo_Nombre': archivo_sentencia.name, 'Archivo_B64': b64_juris, 'Archivo_Drive_ID': drive_id_juris,
                         'Fecha_Carga': datetime.now().strftime("%d/%m/%Y"), 'Usuario_Propietario': usuario_actual
                     }
                     df_juris_guardar = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
                     df_juris_guardar = pd.concat([df_juris_guardar, pd.DataFrame([nueva_sentencia])], ignore_index=True)
                     safe_update_sheet("base_jurisprudencia", df_juris_guardar)
-                    for k in ['juris_ia_tribunal', 'juris_ia_rol', 'juris_ia_fecha', 'juris_ia_materia', 'juris_ia_resumen']:
+                    for k in ['juris_ia_tribunal', 'juris_ia_rol', 'juris_ia_fecha', 'juris_ia_materia', 'juris_ia_resultado', 'juris_ia_resumen']:
                         st.session_state.pop(k, None)
                     st.success("✅ Sentencia agregada a la biblioteca.")
                     st.rerun()
@@ -7274,7 +7280,10 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                 with st.container(border=True):
                     c1, c2 = st.columns([5, 1.3])
                     with c1:
-                        st.markdown(f"**{fila_juris['Tribunal']}** — Rol {fila_juris.get('Rol_Causa','—')} — {fila_juris.get('Fecha_Sentencia','—')}")
+                        resultado_mostrar = fila_juris.get('Resultado', '')
+                        color_resultado = {"Acogida": "#1b7a4a", "Rechazada": "#bf2600", "Acogida Parcialmente": "#7a5b00"}.get(resultado_mostrar, "#6b778c")
+                        etiqueta_resultado = f" <span style='background:{color_resultado}22; color:{color_resultado}; padding:1px 8px; border-radius:8px; font-size:12px; font-weight:700;'>{resultado_mostrar}</span>" if resultado_mostrar and pd.notna(resultado_mostrar) else ""
+                        st.markdown(f"**{fila_juris['Tribunal']}** — Rol {fila_juris.get('Rol_Causa','—')} — {fila_juris.get('Fecha_Sentencia','—')}{etiqueta_resultado}", unsafe_allow_html=True)
                         st.markdown(f"*{fila_juris.get('Materia','')}*")
                         st.caption(fila_juris.get('Resumen', ''))
                     with c2:
@@ -7282,11 +7291,46 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         if bytes_juris_desc is not None:
                             st.download_button("📥 PDF", data=bytes_juris_desc, file_name=fila_juris.get('Archivo_Nombre', 'sentencia.pdf'), key=f"dl_juris_{fila_juris['ID']}")
                         if usuario_actual == "Narratia" or fila_juris['Usuario_Propietario'] == usuario_actual:
+                            if bytes_juris_desc is not None and st.button("🔄 Reanalizar con IA", key=f"reanalizar_juris_{fila_juris['ID']}", use_container_width=True, help="Vuelve a analizar el PDF ya guardado con el análisis más profundo (fundamentos de fondo del rechazo/acogida)"):
+                                with st.spinner("Analizando con mayor profundidad..."):
+                                    try:
+                                        import PyPDF2
+                                        lector_re = PyPDF2.PdfReader(io.BytesIO(bytes_juris_desc))
+                                        texto_re = "\n".join([p.extract_text() or "" for p in lector_re.pages])
+                                        prompt_reanalisis = f"""
+                                        Actúa como un abogado chileno experto en análisis de jurisprudencia, revisando esta sentencia con ojo crítico y profundo — no un resumen superficial.
+                                        Analiza el siguiente texto y extrae: Resultado (Acogida/Rechazada/Acogida Parcialmente) y, sobre todo, los Fundamentos de fondo: explica CON DETALLE el razonamiento real del tribunal — qué argumentos fueron acogidos y por qué, cuáles fueron desechados y con qué fundamento jurídico exacto (cita los "considerandos" relevantes si el texto los numera), qué normas legales aplicó, y si hubo votos disidentes menciónalos. Extensión: 8-12 líneas mínimo, con la máxima fidelidad al texto real.
+                                        TEXTO: {texto_re[:20000]}
+                                        Responde EXCLUSIVAMENTE con un JSON válido: {{"resultado": "...", "resumen": "..."}}
+                                        """
+                                        resp_re = consultar_ia_inteligente(prompt_reanalisis)
+                                        datos_re = json.loads(_limpiar_json_ia(resp_re), strict=False)
+                                        df_juris_upd = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
+                                        df_juris_upd.loc[df_juris_upd['ID'] == fila_juris['ID'], ['Resultado', 'Resumen']] = [datos_re.get('resultado', ''), datos_re.get('resumen', '')]
+                                        safe_update_sheet("base_jurisprudencia", df_juris_upd)
+                                        st.success("✅ Reanalizada con el criterio más profundo.")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"⚠️ No se pudo reanalizar: {e}")
                             if st.button("🗑️", key=f"del_juris_{fila_juris['ID']}"):
                                 df_juris_del = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
                                 df_juris_del = df_juris_del[df_juris_del['ID'] != fila_juris['ID']]
                                 safe_update_sheet("base_jurisprudencia", df_juris_del)
                                 st.rerun()
+                    
+                    if usuario_actual == "Narratia" or fila_juris['Usuario_Propietario'] == usuario_actual:
+                        with st.expander("✏️ Editar manualmente"):
+                            with st.form(f"form_editar_juris_{fila_juris['ID']}"):
+                                resultado_edit = st.selectbox("Resultado", ["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"],
+                                                                index=["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"].index(fila_juris.get('Resultado')) if fila_juris.get('Resultado') in ["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"] else 0,
+                                                                key=f"resultado_edit_{fila_juris['ID']}")
+                                resumen_edit = st.text_area("Fundamentos de fondo", value=fila_juris.get('Resumen', ''), height=200, key=f"resumen_edit_{fila_juris['ID']}")
+                                if st.form_submit_button("💾 Guardar cambios"):
+                                    df_juris_edit = safe_read_sheet("base_jurisprudencia", COLS_JURISPRUDENCIA)
+                                    df_juris_edit.loc[df_juris_edit['ID'] == fila_juris['ID'], ['Resultado', 'Resumen']] = [resultado_edit, resumen_edit]
+                                    safe_update_sheet("base_jurisprudencia", df_juris_edit)
+                                    st.success("✅ Cambios guardados.")
+                                    st.rerun()
     
     # --- PESTAÑA: CÓDIGOS DE LA REPÚBLICA (conexión real con BCN) ---
     with tab_codigos_bcn:
