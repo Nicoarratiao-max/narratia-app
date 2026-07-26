@@ -1184,8 +1184,8 @@ def leer_csv_local(path, default_cols=None):
 # recomienda para cuentas Gmail normales es autenticarse como el usuario
 # real (OAuth), usando SU cuota de 15GB gratis, en vez de la cuenta de
 # servicio. Esto requiere una autorización única (ver Panel Admin).
-def _url_autorizacion_drive_oauth():
-    """Genera la URL para que el abogado autorice el acceso a su Drive personal, y el objeto 'flow' para completar el intercambio después."""
+def _construir_flow_oauth_drive():
+    """Crea el objeto 'flow' de OAuth sin generar una URL de autorización nueva (para no pisar el code_verifier ya guardado al momento de intercambiar el código)."""
     from google_auth_oauthlib.flow import Flow
     redirect_uri = st.secrets.get("APP_BASE_URL", "https://jurisyncs.streamlit.app")
     client_config = {
@@ -1197,12 +1197,26 @@ def _url_autorizacion_drive_oauth():
             "redirect_uris": [redirect_uri],
         }
     }
-    flow = Flow.from_client_config(client_config, scopes=['https://www.googleapis.com/auth/drive'], redirect_uri=redirect_uri)
+    return Flow.from_client_config(client_config, scopes=['https://www.googleapis.com/auth/drive'], redirect_uri=redirect_uri)
+
+def _url_autorizacion_drive_oauth():
+    """Genera la URL para que el abogado autorice el acceso a su Drive personal, y el objeto 'flow' para completar el intercambio después."""
+    flow = _construir_flow_oauth_drive()
     auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline', include_granted_scopes='true')
+    # CRÍTICO: la "llave de verificación" (PKCE code_verifier) que genera
+    # esta librería vive solo en este objeto 'flow', que se pierde apenas
+    # Streamlit recarga la página (cada clic reinicia el script desde
+    # cero). Sin guardarla aparte, al volver desde Google con el código de
+    # autorización, se creaba un 'flow' NUEVO con una llave DISTINTA, y el
+    # intercambio fallaba con "Invalid code verifier". Se guarda en
+    # session_state para que sobreviva a la recarga y se pueda reutilizar.
+    st.session_state['_oauth_code_verifier'] = flow.code_verifier
     return auth_url, flow
 
-def _intercambiar_codigo_oauth_drive(flow, codigo_autorizacion):
-    """Cambia el código de autorización (que llega en la URL tras autorizar) por un refresh_token permanente."""
+def _intercambiar_codigo_oauth_drive(codigo_autorizacion):
+    """Cambia el código de autorización (que llega en la URL tras autorizar) por un refresh_token permanente. Construye su propio 'flow' (sin regenerar la URL) y le reinyecta el code_verifier guardado."""
+    flow = _construir_flow_oauth_drive()
+    flow.code_verifier = st.session_state.get('_oauth_code_verifier')
     flow.fetch_token(code=codigo_autorizacion)
     return flow.credentials
 
@@ -6529,8 +6543,7 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
             if "code" in parametros_url:
                 st.info("🔄 Terminando la autorización...")
                 try:
-                    _, flow_pendiente = _url_autorizacion_drive_oauth()
-                    credenciales_obtenidas = _intercambiar_codigo_oauth_drive(flow_pendiente, parametros_url["code"])
+                    credenciales_obtenidas = _intercambiar_codigo_oauth_drive(parametros_url["code"])
                     st.success("✅ ¡Autorización exitosa! Copia este código y pégalo en tus Secrets de Streamlit:")
                     st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{credenciales_obtenidas.refresh_token}"', language="toml")
                     st.warning("⚠️ Este código es una llave de acceso a tu Drive — trátalo como una contraseña. Después de copiarlo a Secrets, no lo compartas ni lo dejes visible en ningún otro lado.")
