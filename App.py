@@ -407,6 +407,13 @@ def extraer_texto_pdfs(archivos_pdf_subidos):
             texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
     return texto_total
 
+def _mostrar_motor_ia_usado():
+    """Muestra una etiqueta discreta indicando qué IA respondió la última consulta (Gemini, Groq, Cerebras o Mistral)."""
+    motor = st.session_state.get('_ultimo_motor_ia_usado')
+    if motor:
+        color_motor = {"Gemini": "#4285F4", "Groq": "#F55036", "Cerebras": "#FF6600", "Mistral": "#FA5205"}.get(motor, "#6b778c")
+        st.markdown(f"<span style='font-size:11px; color:{color_motor}; font-weight:700;'>🤖 Respondido por: {motor}</span>", unsafe_allow_html=True)
+
 def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2, prompt_completo_gemini: str = None) -> str:
     """
     Motor de IA "inteligente" usado en todo el sistema: intenta en cadena,
@@ -444,7 +451,13 @@ def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2, prompt_compl
         if clave_necesaria not in st.secrets and nombre_motor != "Gemini":
             continue
         try:
-            return funcion_motor()
+            resultado_motor = funcion_motor()
+            # Se guarda en session_state (no se cambia qué devuelve la
+            # función, para no romper los 10 lugares del sistema que ya la
+            # usan) — así cualquier pantalla puede mostrar "Respondido por:
+            # [motor]" justo después de llamar a esta función.
+            st.session_state['_ultimo_motor_ia_usado'] = nombre_motor
+            return resultado_motor
         except Exception as error_motor:
             errores_acumulados.append(f"{nombre_motor} falló ({error_motor})")
     raise Exception(" · ".join(errores_acumulados) if errores_acumulados else "Ningún motor de IA está configurado en Secrets.")
@@ -4336,6 +4349,7 @@ elif st.session_state['menu_radio'] == "📊 Informes":
                     )
                     
                     st.success("✅ Análisis completado con éxito.")
+                    _mostrar_motor_ia_usado()
                     
                     st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>📄 Informe Ejecutivo Generado</h4>", unsafe_allow_html=True)
                     st.write(f"**Cliente:** {nombre_cliente_ia}")
@@ -4512,6 +4526,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         
                         texto_recomendacion_final = consultar_ia_inteligente(prompt_final_estrategia)
                         st.session_state['estrategia_recomendacion_final'] = texto_recomendacion_final
+                        st.session_state['estrategia_motor_usado'] = st.session_state.get('_ultimo_motor_ia_usado')
                         st.session_state['estrategia_etapa'] = 'final'
                         st.rerun()
                     except Exception as e:
@@ -4525,6 +4540,9 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
         
         st.markdown("<div class='dash-card' style='border-top-color:#1b7a4a;'><h4 style='color:#1b7a4a;'>🎯 Recomendación Final</h4>", unsafe_allow_html=True)
         st.write(st.session_state.get('estrategia_recomendacion_final', ''))
+        motor_estrategia = st.session_state.get('estrategia_motor_usado')
+        if motor_estrategia:
+            st.markdown(f"<span style='font-size:11px; color:#6b778c; font-weight:700;'>🤖 Respondido por: {motor_estrategia}</span>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
         
         if st.button("🆕 Analizar un caso nuevo", use_container_width=True):
@@ -7157,6 +7175,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         """
                         respuesta_escrito = consultar_ia_inteligente(prompt_redactor)
                         st.session_state['redactor_texto_borrador'] = respuesta_escrito
+                        st.session_state['redactor_motor_usado'] = st.session_state.get('_ultimo_motor_ia_usado')
                         st.session_state['redactor_tipo_final'] = tipo_escrito
                         st.session_state['redactor_etapa'] = 'borrador'
                         st.rerun()
@@ -7167,6 +7186,9 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
     elif st.session_state['redactor_etapa'] == 'borrador':
         with st.container(border=True):
             st.success("✅ Borrador redactado. Puedes editarlo libremente abajo antes de descargarlo — el Word se genera con el texto tal como quede aquí.")
+            motor_redactor = st.session_state.get('redactor_motor_usado')
+            if motor_redactor:
+                st.markdown(f"<span style='font-size:11px; color:#6b778c; font-weight:700;'>🤖 Respondido por: {motor_redactor}</span>", unsafe_allow_html=True)
             texto_editado = st.text_area("Escrito Generado (editable):", value=st.session_state.get('redactor_texto_borrador', ''), height=500, key="redactor_texto_editable")
             
             c_reg, c_desc, c_nuevo = st.columns(3)
@@ -7255,6 +7277,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         st.session_state['juris_ia_resultado'] = datos_juris_ia.get('resultado', '')
                         st.session_state['juris_ia_resumen'] = datos_juris_ia.get('resumen', '')
                         st.success("✅ Datos autocompletados abajo. Revísalos antes de guardar.")
+                        _mostrar_motor_ia_usado()
                     except Exception as e:
                         st.error(f"⚠️ No se pudo autocompletar: {e}. Puedes llenar los datos a mano igual.")
         
@@ -7581,6 +7604,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         texto_resultado_esc = consultar_ia_inteligente(prompt_final_esc)
                         
                         st.success("✅ Análisis completado.")
+                        _mostrar_motor_ia_usado()
                         st.markdown(texto_resultado_esc)
                         
                         # Se guarda el informe como Word en el historial, exactamente igual
