@@ -3303,6 +3303,18 @@ st.markdown("""
     .task-status-aprobada { background:#e3fcef !important; color:#1b7a4a !important; }
     .task-status-rechazada { background:#ffebe6 !important; color:#bf2600 !important; }
     .stTextInput input, .stTextArea textarea, .stSelectbox select, .stNumberInput input { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; }
+    /* Los selectbox modernos de Streamlit no usan la etiqueta <select> de
+       toda la vida, sino un componente propio — la regla de arriba nunca
+       les aplicaba, por eso se veían mezclados con el fondo y no parecían
+       un menú desplegable. Esta es la que sí les llega. */
+    [data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd2d9 !important;
+        border-radius: 6px !important;
+    }
+    [data-baseweb="select"] > div:hover {
+        border-color: #0e6b74 !important;
+    }
     .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0e6b74 !important; box-shadow: 0 0 0 1px #0e6b74 !important; }
     ::placeholder { color: #6b778c !important; opacity: 1; }
     [data-testid="stButton"] button { background-color: #ffffff !important; color: #172b4d !important; border: 1px solid #cbd2d9 !important; border-radius: 6px !important; font-weight: 600 !important; transition: all 0.2s ease !important; }
@@ -4306,6 +4318,10 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         1. **Análisis del Escenario:** Identifica riesgos y plazos procesales relevantes a ESTA rama específica, citando las normas exactas que los rigen.
                         2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer dentro de ESTA rama, con su fundamento legal (artículos exactos) y, cuando corresponda, el criterio jurisprudencial general aplicable.
                         3. **Siguientes Pasos:** Tareas inmediatas a ejecutar en esta rama.
+                        4. **Acciones Legales Concretas y Viabilidad:** Lista CADA acción legal específica y viable para este caso en esta rama (ej: "Excepción de prescripción", "Demanda de nulidad de despido", "Tercería de dominio"), y para cada una:
+                           - Una frase de por qué es aplicable a ESTE caso concreto (no una explicación genérica de la acción).
+                           - Una **estimación orientadora de viabilidad** (0-100%), basada en la fuerza de los hechos y antecedentes que SÍ tienes a la vista en este caso (documentos aportados, plazos, prueba disponible). Dejar explícito que es una estimación profesional orientadora del abogado IA, no una cifra estadística real (no existen bases de datos con tasas de éxito reales de acciones judiciales chilenas) — usa una frase como "(estimación orientadora, no una cifra estadística)" junto al porcentaje.
+                           - Ordena esta lista de mayor a menor viabilidad, para que la de arriba sea la más recomendable.
                         """
                         
                         texto_respuesta_estrategia = consultar_groq(prompt_maestro)
