@@ -4322,6 +4322,14 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                            - Una frase de por qué es aplicable a ESTE caso concreto (no una explicación genérica de la acción).
                            - Una **estimación orientadora de viabilidad** (0-100%), basada en la fuerza de los hechos y antecedentes que SÍ tienes a la vista en este caso (documentos aportados, plazos, prueba disponible). Dejar explícito que es una estimación profesional orientadora del abogado IA, no una cifra estadística real (no existen bases de datos con tasas de éxito reales de acciones judiciales chilenas) — usa una frase como "(estimación orientadora, no una cifra estadística)" junto al porcentaje.
                            - Ordena esta lista de mayor a menor viabilidad, para que la de arriba sea la más recomendable.
+                        
+                        Al final de TODO (después de haber desarrollado cada rama con sus 4 puntos), agrega esta sección de cierre, una sola vez para todo el caso:
+                        
+                        ## 🎯 Recomendación Final
+                        Sintetiza todo el análisis anterior en una **decisión clara y directa**, no una lista más para que el abogado siga comparando. Indica explícitamente:
+                        - **La acción que recomiendas tomar primero** (una sola, la más viable de todas las identificadas arriba, sin importar de qué rama sea), en una frase directa: "La acción recomendada es: [acción]."
+                        - El motivo concreto de por qué esa es la mejor jugada ahora, en 2-3 líneas (no repitas todo lo ya dicho arriba, solo la síntesis).
+                        - Si hay una segunda acción relevante que además conviene ejecutar en paralelo (no como alternativa, sino como complemento), indícala también, pero deja clarísimo cuál es la prioridad N°1.
                         """
                         
                         texto_respuesta_estrategia = consultar_groq(prompt_maestro)
