@@ -407,6 +407,24 @@ def extraer_texto_pdfs(archivos_pdf_subidos):
             texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
     return texto_total
 
+def consultar_ia_inteligente(prompt: str, temperatura: float = 0.2) -> str:
+    """
+    Motor de IA "inteligente" usado en todo el sistema: intenta PRIMERO con
+    Gemini (la cuenta de pago del usuario, vía generar_contenido_gemini,
+    que ya prueba Vertex AI y luego la API directa), y SOLO si eso falla
+    por cualquier motivo (facturación, clave inválida, etc.), cae
+    automáticamente a Groq (gratis) como respaldo — sin que el usuario
+    tenga que elegir nada ni quedarse sin poder usar el sistema mientras
+    se resuelve cualquier problema del lado de Google.
+    """
+    try:
+        return generar_contenido_gemini(prompt)
+    except Exception as error_gemini:
+        try:
+            return consultar_groq(prompt, temperatura)
+        except Exception as error_groq:
+            raise Exception(f"Gemini falló ({error_gemini}) y el respaldo Groq también falló ({error_groq}).")
+
 def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
     """
     Consulta la API de Groq (gratuita, sin tarjeta de crédito, formato
@@ -834,7 +852,7 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional=""):
     
     texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
     prompt_final = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:25000]}"
-    texto_respuesta = consultar_groq(prompt_final)
+    texto_respuesta = consultar_ia_inteligente(prompt_final)
     return json.loads(_limpiar_json_ia(texto_respuesta), strict=False)
 
 def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_subidos, contexto_adicional):
@@ -873,7 +891,7 @@ def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_
     if archivos_pdf_subidos:
         texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
         prompt_base += f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS ADJUNTOS:\n{texto_documentos[:25000]}"
-    return consultar_groq(prompt_base)
+    return consultar_ia_inteligente(prompt_base)
 
 # =====================================================================
 # 📝 CATÁLOGO DE TIPOS DE ESCRITOS JUDICIALES (general, no solo excepciones)
@@ -4356,7 +4374,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                             {{"analisis_markdown": "...(todo el análisis en markdown, como se describió arriba)...", "preguntas": ["pregunta 1", "pregunta 2"]}}
                             """
                             
-                            respuesta_analisis_estrategia = consultar_groq(prompt_analisis)
+                            respuesta_analisis_estrategia = consultar_ia_inteligente(prompt_analisis)
                             datos_analisis_estrategia = json.loads(_limpiar_json_ia(respuesta_analisis_estrategia), strict=False)
                             
                             st.session_state['estrategia_analisis_md'] = datos_analisis_estrategia.get('analisis_markdown', '')
@@ -4415,7 +4433,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         - Si hay una segunda acción relevante que además conviene ejecutar en paralelo (no como alternativa, sino como complemento), indícala también, pero deja clarísimo cuál es la prioridad N°1.
                         """
                         
-                        texto_recomendacion_final = consultar_groq(prompt_final_estrategia)
+                        texto_recomendacion_final = consultar_ia_inteligente(prompt_final_estrategia)
                         st.session_state['estrategia_recomendacion_final'] = texto_recomendacion_final
                         st.session_state['estrategia_etapa'] = 'final'
                         st.rerun()
@@ -4973,16 +4991,6 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             doc = Document(archivo_contrato)
                             for p in doc.paragraphs: texto_contrato += p.text + "\n"
                                 
-                        import google.generativeai as genai
-                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        
-                        modelo_elegido = "gemini-1.0-pro"
-                        for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods and 'flash' in m.name:
-                                modelo_elegido = m.name.replace("models/", ""); break
-                                    
-                        modelo = genai.GenerativeModel(modelo_elegido)
-                        
                         prompt_extractor = f"""
                         Eres un asistente legal experto en Chile. Extrae los datos del CLIENTE.
                         Devuelve ÚNICAMENTE un objeto JSON válido (sin markdown) con esta estructura:
@@ -4990,9 +4998,8 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         CONTRATO: {texto_contrato[:15000]}
                         """
                         
-                        respuesta = modelo.generate_content(prompt_extractor)
-                        texto_json = respuesta.text.replace('```json', '').replace('```', '').strip()
-                        datos_extraidos = json.loads(texto_json)
+                        texto_json = consultar_ia_inteligente(prompt_extractor).replace('```json', '').replace('```', '').strip()
+                        datos_extraidos = json.loads(texto_json, strict=False)
                         
                         df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
                         nombre_extraido = datos_extraidos.get('cliente_nombre', 'Cliente Importado')
@@ -6954,18 +6961,6 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
     if 'redactor_etapa' not in st.session_state:
         st.session_state['redactor_etapa'] = 'analisis'
     
-    def _modelo_gemini_activo():
-        import google.generativeai as genai
-        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-        modelo_elegido = "gemini-1.0-pro"
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                md_name = m.name.replace("models/", "")
-                if 'flash' in md_name:
-                    modelo_elegido = md_name
-                    break
-        return genai.GenerativeModel(modelo_elegido)
-    
     # --- ETAPA 1: ANÁLISIS DEL CASO ---
     if st.session_state['redactor_etapa'] == 'analisis':
         with st.container(border=True):
@@ -6990,7 +6985,6 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                     with st.spinner("⚖️ Analizando el caso..."):
                         try:
                             texto_documentos_red = extraer_texto_pdfs(documentos_red) if documentos_red else ""
-                            modelo = _modelo_gemini_activo()
                             
                             lista_tipos_texto = "\n".join([f"- {k}" for k in ESTRUCTURAS_REDACTOR_IA.keys()])
                             prompt_analisis = f"""
@@ -7008,8 +7002,8 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                             Analiza el caso y responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown):
                             {{"analisis": "resumen de 3-6 líneas de tu lectura del caso: qué etapa procesal parece tener, plazos relevantes si los detectas, riesgos u oportunidades", "tipo_recomendado": "el nombre EXACTO de uno de los tipos de la lista de arriba", "razon_recomendacion": "por qué ese es el escrito adecuado ahora, en 2-4 líneas"}}
                             """
-                            respuesta_analisis = modelo.generate_content(prompt_analisis)
-                            datos_analisis = json.loads(_limpiar_json_ia(respuesta_analisis.text), strict=False)
+                            respuesta_analisis = consultar_ia_inteligente(prompt_analisis)
+                            datos_analisis = json.loads(_limpiar_json_ia(respuesta_analisis), strict=False)
                             
                             st.session_state['redactor_analisis'] = datos_analisis.get('analisis', '')
                             st.session_state['redactor_tipo_recomendado'] = datos_analisis.get('tipo_recomendado', list(ESTRUCTURAS_REDACTOR_IA.keys())[0])
@@ -7045,7 +7039,6 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
             if c_gen.button(f"✍️ Redactar «{tipo_escrito}»", type="primary", use_container_width=True):
                 with st.spinner("⚖️ Redactando escrito en lenguaje procesal chileno..."):
                     try:
-                        modelo = _modelo_gemini_activo()
                         instrucciones_red = st.session_state.get('redactor_instrucciones_guardadas', '')
                         texto_documentos_red = st.session_state.get('redactor_texto_docs_guardado', '')
                         rol_red = st.session_state.get('redactor_rol_key', '')
@@ -7085,8 +7078,8 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                         
                         Usa el lenguaje propio del Código de Procedimiento Civil chileno. No agregues notas explicativas para mí, entrégame SOLO el texto del escrito listo para copiar.
                         """
-                        respuesta_escrito = modelo.generate_content(prompt_redactor)
-                        st.session_state['redactor_texto_borrador'] = respuesta_escrito.text
+                        respuesta_escrito = consultar_ia_inteligente(prompt_redactor)
+                        st.session_state['redactor_texto_borrador'] = respuesta_escrito
                         st.session_state['redactor_tipo_final'] = tipo_escrito
                         st.session_state['redactor_etapa'] = 'borrador'
                         st.rerun()
@@ -7167,7 +7160,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         
                         Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resumen": "..."}}
                         """
-                        respuesta_juris_ia = consultar_groq(prompt_juris)
+                        respuesta_juris_ia = consultar_ia_inteligente(prompt_juris)
                         datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia), strict=False)
                         st.session_state['juris_ia_tribunal'] = datos_juris_ia.get('tribunal', '')
                         st.session_state['juris_ia_rol'] = datos_juris_ia.get('rol', '')
@@ -7456,7 +7449,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                         todos_archivos_esc = [archivo_escritura_analizar] + (docs_respaldo_analizar or [])
                         texto_extraido_esc = extraer_texto_pdfs(todos_archivos_esc)
                         prompt_final_esc = prompt_analisis_esc + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_extraido_esc[:25000]}"
-                        texto_resultado_esc = consultar_groq(prompt_final_esc)
+                        texto_resultado_esc = consultar_ia_inteligente(prompt_final_esc)
                         
                         st.success("✅ Análisis completado.")
                         st.markdown(texto_resultado_esc)
