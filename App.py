@@ -40,25 +40,46 @@ except ImportError:
 # 🔒 UTILIDADES DE SEGURIDAD (HASH DE CONTRASEÑAS Y COOKIES FIRMADAS)
 # =====================================================================
 
-def _usuarios_a_incluir_en_vista_equipo(nombre_de_un_archivo_u_usuario, usuario_actual):
+def _construir_vista_admin(prefijo_archivo, cols, df_propio, usuario_actual):
     """
-    Decide si los datos de OTRO usuario (identificado por su nombre, tal
-    como aparece en el nombre del archivo) deben incluirse en la vista
-    actual del administrador, según lo que haya elegido en el selector
-    "👁️ Ver datos de otro usuario" de la barra lateral:
-    - "Solo mis datos" (por defecto): nunca se incluye a nadie más.
-    - Un usuario específico: solo se incluye ese usuario.
-    - "Todo el equipo junto": se incluye cualquier otro usuario (como antes).
+    Arma el DataFrame a mostrar según lo que el administrador eligió en el
+    selector "👁️ Ver datos de otro usuario" de la barra lateral:
+    - "Solo mis datos" (por defecto): solo los datos propios.
+    - Un usuario específico: SOLO los datos de esa persona — exclusivo,
+      sin mezclar con los propios (para no confundirse viendo ambos juntos).
+    - "Todo el equipo junto": todos los archivos que coincidan, mezclados
+      (comportamiento de antes de tener este selector).
+    Siempre agrega la columna 'Propietario_Vista' para saber de quién es
+    cada fila.
     """
-    if nombre_de_un_archivo_u_usuario == usuario_actual:
-        return False  # Los propios datos siempre se muestran, esto es solo para "los demás"
     filtro_actual = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
+    
     if filtro_actual == "Solo mis datos":
-        return False
+        df_resultado = df_propio.copy() if not df_propio.empty else pd.DataFrame(columns=cols)
+        if not df_resultado.empty:
+            df_resultado['Propietario_Vista'] = usuario_actual
+        return df_resultado
+    
     elif filtro_actual == "Todo el equipo junto":
-        return True
+        piezas = []
+        for arch in glob.glob(f"{prefijo_archivo}*.csv"):
+            propietario = arch.replace(prefijo_archivo, "").replace(".csv", "")
+            t = leer_csv_local(arch, cols)
+            if not t.empty:
+                t = t.copy()
+                t['Propietario_Vista'] = propietario
+                piezas.append(t)
+        return pd.concat(piezas, ignore_index=True) if piezas else (df_propio.copy() if not df_propio.empty else pd.DataFrame(columns=cols))
+    
     else:
-        return nombre_de_un_archivo_u_usuario == filtro_actual
+        # Usuario específico: exclusivo, solo esa persona (nada de lo propio).
+        arch_especifico = f"{prefijo_archivo}{filtro_actual}.csv"
+        t = leer_csv_local(arch_especifico, cols)
+        if not t.empty:
+            t = t.copy()
+            t['Propietario_Vista'] = filtro_actual
+            return t
+        return pd.DataFrame(columns=cols)
 
 def _es_admin_usuario(nombre_usuario):
     """
@@ -4071,31 +4092,11 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
         df_todos_conta = df_c[df_c['Total_Honorarios'] > 0].copy() if not df_c.empty else pd.DataFrame()
         df_pagos_general = leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS)
         if ES_ADMIN_CONTA:
-            for arch_conta in glob.glob("base_causas_*.csv"):
-                propietario_conta = arch_conta.replace("base_causas_", "").replace(".csv", "")
-                if propietario_conta != usuario_actual and _usuarios_a_incluir_en_vista_equipo(propietario_conta, usuario_actual):
-                    t_conta = leer_csv_local(arch_conta, COLS_CAUSAS)
-                    if not t_conta.empty and 'Total_Honorarios' in t_conta.columns:
-                        # Blindaje extra: si por un cambio de nombre de usuario
-                        # anterior quedó un archivo local duplicado con el nombre
-                        # viejo (pero con TUS MISMAS causas adentro), el nombre del
-                        # archivo diría que es "de otra persona" y se sumarían tus
-                        # propias causas dos veces. Se revisa el dato real dentro
-                        # de cada fila (Usuario_Propietario), no solo el nombre del
-                        # archivo, para excluir cualquier fila que en realidad sea
-                        # tuya, sin importar en qué archivo haya quedado guardada.
-                        if 'Usuario_Propietario' in t_conta.columns:
-                            t_conta = t_conta[t_conta['Usuario_Propietario'] != usuario_actual]
-                        t_conta['Total_Honorarios'] = pd.to_numeric(t_conta['Total_Honorarios'], errors='coerce').fillna(0)
-                        df_todos_conta = pd.concat([df_todos_conta, t_conta[t_conta['Total_Honorarios'] > 0]], ignore_index=True)
-            for arch_pago in glob.glob("base_pagos_honorarios_*.csv"):
-                propietario_pago = arch_pago.replace("base_pagos_honorarios_", "").replace(".csv", "")
-                if propietario_pago != usuario_actual and _usuarios_a_incluir_en_vista_equipo(propietario_pago, usuario_actual):
-                    t_pago = leer_csv_local(arch_pago, COLS_PAGOS_HONORARIOS)
-                    if not t_pago.empty:
-                        if 'Usuario_Propietario' in t_pago.columns:
-                            t_pago = t_pago[t_pago['Usuario_Propietario'] != usuario_actual]
-                        df_pagos_general = pd.concat([df_pagos_general, t_pago], ignore_index=True)
+            df_todos_conta = _construir_vista_admin("base_causas_", COLS_CAUSAS, df_c, usuario_actual)
+            if not df_todos_conta.empty and 'Total_Honorarios' in df_todos_conta.columns:
+                df_todos_conta['Total_Honorarios'] = pd.to_numeric(df_todos_conta['Total_Honorarios'], errors='coerce').fillna(0)
+                df_todos_conta = df_todos_conta[df_todos_conta['Total_Honorarios'] > 0]
+            df_pagos_general = _construir_vista_admin("base_pagos_honorarios_", COLS_PAGOS_HONORARIOS, leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS), usuario_actual)
             # Por si quedaran filas exactamente duplicadas (mismo ROL, mismo
             # Cliente, mismo Total_Honorarios) de haberse guardado la misma causa
             # en más de un archivo, se deja solo una copia de cada una.
@@ -5406,22 +5407,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         
         if ES_ADMIN_NARRATIA:
             boton_refrescar_equipo("refresh_causas_equipo")
-            archivos_causas_equipo = glob.glob("base_causas_*.csv")
-            piezas_equipo = []
-            for arch in archivos_causas_equipo:
-                propietario_arch = arch.replace("base_causas_", "").replace(".csv", "")
-                # Solo se incluyen los propios datos siempre, y los de otro
-                # usuario únicamente si el administrador eligió verlos
-                # explícitamente en el selector de la barra lateral.
-                if propietario_arch != usuario_actual and not _usuarios_a_incluir_en_vista_equipo(propietario_arch, usuario_actual):
-                    continue
-                temp_causa_eq = leer_csv_local(arch, COLS_CAUSAS)
-                if not temp_causa_eq.empty:
-                    temp_causa_eq = temp_causa_eq.copy()
-                    temp_causa_eq['Propietario_Vista'] = propietario_arch
-                    piezas_equipo.append(temp_causa_eq)
-            if piezas_equipo:
-                df_para_listado = pd.concat(piezas_equipo, ignore_index=True)
+            df_para_listado = _construir_vista_admin("base_causas_", COLS_CAUSAS, df_causas, usuario_actual)
         
         col_f1, col_f2 = st.columns(2)
         filtro_trib = col_f1.multiselect("Filtrar por Tribunal de la República", df_para_listado['TRIBUNAL'].dropna().unique().tolist(), placeholder="Selecciona el juzgado...")
@@ -6285,16 +6271,20 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
 
     # PRIVACIDAD: cada abogado ve solo SUS PROPIOS clientes. El administrador
     # ve además los de otros según lo que haya elegido en el selector "👁️ Ver
-    # datos de otro usuario" de la barra lateral (antes siempre veía todo el
-    # equipo junto, sin poder acotarlo).
+    # datos de otro usuario" de la barra lateral — de forma EXCLUSIVA (si
+    # elige a alguien específico, ve solo esa persona, sin mezclar con lo
+    # propio, para no confundirse).
     if not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
         if not ES_ADMIN_CLIENTES_TOP:
             df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
         else:
-            df_clientes = df_clientes[
-                (df_clientes['Usuario_Propietario'] == usuario_actual) |
-                (df_clientes['Usuario_Propietario'].apply(lambda u: _usuarios_a_incluir_en_vista_equipo(u, usuario_actual)))
-            ]
+            _filtro_cli_admin = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
+            if _filtro_cli_admin == "Solo mis datos":
+                df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
+            elif _filtro_cli_admin == "Todo el equipo junto":
+                pass  # se queda como está: todos
+            else:
+                df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == _filtro_cli_admin]
 
     if ES_ADMIN_CLIENTES_TOP:
         with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
@@ -6632,24 +6622,13 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
         df_t_nube_tareas = safe_read_sheet("base_tareas", COLS_TAREAS)
         if not df_t_nube_tareas.empty and 'Usuario_Propietario' in df_t_nube_tareas.columns:
             df_t = df_t_nube_tareas[df_t_nube_tareas['Usuario_Propietario'] == usuario_actual]
+    df_t_propio = df_t.copy()
     df_t['Propietario_Vista'] = usuario_actual
     
     ES_ADMIN_TAREAS = _es_admin_usuario(usuario_actual)
     if ES_ADMIN_TAREAS:
         boton_refrescar_equipo("refresh_tareas_equipo")
-        archivos_tareas_equipo = glob.glob("base_tareas_*.csv")
-        piezas_tareas_eq = []
-        for arch_t in archivos_tareas_equipo:
-            propietario_t = arch_t.replace("base_tareas_", "").replace(".csv", "")
-            if propietario_t != usuario_actual and not _usuarios_a_incluir_en_vista_equipo(propietario_t, usuario_actual):
-                continue
-            temp_t_eq = leer_csv_local(arch_t, COLS_TAREAS)
-            if not temp_t_eq.empty:
-                temp_t_eq = temp_t_eq.copy()
-                temp_t_eq['Propietario_Vista'] = propietario_t
-                piezas_tareas_eq.append(temp_t_eq)
-        if piezas_tareas_eq:
-            df_t = pd.concat(piezas_tareas_eq, ignore_index=True)
+        df_t = _construir_vista_admin("base_tareas_", COLS_TAREAS, df_t_propio, usuario_actual)
     
     n_rechazadas = len(df_t[df_t['Estado'] == 'Rechazada']) if not df_t.empty else 0
     n_en_progreso = len(df_t[df_t['Estado'] == 'En progreso']) if not df_t.empty else 0
