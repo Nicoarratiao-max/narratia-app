@@ -3383,6 +3383,27 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# --- MANEJO GLOBAL DEL CALLBACK DE AUTORIZACIÓN DE DRIVE (OAuth) ---
+# Cuando Google redirige de vuelta después de autorizar, es una carga
+# COMPLETAMENTE NUEVA de la página (no un clic dentro de la app), así que
+# Streamlit vuelve a la pantalla por defecto (Inicio) en vez de quedarse en
+# la pestaña de Panel Admin donde estaba el código para completar el
+# proceso — por eso antes no se veía nada. Este chequeo va al nivel más
+# alto del script, antes de cualquier menú, para que funcione sin importar
+# en qué pantalla caiga el usuario al volver.
+if "code" in st.query_params and "state" in st.query_params and st.session_state.get('username') == "Narratia":
+    st.title("🔑 Completando la conexión con tu Drive personal...")
+    try:
+        credenciales_obtenidas_global = _intercambiar_codigo_oauth_drive(st.query_params["code"], st.query_params.get("state", ""))
+        st.success("✅ ¡Autorización exitosa! Copia este código y pégalo en tus Secrets de Streamlit:")
+        st.code(f'GOOGLE_OAUTH_REFRESH_TOKEN = "{credenciales_obtenidas_global.refresh_token}"', language="toml")
+        st.warning("⚠️ Este código es una llave de acceso a tu Drive — trátalo como una contraseña. Después de copiarlo a Secrets, no lo compartas ni lo dejes visible en ningún otro lado.")
+    except Exception as e:
+        st.error(f"⚠️ No se pudo completar la autorización. Detalle técnico: {e}")
+        st.warning("Vuelve a Panel Admin → '🔑 Conectar Drive' y genera un link nuevo para intentarlo de nuevo desde cero.")
+    st.query_params.clear()
+    st.stop()
+
 # --- RENDER DE BARRA LATERAL (ESTILO CUADRADITOS) ---
 with st.sidebar:
     st.markdown(f"""
