@@ -4229,7 +4229,10 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
     st.markdown("Describe los hechos o adjunta el PDF de la demanda/notificación. La IA analizará los antecedentes y te propondrá la mejor salida legal bajo la normativa chilena.")
     
     with st.container(border=True):
-        materia = st.selectbox("Rama del Derecho", ["Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Comercial y Societario", "Tributario", "Administrativo", "Constitucional", "Del Consumidor", "Inmobiliario", "Migratorio y Extranjería", "Ambiental", "Bancario y Ejecutivo Hipotecario", "Policía Local / Tránsito"])
+        materia = st.selectbox(
+            "Rama del Derecho (opcional — si no la sabes o el caso toca varias, déjala en 'Que la IA lo determine')",
+            ["Que la IA lo determine", "Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Comercial y Societario", "Tributario", "Administrativo", "Constitucional", "Del Consumidor", "Inmobiliario", "Migratorio y Extranjería", "Ambiental", "Bancario y Ejecutivo Hipotecario", "Policía Local / Tránsito"]
+        )
         caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
         
         archivos_legales = st.file_uploader(
@@ -4272,9 +4275,16 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                                 texto_pdf += f"\n--- {archivo_subido.name} ---\n"
                                 texto_pdf += _extraer_texto_de_un_pdf(archivo_subido)
                         
+                        indicacion_materia = (
+                            f"El abogado ya identificó que el caso corresponde al área: {materia}. Concéntrate en esa rama."
+                            if materia != "Que la IA lo determine" else
+                            "El abogado NO indicó la rama del derecho — es tu trabajo identificarla tú mismo a partir de los hechos y documentos. Si el caso involucra MÁS DE UNA rama del derecho a la vez (por ejemplo, un despido que además tiene aristas penales, o una causa civil con implicancias tributarias), identifícalas TODAS, no solo la principal."
+                        )
+                        
                         prompt_maestro = f"""
-                        Actúa como un Abogado Supervisor experto en litigación en Chile, específicamente en el área: {materia}.
-                        Analiza los siguientes antecedentes entregados por tu equipo:
+                        Actúa como un Abogado Supervisor experto en litigación en Chile, revisando un caso para tu equipo.
+                        
+                        {indicacion_materia}
                         
                         RELATO DEL ABOGADO:
                         {caso_texto}
@@ -4285,11 +4295,17 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
                         
-                        Tu tarea es proponer una estrategia jurídica basándote estrictamente en la legislación chilena vigente, con fundamentos lo más completos posible.
-                        Estructura tu respuesta en:
-                        1. **Análisis del Escenario:** Identifica riesgos y plazos procesales, citando las normas exactas que los rigen.
-                        2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer, con su fundamento legal (artículos exactos) y, cuando corresponda, el criterio jurisprudencial general aplicable.
-                        3. **Siguientes Pasos:** Tareas inmediatas a ejecutar.
+                        Estructura tu respuesta así:
+                        
+                        ## 📋 Ramas del Derecho Identificadas
+                        Lista breve de la(s) rama(s) del derecho que aplican a este caso concreto, con una frase de por qué cada una aplica.
+                        
+                        Luego, POR CADA RAMA IDENTIFICADA (repite esta estructura completa una vez por cada una — si solo hay una rama, desarróllala igual con esta misma estructura):
+                        
+                        ## ⚖️ [Nombre de la Rama]
+                        1. **Análisis del Escenario:** Identifica riesgos y plazos procesales relevantes a ESTA rama específica, citando las normas exactas que los rigen.
+                        2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer dentro de ESTA rama, con su fundamento legal (artículos exactos) y, cuando corresponda, el criterio jurisprudencial general aplicable.
+                        3. **Siguientes Pasos:** Tareas inmediatas a ejecutar en esta rama.
                         """
                         
                         texto_respuesta_estrategia = consultar_groq(prompt_maestro)
