@@ -3894,6 +3894,21 @@ if st.session_state['menu_radio'] == "🏠 Inicio":
 elif st.session_state['menu_radio'] == "💰 Contabilidad":
     st.title("💰 Panel de Honorarios y Contabilidad")
     df_c = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+    # Si en algún momento el usuario se renombró a sí mismo, sus causas
+    # podrían haber quedado guardadas en un archivo local con el nombre
+    # ANTERIOR (uno distinto al archivo que corresponde a su nombre actual).
+    # Para no perderlas de vista, se revisan también los demás archivos
+    # locales de causas por si alguno tiene filas cuyo Usuario_Propietario
+    # real sea el usuario actual, y se agregan aquí.
+    for _arch_causa_extra in glob.glob("base_causas_*.csv"):
+        if _arch_causa_extra != ARCHIVO_BD:
+            _t_extra = leer_csv_local(_arch_causa_extra, COLS_CAUSAS)
+            if not _t_extra.empty and 'Usuario_Propietario' in _t_extra.columns:
+                _filas_mias_extra = _t_extra[_t_extra['Usuario_Propietario'] == usuario_actual]
+                if not _filas_mias_extra.empty:
+                    df_c = pd.concat([df_c, _filas_mias_extra], ignore_index=True)
+    if not df_c.empty and 'ROL' in df_c.columns:
+        df_c = df_c.drop_duplicates(subset=['ROL'])
     
     # Blindaje: si alguna causa tiene el campo de honorarios vacío o en un
     # formato inconsistente (texto, vacío, etc.), antes esto podía romper
@@ -4021,12 +4036,21 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
         df_todos_conta = df_c[df_c['Total_Honorarios'] > 0].copy() if not df_c.empty else pd.DataFrame()
         df_pagos_general = leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS)
         if ES_ADMIN_CONTA:
-            df_todos_causas_conta = df_c.copy()
             for arch_conta in glob.glob("base_causas_*.csv"):
                 propietario_conta = arch_conta.replace("base_causas_", "").replace(".csv", "")
                 if propietario_conta != usuario_actual:
                     t_conta = leer_csv_local(arch_conta, COLS_CAUSAS)
                     if not t_conta.empty and 'Total_Honorarios' in t_conta.columns:
+                        # Blindaje extra: si por un cambio de nombre de usuario
+                        # anterior quedó un archivo local duplicado con el nombre
+                        # viejo (pero con TUS MISMAS causas adentro), el nombre del
+                        # archivo diría que es "de otra persona" y se sumarían tus
+                        # propias causas dos veces. Se revisa el dato real dentro
+                        # de cada fila (Usuario_Propietario), no solo el nombre del
+                        # archivo, para excluir cualquier fila que en realidad sea
+                        # tuya, sin importar en qué archivo haya quedado guardada.
+                        if 'Usuario_Propietario' in t_conta.columns:
+                            t_conta = t_conta[t_conta['Usuario_Propietario'] != usuario_actual]
                         t_conta['Total_Honorarios'] = pd.to_numeric(t_conta['Total_Honorarios'], errors='coerce').fillna(0)
                         df_todos_conta = pd.concat([df_todos_conta, t_conta[t_conta['Total_Honorarios'] > 0]], ignore_index=True)
             for arch_pago in glob.glob("base_pagos_honorarios_*.csv"):
@@ -4034,7 +4058,14 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                 if propietario_pago != usuario_actual:
                     t_pago = leer_csv_local(arch_pago, COLS_PAGOS_HONORARIOS)
                     if not t_pago.empty:
+                        if 'Usuario_Propietario' in t_pago.columns:
+                            t_pago = t_pago[t_pago['Usuario_Propietario'] != usuario_actual]
                         df_pagos_general = pd.concat([df_pagos_general, t_pago], ignore_index=True)
+            # Por si quedaran filas exactamente duplicadas (mismo ROL, mismo
+            # Cliente, mismo Total_Honorarios) de haberse guardado la misma causa
+            # en más de un archivo, se deja solo una copia de cada una.
+            if not df_todos_conta.empty and 'ROL' in df_todos_conta.columns:
+                df_todos_conta = df_todos_conta.drop_duplicates(subset=['ROL', 'Cliente', 'Total_Honorarios'])
         
         if df_todos_conta.empty:
             st.info("Todavía no hay honorarios pactados con ningún cliente.")
@@ -4074,10 +4105,26 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             st.markdown("##### 📋 Detalle por cliente")
             df_mostrar_conta = df_todos_conta[['Cliente', 'ROL', 'Total_Honorarios', 'Cobrado', 'Pendiente', 'Estado_Honorarios']].copy()
             df_mostrar_conta['% Avance'] = (df_todos_conta['Cobrado'] / df_todos_conta['Total_Honorarios'] * 100).round(0).astype(str) + '%'
-            st.dataframe(
-                df_mostrar_conta.style.format({'Total_Honorarios': '${:,.0f}', 'Cobrado': '${:,.0f}', 'Pendiente': '${:,.0f}'}),
-                use_container_width=True, hide_index=True
-            )
+            # Se agrega quién es el responsable de cada causa, y se resaltan con
+            # un color distinto las filas que NO son del usuario que está
+            # mirando la pantalla — para no confundirlas con las propias cuando
+            # el administrador ve las de todo el equipo junto.
+            if 'Usuario_Propietario' in df_todos_conta.columns:
+                df_mostrar_conta['Responsable'] = df_todos_conta['Usuario_Propietario'].apply(lambda u: NOMBRES_REALES.get(u, u))
+                es_de_otro = (df_todos_conta['Usuario_Propietario'] != usuario_actual).values
+            else:
+                es_de_otro = [False] * len(df_mostrar_conta)
+            
+            def _resaltar_de_otros(fila):
+                idx_fila = df_mostrar_conta.index.get_loc(fila.name)
+                if es_de_otro[idx_fila]:
+                    return ['background-color: #fff0e0; color: #7a4a00'] * len(fila)
+                return [''] * len(fila)
+            
+            estilo_tabla_conta = df_mostrar_conta.style.apply(_resaltar_de_otros, axis=1).format({'Total_Honorarios': '${:,.0f}', 'Cobrado': '${:,.0f}', 'Pendiente': '${:,.0f}'})
+            st.dataframe(estilo_tabla_conta, use_container_width=True, hide_index=True)
+            if any(es_de_otro):
+                st.caption("🟧 Las filas en naranja corresponden a causas de otros abogados del equipo, no tuyas.")
 
 # 3. TRÁMITES Y CONTROL DE AUXILIARES
 elif st.session_state['menu_radio'] == "📝 Trámites":
