@@ -1536,7 +1536,7 @@ def selector_tribunal(valor_actual="", key_prefix="trib"):
     if trib_sel == "✏️ Otro (no está en la lista)":
         return ""
     return trib_sel
-COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']
+COLS_TAREAS = ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Tipo_Gestion', 'Asignados', 'Usuario_Propietario']
 COLS_CONTRATOS = ['ID', 'Fecha', 'Cliente', 'Servicio', 'Honorarios', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ESCRITURAS = ['ID', 'Fecha', 'Tipo_Escritura', 'Cliente', 'RUT_Cliente', 'Detalle', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
 COLS_ANALISIS_ESCRITURAS = ['ID', 'Fecha', 'Nombre_Archivo_Original', 'Archivo_B64', 'Archivo_Drive_ID', 'Usuario_Propietario']
@@ -5136,53 +5136,65 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     
                 if st.session_state.get('creando_tarea'):
                     with st.form("form_t_interna"):
-                        t_t = st.text_input("Nomenclatura Breve")
+                        # La "Nomenclatura Breve" ahora usa los mismos códigos cortos
+                        # del sistema (OEX, DDA, etc.), para no tener que escribirla
+                        # cada vez — con opción de personalizada si no calza ninguna.
+                        opciones_nomenclatura = sorted(set(CODIGOS_BREVES_ESCRITOS.values())) + ["Otra (escribir abajo)"]
+                        nomenclatura_sel = st.selectbox("Nomenclatura Breve", opciones_nomenclatura)
+                        if nomenclatura_sel == "Otra (escribir abajo)":
+                            t_t = st.text_input("Escribe la nomenclatura personalizada")
+                        else:
+                            t_t = nomenclatura_sel
+                        
                         t_d = st.text_area("Descripción de la gestión")
                         t_p = st.selectbox("Prioridad", ["Alta", "Media", "Baja"])
                         t_f = st.date_input("Fecha de Cumplimiento")
                         
                         st.markdown("---")
-                        st.markdown("<span style='font-size:13px; color:#6b778c;'>Dejar en blanco para asignarla a ti mismo. Para delegar, escribe el nombre del colega.</span>", unsafe_allow_html=True)
-                        t_delegado = st.text_input("Asignar Tarea a (Opcional)", placeholder="Ej: Eduardo Riquelme")
+                        st.markdown("<span style='font-size:13px; color:#6b778c;'>Si no eliges a nadie, la tarea queda asignada a ti mismo. Puedes elegir uno o varios colegas para delegarla o compartirla.</span>", unsafe_allow_html=True)
+                        opciones_colegas = {user_key: f"{real_name} ({user_key})" for user_key, real_name in NOMBRES_REALES.items() if user_key != usuario_actual}
+                        colegas_elegidos = st.multiselect("Asignar Tarea a (Opcional, uno o varios)", options=list(opciones_colegas.keys()), format_func=lambda k: opciones_colegas.get(k, k))
                         
                         if st.form_submit_button("Registrar y Asignar Tarea", type="primary"):
-                            destinatario_file = ARCHIVO_TAREAS
-                            destinatario_usr = usuario_actual
+                            # Si no se elige a nadie, se asigna a uno mismo (comportamiento
+                            # de antes). Si se elige uno o varios colegas, la tarea se crea
+                            # una copia en la lista de CADA uno de ellos, para que todos la
+                            # vean en su propia pantalla de Tareas.
+                            destinatarios = colegas_elegidos if colegas_elegidos else [usuario_actual]
+                            nombres_asignados_texto = ", ".join(NOMBRES_REALES.get(d, d) for d in destinatarios)
                             
-                            if t_delegado.strip():
-                                nombre_buscado = t_delegado.strip().lower()
-                                for user_key, real_name in NOMBRES_REALES.items():
-                                    if nombre_buscado in real_name.lower() or nombre_buscado == user_key.lower():
-                                        destinatario_usr = user_key
-                                        destinatario_file = f"base_tareas_{user_key}.csv"
-                                        break
+                            for destinatario_usr in destinatarios:
+                                destinatario_file = f"base_tareas_{destinatario_usr}.csv"
                                 
-                            if not os.path.exists(destinatario_file):
-                                pd.DataFrame(columns=['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario']).to_csv(destinatario_file, index=False)
+                                if not os.path.exists(destinatario_file):
+                                    pd.DataFrame(columns=COLS_TAREAS).to_csv(destinatario_file, index=False)
                                 
-                            df_t_destino = leer_csv_local(destinatario_file, COLS_TAREAS)
-                            nueva_t = {
-                                'ID_Tarea': str(uuid.uuid4())[:8], 
-                                'ROL': rol_actual, 
-                                'Creador': nombre_real_usuario, 
-                                'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
-                                'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
-                                'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p,
-                                'Usuario_Propietario': destinatario_usr
-                            }
-                            df_t_destino = pd.concat([df_t_destino, pd.DataFrame([nueva_t])], ignore_index=True)
-                            df_t_destino.to_csv(destinatario_file, index=False)
-                            
-                            dn_t_upd = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
-                            safe_update_sheet("base_tareas", pd.concat([dn_t_upd, pd.DataFrame([nueva_t])], ignore_index=True))
+                                df_t_destino = leer_csv_local(destinatario_file, COLS_TAREAS)
+                                nueva_t = {
+                                    'ID_Tarea': str(uuid.uuid4())[:8], 
+                                    'ROL': rol_actual, 
+                                    'Creador': nombre_real_usuario, 
+                                    'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
+                                    'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
+                                    'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p,
+                                    'Tipo_Gestion': nomenclatura_sel if nomenclatura_sel != "Otra (escribir abajo)" else '',
+                                    'Asignados': nombres_asignados_texto,
+                                    'Usuario_Propietario': destinatario_usr
+                                }
+                                df_t_destino = pd.concat([df_t_destino, pd.DataFrame([nueva_t])], ignore_index=True)
+                                df_t_destino.to_csv(destinatario_file, index=False)
                                 
-                            # --- 🚀 DISPARO A GOOGLE CALENDAR DINÁMICO ---
-                            if t_p == "Alta":
-                                df_usr_db = safe_read_sheet("base_usuarios", [])
-                                f_user = df_usr_db[df_usr_db['Usuario'] == destinatario_usr]
-                                if not f_user.empty and "@" in str(f_user.iloc[0]['Correo']):
-                                    correo_cal = f_user.iloc[0]['Correo']
-                                    exito = agendar_plazo_calendar(t_t, f"Causa ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_cal)
+                                dn_t_upd = safe_read_sheet("base_tareas", COLS_TAREAS)
+                                safe_update_sheet("base_tareas", pd.concat([dn_t_upd, pd.DataFrame([nueva_t])], ignore_index=True))
+                                    
+                                # --- 🚀 DISPARO A GOOGLE CALENDAR DINÁMICO (para cada asignado) ---
+                                if t_p == "Alta":
+                                    exito = False
+                                    df_usr_db = safe_read_sheet("base_usuarios", [])
+                                    f_user = df_usr_db[df_usr_db['Usuario'] == destinatario_usr]
+                                    if not f_user.empty and "@" in str(f_user.iloc[0]['Correo']):
+                                        correo_cal = f_user.iloc[0]['Correo']
+                                        exito = agendar_plazo_calendar(t_t, f"Causa ROL: {rol_actual}\nDetalle: {t_d}", t_f.strftime("%d/%m/%Y"), correo_cal)
                                     if exito:
                                         st.toast("📅 Plazo fatal sincronizado en Google Calendar con alarmas.", icon="🚨")
                             # ------------------------------------
@@ -5217,6 +5229,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     st.markdown(f"<div style='font-weight:700; font-size:17px; color:#172b4d;'>{tarea['Titulo']}</div>", unsafe_allow_html=True)
                                     st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Creado por: {autor_real} • N° tarea {nro_tarea_corto} • [{tarea.get('Prioridad', 'Media')}]</span>", unsafe_allow_html=True)
                                     st.markdown(f"<span style='font-size:13px; color:#6b778c;'>Fecha creación: {tarea['Fecha_Creacion']} • Fecha vencimiento: {tarea['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
+                                    if pd.notna(tarea.get('Asignados')) and str(tarea.get('Asignados', '')).strip():
+                                        st.markdown(f"<span style='font-size:13px; color:#0e6b74;'>👥 Asignada a: {tarea['Asignados']}</span>", unsafe_allow_html=True)
                                 
                                 with c_top_r:
                                     if tarea['Estado'] == 'En progreso':
