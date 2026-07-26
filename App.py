@@ -40,6 +40,34 @@ except ImportError:
 # 🔒 UTILIDADES DE SEGURIDAD (HASH DE CONTRASEÑAS Y COOKIES FIRMADAS)
 # =====================================================================
 
+def _es_admin_usuario(nombre_usuario):
+    """
+    Determina si un usuario es administrador. Antes esto se verificaba
+    comparando directo contra el nombre "Narratia" en 20 lugares distintos
+    del sistema — lo cual significaba que si ESE usuario se renombraba a
+    sí mismo (con la función de cambiar nombre de usuario), perdía el
+    acceso de administrador de inmediato, sin ningún aviso. Ahora se
+    verifica una marca separada ("Es_Admin") guardada en la base de
+    usuarios, que sobrevive a cualquier cambio de nombre — y, por
+    compatibilidad con cuentas ya existentes, "Narratia" sigue
+    reconociéndose como admin aunque nunca se le haya puesto la marca
+    explícita.
+    """
+    if not nombre_usuario:
+        return False
+    if nombre_usuario == "Narratia":
+        return True
+    try:
+        df_usr_check = safe_read_sheet("base_usuarios", [])
+        if df_usr_check.empty or 'Es_Admin' not in df_usr_check.columns:
+            return False
+        fila_usr_check = df_usr_check[df_usr_check['Usuario'] == nombre_usuario]
+        if fila_usr_check.empty:
+            return False
+        return str(fila_usr_check.iloc[0]['Es_Admin']).strip() in ('True', 'true', '1')
+    except Exception:
+        return False
+
 def hash_password(plano: str) -> str:
     """Convierte una contraseña en texto plano a un hash bcrypt seguro."""
     if not BCRYPT_READY:
@@ -1564,7 +1592,7 @@ def generar_contenido_gemini(prompt_texto, archivos_pdf=None):
         return respuesta.text
 
 # --- DEFINICIÓN DE COLUMNAS MAESTRAS ---
-COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan']
+COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan', 'Es_Admin']
 COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion', 'Usuario_Propietario']
 COLS_CAUSAS = ['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']
 
@@ -3614,7 +3642,7 @@ st.markdown("""
 # proceso — por eso antes no se veía nada. Este chequeo va al nivel más
 # alto del script, antes de cualquier menú, para que funcione sin importar
 # en qué pantalla caiga el usuario al volver.
-if "code" in st.query_params and st.session_state.get('username') == "Narratia":
+if "code" in st.query_params and _es_admin_usuario(st.session_state.get('username')):
     st.title("🔑 Completando la conexión con tu Drive personal...")
     try:
         refresh_token_obtenido = _intercambiar_codigo_oauth_drive(st.query_params["code"])
@@ -3714,7 +3742,7 @@ with st.sidebar:
                     _boton_menu(opcion, contador_botones)
                     contador_botones += 1
     
-    if usuario_actual == "Narratia":
+    if _es_admin_usuario(usuario_actual):
         st.markdown("---")
         _boton_menu("👑 Panel Admin", contador_botones)
         contador_botones += 1
@@ -3864,7 +3892,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
         if 'Estado_Honorarios' in df_c.columns:
             df_c['Estado_Honorarios'] = df_c['Estado_Honorarios'].astype(str)
     
-    ES_ADMIN_CONTA = usuario_actual == "Narratia"
+    ES_ADMIN_CONTA = _es_admin_usuario(usuario_actual)
     
     tab_conta_cliente, tab_conta_general = st.tabs(["📋 Gestión por Cliente", "📊 Contabilidad General"])
     
@@ -4209,7 +4237,7 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
 elif st.session_state['menu_radio'] == "📇 Encargos":
     st.title("📇 Encargos")
     
-    ES_ADMIN_ENCARGOS = usuario_actual == "Narratia"
+    ES_ADMIN_ENCARGOS = _es_admin_usuario(usuario_actual)
     df_encargos = leer_csv_local(ARCHIVO_ENCARGOS, COLS_ENCARGOS)
     if ES_ADMIN_ENCARGOS:
         for arch_enc in glob.glob("base_encargos_*.csv"):
@@ -5057,7 +5085,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                             st.write("*(Sin archivo)*")
                             
                     with c3:
-                        if usuario_actual == "Narratia":
+                        if _es_admin_usuario(usuario_actual):
                             if st.button("🗑️ Eliminar", key=f"del_con_{row.get('ID', idx)}"):
                                 df_contratos_reg = df_contratos_reg.drop(idx)
                                 df_contratos_reg.to_csv(ARCHIVO_CONTRATOS, index=False)
@@ -5122,7 +5150,7 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
 
 # 7. CAUSAS / EXPEDIENTES (MEJORADO Y RELACIONAL)
 elif st.session_state['menu_radio'] == "💼 Causas":
-    ES_ADMIN_NARRATIA = usuario_actual == "Narratia"
+    ES_ADMIN_NARRATIA = _es_admin_usuario(usuario_actual)
     
     # Si Narratia (administrador del estudio) abre una causa que pertenece a otro
     # abogado, trabajamos sobre los archivos REALES de ese abogado (no los del
@@ -5386,7 +5414,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 st.session_state['modo_edicion'] = not st.session_state['modo_edicion']
                 st.rerun()
                 
-            if usuario_actual == "Narratia":
+            if _es_admin_usuario(usuario_actual):
                 if c_btn_del.button("🗑️", help="Eliminar Causa Permanentemente"):
                     df_causas = df_causas.drop(idx)
                     df_causas.to_csv(ARCHIVO_BD, index=False)
@@ -5589,14 +5617,14 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 
                                 with c_top_r:
                                     if tarea['Estado'] == 'En progreso':
-                                        bcols = st.columns([1.3, 1.3, 0.9, 0.9] if usuario_actual == "Narratia" else [1.3, 1.3, 0.9])
+                                        bcols = st.columns([1.3, 1.3, 0.9, 0.9] if _es_admin_usuario(usuario_actual) else [1.3, 1.3, 0.9])
                                         if bcols[0].button("❌ Rechazar", key=f"rech_{tarea['ID_Tarea']}", use_container_width=True): 
                                             _actualizar_campo_tarea(tarea['ID_Tarea'], tarea['Usuario_Propietario'], 'Estado', 'Rechazada'); st.rerun()
                                         if bcols[1].button("✅ Aprobar", key=f"apr_{tarea['ID_Tarea']}", use_container_width=True): 
                                             _actualizar_campo_tarea(tarea['ID_Tarea'], tarea['Usuario_Propietario'], 'Estado', 'Aprobada'); st.rerun()
                                         if bcols[2].button("✏️", key=f"edit_{tarea['ID_Tarea']}", help="Editar tarea", use_container_width=True):
                                             st.session_state['editando_tarea'] = tarea['ID_Tarea']; st.rerun()
-                                        if usuario_actual == "Narratia" and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
+                                        if _es_admin_usuario(usuario_actual) and bcols[3].button("🗑️", key=f"del_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
                                             _eliminar_tarea_por_id(tarea['ID_Tarea'], tarea['Usuario_Propietario']); st.rerun()
                                         st.markdown("<div class='task-status-chip task-status-progreso' style='margin-top:8px; text-align:right; float:right;'>En progreso</div>", unsafe_allow_html=True)
                                     else:
@@ -5605,7 +5633,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                         with c_chip:
                                             st.markdown(f"<div style='text-align:right;'><span class='task-status-chip {clase_estado}'>{tarea['Estado']}</span></div>", unsafe_allow_html=True)
                                         with c_del:
-                                            if usuario_actual == "Narratia" and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
+                                            if _es_admin_usuario(usuario_actual) and st.button("🗑️", key=f"del_fin_{tarea['ID_Tarea']}", help="Eliminar tarea", use_container_width=True):
                                                 _eliminar_tarea_por_id(tarea['ID_Tarea'], tarea['Usuario_Propietario']); st.rerun()
 
                                 st.markdown(f"<p style='font-size: 15px; color: #172b4d; margin-top:12px; margin-bottom: 5px;'>{tarea['Descripcion']}</p>", unsafe_allow_html=True)
@@ -6030,7 +6058,7 @@ elif st.session_state['menu_radio'] == "✈️ Mensajería":
     st.title("✈️ Mensajería Interna del Equipo")
     st.markdown("Plataforma de comunicación rápida para la oficina.")
     
-    ES_ADMIN_MENSAJES = usuario_actual == "Narratia"
+    ES_ADMIN_MENSAJES = _es_admin_usuario(usuario_actual)
     
     c_tit_msj, c_refresh_msj = st.columns([4, 1])
     with c_refresh_msj:
@@ -6104,7 +6132,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
     
     df_clientes = safe_read_sheet("base_clientes", COLS_CLIENTES)
     
-    ES_ADMIN_CLIENTES_TOP = usuario_actual == "Narratia"
+    ES_ADMIN_CLIENTES_TOP = _es_admin_usuario(usuario_actual)
     
     # ASIGNACIÓN DE DUEÑO (solo en memoria, para clientes antiguos sin dueño
     # asignado): antes esto se volvía a guardar en la nube automáticamente
@@ -6231,7 +6259,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
         st.write("---")
         
         # CRUZAMOS DATOS PARA NO PERDER CLIENTES HISTÓRICOS (y, para el admin, de todo el equipo)
-        ES_ADMIN_CLIENTES = usuario_actual == "Narratia"
+        ES_ADMIN_CLIENTES = _es_admin_usuario(usuario_actual)
         if ES_ADMIN_CLIENTES:
             boton_refrescar_equipo("refresh_clientes_equipo")
             df_causas_local = pd.DataFrame()
@@ -6306,7 +6334,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
             st.session_state['cliente_seleccionado'] = None
             st.rerun()
             
-        if st.session_state['username'] == "Narratia": 
+        if _es_admin_usuario(st.session_state['username']): 
             if c_del.button("🗑️ Eliminar Cliente", use_container_width=True):
                 with st.spinner("Borrando cliente y limpiando datos en cascada..."):
                     df_causas = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
@@ -6481,7 +6509,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
             df_t = df_t_nube_tareas[df_t_nube_tareas['Usuario_Propietario'] == usuario_actual]
     df_t['Propietario_Vista'] = usuario_actual
     
-    ES_ADMIN_TAREAS = usuario_actual == "Narratia"
+    ES_ADMIN_TAREAS = _es_admin_usuario(usuario_actual)
     if ES_ADMIN_TAREAS:
         boton_refrescar_equipo("refresh_tareas_equipo")
         archivos_tareas_equipo = glob.glob("base_tareas_*.csv")
@@ -6553,7 +6581,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
                     st.markdown(f"<span style='color:#172b4d; font-size:14px;'><br>Causa: {row['ROL']} | Vence: {row['Fecha_Vencimiento']}</span>", unsafe_allow_html=True)
                 with c3:
                     st.button("Ir al expediente ➔", key=f"global_ir_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", on_click=ir_a_expediente, args=(row['ROL'], row.get('Propietario_Vista', usuario_actual)))
-                    if fila_tarea_propia or usuario_actual == "Narratia":
+                    if fila_tarea_propia or _es_admin_usuario(usuario_actual):
                         if st.button("🗑️ Eliminar", key=f"global_del_{row['ID_Tarea']}_{row.get('Propietario_Vista', '')}", use_container_width=True):
                             propietario_borrar = row.get('Propietario_Vista', usuario_actual)
                             archivo_borrar_tarea = f"base_tareas_{propietario_borrar}.csv"
@@ -6571,7 +6599,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
 elif st.session_state['menu_radio'] == "🗓️ Agenda de Asesorías":
     st.title("🗓️ Agenda de Asesorías")
     
-    ES_ADMIN_CITAS = usuario_actual == "Narratia"
+    ES_ADMIN_CITAS = _es_admin_usuario(usuario_actual)
     df_citas = leer_csv_local(ARCHIVO_CITAS, COLS_CITAS)
     if ES_ADMIN_CITAS:
         for arch_cita in glob.glob("base_citas_*.csv"):
@@ -6831,7 +6859,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
         except Exception: 
             st.caption("Haz clic en un día del calendario para ver sus tareas detalladas.")
 # 14. PANEL DE ADMINISTRADOR (SOLO NARRATIA)
-elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == "Narratia":
+elif st.session_state['menu_radio'] == "👑 Panel Admin" and _es_admin_usuario(usuario_actual):
     st.title("👑 Panel de Control Master - SaaS JuriSync")
     st.markdown("Gestión maestra de usuarios y formateo del sistema.")
     
@@ -6916,9 +6944,18 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                     st.error("⚠️ Ya existe un usuario con ese nombre.")
                 else:
                     with st.spinner(f"Renombrando '{usuario_renombrar}' a '{nuevo_nombre_limpio}' en todo el sistema..."):
-                        # 1. El propio registro de usuario.
-                        df_usr_renom = safe_read_sheet("base_usuarios", [])
+                        # 1. El propio registro de usuario. Si la persona que se
+                        # renombra ya era administrador, se le mantiene esa marca
+                        # con su nombre nuevo — antes esto no existía y era
+                        # justamente lo que le quitaba el acceso de admin a alguien
+                        # al renombrarse a sí mismo.
+                        era_admin_antes = _es_admin_usuario(usuario_renombrar)
+                        df_usr_renom = safe_read_sheet("base_usuarios", COLS_USUARIOS)
                         df_usr_renom.loc[df_usr_renom['Usuario'] == usuario_renombrar, 'Usuario'] = nuevo_nombre_limpio
+                        if era_admin_antes:
+                            if 'Es_Admin' not in df_usr_renom.columns:
+                                df_usr_renom['Es_Admin'] = 'False'
+                            df_usr_renom.loc[df_usr_renom['Usuario'] == nuevo_nombre_limpio, 'Es_Admin'] = 'True'
                         safe_update_sheet("base_usuarios", df_usr_renom)
                     
                         # 2. Las hojas compartidas en la nube: cambiar Usuario_Propietario
@@ -6968,6 +7005,29 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and usuario_actual == 
                     df_usr_reset.loc[df_usr_reset['Usuario'] == usuario_reset_clave, 'Debe_Cambiar_Clave'] = 'True'
                     safe_update_sheet("base_usuarios", df_usr_reset)
                     st.success(f"✅ Contraseña temporal asignada a **{usuario_reset_clave}**. Se le va a pedir cambiarla por una propia apenas inicie sesión.")
+        
+        with st.container(border=True):
+            st.subheader("👑 Otorgar o Quitar Permiso de Administrador")
+            st.caption("Esta marca es independiente del nombre de usuario — a diferencia de antes, renombrar a alguien ya NO le quita (ni le da) el acceso de administrador.")
+            df_usr_admin_flag = safe_read_sheet("base_usuarios", COLS_USUARIOS)
+            usuario_admin_flag = st.selectbox("Usuario", lista_usuarios, key="sel_admin_flag")
+            es_admin_actual_flag = _es_admin_usuario(usuario_admin_flag)
+            st.caption(f"Estado actual: {'✅ Es administrador' if es_admin_actual_flag else '❌ No es administrador'}")
+            c_dar, c_quitar = st.columns(2)
+            if c_dar.button("👑 Otorgar Admin", key="btn_dar_admin", use_container_width=True, disabled=es_admin_actual_flag):
+                if 'Es_Admin' not in df_usr_admin_flag.columns:
+                    df_usr_admin_flag['Es_Admin'] = 'False'
+                df_usr_admin_flag.loc[df_usr_admin_flag['Usuario'] == usuario_admin_flag, 'Es_Admin'] = 'True'
+                safe_update_sheet("base_usuarios", df_usr_admin_flag)
+                st.success(f"✅ '{usuario_admin_flag}' ahora es administrador.")
+                st.rerun()
+            if c_quitar.button("🚫 Quitar Admin", key="btn_quitar_admin", use_container_width=True, disabled=(not es_admin_actual_flag or usuario_admin_flag == "Narratia")):
+                df_usr_admin_flag.loc[df_usr_admin_flag['Usuario'] == usuario_admin_flag, 'Es_Admin'] = 'False'
+                safe_update_sheet("base_usuarios", df_usr_admin_flag)
+                st.success(f"✅ A '{usuario_admin_flag}' se le quitó el permiso de administrador.")
+                st.rerun()
+            if usuario_admin_flag == "Narratia":
+                st.caption("ℹ️ 'Narratia' es admin por defecto en el sistema y no se le puede quitar desde acá (es la cuenta principal, por compatibilidad).")
 
     with tab_vision:
         st.subheader("Monitoreo Absoluto de la Oficina")
@@ -7413,7 +7473,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         bytes_juris_desc = obtener_bytes_adjunto(fila_juris, 'Archivo_Drive_ID', 'Archivo_B64')
                         if bytes_juris_desc is not None:
                             st.download_button("📥 PDF", data=bytes_juris_desc, file_name=fila_juris.get('Archivo_Nombre', 'sentencia.pdf'), key=f"dl_juris_{fila_juris['ID']}")
-                        if usuario_actual == "Narratia" or fila_juris['Usuario_Propietario'] == usuario_actual:
+                        if _es_admin_usuario(usuario_actual) or fila_juris['Usuario_Propietario'] == usuario_actual:
                             if bytes_juris_desc is not None and st.button("🔄 Reanalizar con IA", key=f"reanalizar_juris_{fila_juris['ID']}", use_container_width=True, help="Vuelve a analizar el PDF ya guardado con el análisis más profundo (fundamentos de fondo del rechazo/acogida)"):
                                 with st.spinner("Analizando con mayor profundidad..."):
                                     try:
@@ -7443,7 +7503,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                                 safe_update_sheet("base_jurisprudencia", df_juris_del)
                                 st.rerun()
                     
-                    if usuario_actual == "Narratia" or fila_juris['Usuario_Propietario'] == usuario_actual:
+                    if _es_admin_usuario(usuario_actual) or fila_juris['Usuario_Propietario'] == usuario_actual:
                         with st.expander("✏️ Editar manualmente"):
                             with st.form(f"form_editar_juris_{fila_juris['ID']}"):
                                 resultado_edit = st.selectbox("Resultado", ["Acogida", "Rechazada", "Acogida Parcialmente", "Otro/No aplica"],
