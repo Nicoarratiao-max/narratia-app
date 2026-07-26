@@ -3307,13 +3307,22 @@ st.markdown("""
        toda la vida, sino un componente propio — la regla de arriba nunca
        les aplicaba, por eso se veían mezclados con el fondo y no parecían
        un menú desplegable. Esta es la que sí les llega. */
+    /* Los selectbox modernos de Streamlit no usan la etiqueta <select> de
+       toda la vida, sino un componente propio — la regla de arriba nunca
+       les aplicaba, por eso se veían mezclados con el fondo y no parecían
+       un menú desplegable. El primer intento (fondo blanco) se notaba muy
+       poco porque el fondo de la página ya es un gris casi blanco — ahora
+       se usa un tinte de color bien diferenciado, para que no haya dudas
+       de que es un menú desplegable.
+       ======================================================================== */
     [data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        border: 1px solid #cbd2d9 !important;
+        background-color: #e3f2f1 !important;
+        border: 2px solid #0e6b74 !important;
         border-radius: 6px !important;
     }
     [data-baseweb="select"] > div:hover {
-        border-color: #0e6b74 !important;
+        background-color: #d0e9e7 !important;
+        border-color: #0a4d54 !important;
     }
     .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0e6b74 !important; box-shadow: 0 0 0 1px #0e6b74 !important; }
     ::placeholder { color: #6b778c !important; opacity: 1; }
