@@ -40,6 +40,26 @@ except ImportError:
 # 🔒 UTILIDADES DE SEGURIDAD (HASH DE CONTRASEÑAS Y COOKIES FIRMADAS)
 # =====================================================================
 
+def _usuarios_a_incluir_en_vista_equipo(nombre_de_un_archivo_u_usuario, usuario_actual):
+    """
+    Decide si los datos de OTRO usuario (identificado por su nombre, tal
+    como aparece en el nombre del archivo) deben incluirse en la vista
+    actual del administrador, según lo que haya elegido en el selector
+    "👁️ Ver datos de otro usuario" de la barra lateral:
+    - "Solo mis datos" (por defecto): nunca se incluye a nadie más.
+    - Un usuario específico: solo se incluye ese usuario.
+    - "Todo el equipo junto": se incluye cualquier otro usuario (como antes).
+    """
+    if nombre_de_un_archivo_u_usuario == usuario_actual:
+        return False  # Los propios datos siempre se muestran, esto es solo para "los demás"
+    filtro_actual = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
+    if filtro_actual == "Solo mis datos":
+        return False
+    elif filtro_actual == "Todo el equipo junto":
+        return True
+    else:
+        return nombre_de_un_archivo_u_usuario == filtro_actual
+
 def _es_admin_usuario(nombre_usuario):
     """
     Determina si un usuario es administrador. Antes esto se verificaba
@@ -3746,6 +3766,21 @@ with st.sidebar:
         st.markdown("---")
         _boton_menu("👑 Panel Admin", contador_botones)
         contador_botones += 1
+        
+        # Selector de vista de equipo: antes, como administrador, siempre veías
+        # los datos de todo el equipo mezclados con los tuyos en cada pantalla
+        # (Causas, Tareas, Contabilidad) — eso desordenaba y confundía. Ahora
+        # eliges explícitamente si quieres ver solo lo tuyo, lo de un colega en
+        # particular, o todo el equipo junto — y esa elección se aplica en
+        # todos los módulos del sistema.
+        with st.expander("👁️ Ver datos de otro usuario"):
+            df_usr_filtro_lateral = safe_read_sheet("base_usuarios", [])
+            opciones_filtro_vista = ["Solo mis datos"]
+            if not df_usr_filtro_lateral.empty:
+                opciones_filtro_vista += [u for u in df_usr_filtro_lateral['Usuario'].tolist() if u != usuario_actual]
+            opciones_filtro_vista += ["Todo el equipo junto"]
+            filtro_elegido = st.selectbox("Ver:", opciones_filtro_vista, key="filtro_vista_admin_selector", label_visibility="collapsed")
+            st.session_state['filtro_vista_admin'] = filtro_elegido
 
     st.markdown("<br><br>", unsafe_allow_html=True)
     
@@ -4038,7 +4073,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
         if ES_ADMIN_CONTA:
             for arch_conta in glob.glob("base_causas_*.csv"):
                 propietario_conta = arch_conta.replace("base_causas_", "").replace(".csv", "")
-                if propietario_conta != usuario_actual:
+                if propietario_conta != usuario_actual and _usuarios_a_incluir_en_vista_equipo(propietario_conta, usuario_actual):
                     t_conta = leer_csv_local(arch_conta, COLS_CAUSAS)
                     if not t_conta.empty and 'Total_Honorarios' in t_conta.columns:
                         # Blindaje extra: si por un cambio de nombre de usuario
@@ -4055,7 +4090,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                         df_todos_conta = pd.concat([df_todos_conta, t_conta[t_conta['Total_Honorarios'] > 0]], ignore_index=True)
             for arch_pago in glob.glob("base_pagos_honorarios_*.csv"):
                 propietario_pago = arch_pago.replace("base_pagos_honorarios_", "").replace(".csv", "")
-                if propietario_pago != usuario_actual:
+                if propietario_pago != usuario_actual and _usuarios_a_incluir_en_vista_equipo(propietario_pago, usuario_actual):
                     t_pago = leer_csv_local(arch_pago, COLS_PAGOS_HONORARIOS)
                     if not t_pago.empty:
                         if 'Usuario_Propietario' in t_pago.columns:
@@ -5375,6 +5410,11 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             piezas_equipo = []
             for arch in archivos_causas_equipo:
                 propietario_arch = arch.replace("base_causas_", "").replace(".csv", "")
+                # Solo se incluyen los propios datos siempre, y los de otro
+                # usuario únicamente si el administrador eligió verlos
+                # explícitamente en el selector de la barra lateral.
+                if propietario_arch != usuario_actual and not _usuarios_a_incluir_en_vista_equipo(propietario_arch, usuario_actual):
+                    continue
                 temp_causa_eq = leer_csv_local(arch, COLS_CAUSAS)
                 if not temp_causa_eq.empty:
                     temp_causa_eq = temp_causa_eq.copy()
@@ -6243,10 +6283,18 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     st.rerun()
     
 
-    # PRIVACIDAD: cada abogado ve solo SUS PROPIOS clientes. Solo Nicolás
-    # (Narratia), como administrador, ve los de todo el equipo.
-    if not ES_ADMIN_CLIENTES_TOP and not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
-        df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
+    # PRIVACIDAD: cada abogado ve solo SUS PROPIOS clientes. El administrador
+    # ve además los de otros según lo que haya elegido en el selector "👁️ Ver
+    # datos de otro usuario" de la barra lateral (antes siempre veía todo el
+    # equipo junto, sin poder acotarlo).
+    if not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
+        if not ES_ADMIN_CLIENTES_TOP:
+            df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
+        else:
+            df_clientes = df_clientes[
+                (df_clientes['Usuario_Propietario'] == usuario_actual) |
+                (df_clientes['Usuario_Propietario'].apply(lambda u: _usuarios_a_incluir_en_vista_equipo(u, usuario_actual)))
+            ]
 
     if ES_ADMIN_CLIENTES_TOP:
         with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
@@ -6593,6 +6641,8 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
         piezas_tareas_eq = []
         for arch_t in archivos_tareas_equipo:
             propietario_t = arch_t.replace("base_tareas_", "").replace(".csv", "")
+            if propietario_t != usuario_actual and not _usuarios_a_incluir_en_vista_equipo(propietario_t, usuario_actual):
+                continue
             temp_t_eq = leer_csv_local(arch_t, COLS_TAREAS)
             if not temp_t_eq.empty:
                 temp_t_eq = temp_t_eq.copy()
