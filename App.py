@@ -4271,19 +4271,6 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                                 texto_pdf += f"\n--- {archivo_subido.name} ---\n"
                                 texto_pdf += _extraer_texto_de_un_pdf(archivo_subido)
                         
-                        import google.generativeai as genai
-                        genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-                        
-                        modelo_elegido = "gemini-1.0-pro"
-                        for m in genai.list_models():
-                            if 'generateContent' in m.supported_generation_methods:
-                                md_name = m.name.replace("models/", "")
-                                if 'flash' in md_name:
-                                    modelo_elegido = md_name
-                                    break
-                                    
-                        modelo = genai.GenerativeModel(modelo_elegido)
-                        
                         prompt_maestro = f"""
                         Actúa como un Abogado Supervisor experto en litigación en Chile, específicamente en el área: {materia}.
                         Analiza los siguientes antecedentes entregados por tu equipo:
@@ -4304,10 +4291,10 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                         3. **Siguientes Pasos:** Tareas inmediatas a ejecutar.
                         """
                         
-                        respuesta = modelo.generate_content(prompt_maestro)
+                        texto_respuesta_estrategia = consultar_groq(prompt_maestro)
                         st.success("✅ Análisis estratégico formulado con éxito.")
                         st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
-                        st.write(respuesta.text)
+                        st.write(texto_respuesta_estrategia)
                         st.markdown("</div>", unsafe_allow_html=True)
                         
                     except Exception as e:
