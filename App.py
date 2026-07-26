@@ -7135,6 +7135,26 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and _es_admin_usuario(
                 st.caption("Te va a llevar a una pantalla de Google pidiéndote iniciar sesión y dar permiso — es normal que Google muestre una advertencia de 'app no verificada' (porque es tu propia app, no una app pública), puedes continuar igual haciendo clic en 'Avanzado' → 'Ir a JuriSync (no seguro)'.")
 
     with tab_peligro:
+        st.subheader("🗑️ Eliminar un Usuario Específico")
+        st.warning(
+            "Esto elimina el ACCESO de esa persona (ya no va a poder iniciar sesión), pero **NO borra su trabajo**: "
+            "sus causas, tareas, clientes y contratos ya creados quedan intactos en el sistema, visibles para el "
+            "administrador (tú), por si otro abogado necesita seguir con ellos."
+        )
+        usuarios_para_eliminar = [u for u in lista_usuarios if u != "Narratia"]
+        if not usuarios_para_eliminar:
+            st.info("No hay otros usuarios para eliminar (solo existe la cuenta principal).")
+        else:
+            usuario_a_eliminar = st.selectbox("Usuario a eliminar", usuarios_para_eliminar, key="sel_usuario_eliminar")
+            confirmacion_usuario = st.text_input(f"Escribe **{usuario_a_eliminar}** para confirmar:", key="confirmacion_eliminar_usuario")
+            if st.button("🗑️ Eliminar Este Usuario", type="primary", use_container_width=True, disabled=(confirmacion_usuario.strip() != usuario_a_eliminar)):
+                df_usr_eliminar = safe_read_sheet("base_usuarios", COLS_USUARIOS)
+                df_usr_eliminar = df_usr_eliminar[df_usr_eliminar['Usuario'] != usuario_a_eliminar]
+                safe_update_sheet("base_usuarios", df_usr_eliminar)
+                st.success(f"✅ '{usuario_a_eliminar}' ya no puede iniciar sesión. Su trabajo anterior sigue disponible en el sistema.")
+                import time; time.sleep(0.4); st.rerun()
+        
+        st.markdown("---")
         st.subheader("Borrón y Cuenta Nueva (Limpieza Estricta)")
         st.error("⚠️ ADVERTENCIA: Esta acción eliminará permanentemente todos los clientes, causas, tareas, contratos, trámites y documentos de Google Sheets y del servidor local.")
         
