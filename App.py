@@ -4246,108 +4246,179 @@ elif st.session_state['menu_radio'] == "📊 Informes":
 # 6. ESTRATEGIA JURÍDICA (ASISTENTE PRIVADO)
 elif st.session_state['menu_radio'] == "🧠 Estrategia":
     st.title("🧠 Asistente de Estrategia Jurídica")
-    st.markdown("Describe los hechos o adjunta el PDF de la demanda/notificación. La IA analizará los antecedentes y te propondrá la mejor salida legal bajo la normativa chilena.")
+    st.markdown("Sube los documentos del caso. La IA los analiza, te hace algunas preguntas puntuales para afinar su criterio, y recién con tus respuestas te entrega la Recomendación Final.")
     
-    with st.container(border=True):
-        materia = st.selectbox(
-            "Rama del Derecho (opcional — si no la sabes o el caso toca varias, déjala en 'Que la IA lo determine')",
-            ["Que la IA lo determine", "Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Comercial y Societario", "Tributario", "Administrativo", "Constitucional", "Del Consumidor", "Inmobiliario", "Migratorio y Extranjería", "Ambiental", "Bancario y Ejecutivo Hipotecario", "Policía Local / Tránsito"]
-        )
-        caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
+    if 'estrategia_etapa' not in st.session_state:
+        st.session_state['estrategia_etapa'] = 'analisis'
+    
+    def _extraer_texto_de_un_pdf(archivo_pdf_individual):
+        texto_uno = ""
+        try:
+            import PyPDF2
+            lector_uno = PyPDF2.PdfReader(archivo_pdf_individual)
+            for pagina_uno in lector_uno.pages:
+                texto_uno += (pagina_uno.extract_text() or "") + "\n"
+        except Exception:
+            pass
+        return texto_uno
+    
+    # --- ETAPA 1: ANÁLISIS Y PREGUNTAS ACLARATORIAS ---
+    if st.session_state['estrategia_etapa'] == 'analisis':
+        with st.container(border=True):
+            materia = st.selectbox(
+                "Rama del Derecho (opcional — si no la sabes o el caso toca varias, déjala en 'Que la IA lo determine')",
+                ["Que la IA lo determine", "Civil / Ejecutivo", "Familia", "Penal", "Laboral", "Comercial y Societario", "Tributario", "Administrativo", "Constitucional", "Del Consumidor", "Inmobiliario", "Migratorio y Extranjería", "Ambiental", "Bancario y Ejecutivo Hipotecario", "Policía Local / Tránsito"]
+            )
+            caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
+            
+            archivos_legales = st.file_uploader(
+                "📎 Adjuntar documentos del caso (varios PDFs sueltos, o un .zip con muchos documentos adentro)",
+                type=['pdf', 'zip'], accept_multiple_files=True
+            )
+            st.caption("⚠️ Si el total de texto de todos los documentos es muy grande, el sistema toma solo la primera parte (equivalente a unas 15-20 páginas de texto en total) — para casos con muchísimos documentos, prioriza los más relevantes para el análisis (la demanda, el título, la resolución clave) en vez de adjuntar el expediente completo.")
+            
+            if st.button("💡 Analizar Caso", type="primary", use_container_width=True):
+                if not caso_texto.strip() and not archivos_legales:
+                    st.error("⚠️ Debes escribir los antecedentes o adjuntar al menos un documento.")
+                else:
+                    with st.spinner("🧠 Leyendo documentos y buscando jurisprudencia/normativa aplicable..."):
+                        try:
+                            import zipfile
+                            
+                            texto_pdf = ""
+                            for archivo_subido in (archivos_legales or []):
+                                if archivo_subido.name.lower().endswith(".zip"):
+                                    with zipfile.ZipFile(archivo_subido) as zip_abierto:
+                                        for nombre_interno in zip_abierto.namelist():
+                                            if nombre_interno.lower().endswith(".pdf") and not nombre_interno.startswith("__MACOSX"):
+                                                with zip_abierto.open(nombre_interno) as pdf_interno:
+                                                    texto_pdf += f"\n--- {nombre_interno} (dentro del ZIP {archivo_subido.name}) ---\n"
+                                                    texto_pdf += _extraer_texto_de_un_pdf(io.BytesIO(pdf_interno.read()))
+                                else:
+                                    texto_pdf += f"\n--- {archivo_subido.name} ---\n"
+                                    texto_pdf += _extraer_texto_de_un_pdf(archivo_subido)
+                            
+                            indicacion_materia = (
+                                f"El abogado ya identificó que el caso corresponde al área: {materia}. Concéntrate en esa rama."
+                                if materia != "Que la IA lo determine" else
+                                "El abogado NO indicó la rama del derecho — es tu trabajo identificarla tú mismo a partir de los hechos y documentos. Si el caso involucra MÁS DE UNA rama del derecho a la vez (por ejemplo, un despido que además tiene aristas penales, o una causa civil con implicancias tributarias), identifícalas TODAS, no solo la principal."
+                            )
+                            
+                            prompt_analisis = f"""
+                            Actúa como un Abogado Supervisor experto en litigación en Chile, revisando un caso para tu equipo.
+                            
+                            {indicacion_materia}
+                            
+                            RELATO DEL ABOGADO:
+                            {caso_texto}
+                            
+                            TEXTO DE LOS DOCUMENTOS ADJUNTOS:
+                            {texto_pdf[:25000]}
+                            {"(NOTA: había más contenido de los documentos adjuntos que no cupo aquí por su tamaño total; se truncó a las primeras páginas/documentos.)" if len(texto_pdf) > 25000 else ""}
+                            
+                            {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+                            
+                            Estructura el campo "analisis_markdown" así:
+                            
+                            ## 📋 Ramas del Derecho Identificadas
+                            Lista breve de la(s) rama(s) del derecho que aplican a este caso concreto, con una frase de por qué cada una aplica.
+                            
+                            Luego, POR CADA RAMA IDENTIFICADA (repite esta estructura completa una vez por cada una — si solo hay una rama, desarróllala igual con esta misma estructura):
+                            
+                            ## ⚖️ [Nombre de la Rama]
+                            1. **Análisis del Escenario:** Identifica riesgos y plazos procesales relevantes a ESTA rama específica, citando las normas exactas que los rigen.
+                            2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer dentro de ESTA rama, con su fundamento legal (artículos exactos) y, cuando corresponda, el criterio jurisprudencial general aplicable.
+                            3. **Siguientes Pasos:** Tareas inmediatas a ejecutar en esta rama.
+                            4. **Acciones Legales Concretas y Viabilidad:** Lista CADA acción legal específica y viable para este caso en esta rama, y para cada una: una frase de por qué es aplicable a ESTE caso concreto, y una estimación orientadora de viabilidad (0-100%, aclarando que es una estimación profesional orientadora, no una cifra estadística real). Ordena de mayor a menor viabilidad.
+                            
+                            NO agregues todavía ninguna "Recomendación Final" — eso viene después, en otro paso.
+                            
+                            Además, identifica de 1 a 3 preguntas ACLARATORIAS concretas que, si el abogado te las responde, te permitirían dar una recomendación final más precisa (ej: "¿El cliente ya fue notificado formalmente?", "¿Existe algún acuerdo de pago previo con la contraparte?", "¿Hay testigos disponibles de este hecho?"). Solo pregunta lo que de verdad no puedas deducir de los documentos y que cambie tu recomendación según la respuesta — no preguntes cosas triviales.
+                            
+                            Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown), con esta estructura exacta:
+                            {{"analisis_markdown": "...(todo el análisis en markdown, como se describió arriba)...", "preguntas": ["pregunta 1", "pregunta 2"]}}
+                            """
+                            
+                            respuesta_analisis_estrategia = consultar_groq(prompt_analisis)
+                            datos_analisis_estrategia = json.loads(_limpiar_json_ia(respuesta_analisis_estrategia))
+                            
+                            st.session_state['estrategia_analisis_md'] = datos_analisis_estrategia.get('analisis_markdown', '')
+                            st.session_state['estrategia_preguntas'] = datos_analisis_estrategia.get('preguntas', [])
+                            st.session_state['estrategia_materia'] = materia
+                            st.session_state['estrategia_caso_texto'] = caso_texto
+                            st.session_state['estrategia_etapa'] = 'preguntas'
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error al conectar con la IA o leer el PDF: {e}")
+    
+    # --- ETAPA 2: PREGUNTAS ACLARATORIAS ---
+    elif st.session_state['estrategia_etapa'] == 'preguntas':
+        st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>💡 Análisis del Caso</h4>", unsafe_allow_html=True)
+        st.write(st.session_state.get('estrategia_analisis_md', ''))
+        st.markdown("</div>", unsafe_allow_html=True)
         
-        archivos_legales = st.file_uploader(
-            "📎 Adjuntar documentos del caso (varios PDFs sueltos, o un .zip con muchos documentos adentro)",
-            type=['pdf', 'zip'], accept_multiple_files=True
-        )
-        st.caption("⚠️ Si el total de texto de todos los documentos es muy grande, el sistema toma solo la primera parte (equivalente a unas 15-20 páginas de texto en total) — para casos con muchísimos documentos, prioriza los más relevantes para el análisis (la demanda, el título, la resolución clave) en vez de adjuntar el expediente completo.")
-        
-        if st.button("💡 Analizar y Generar Propuesta", type="primary", use_container_width=True):
-            if not caso_texto.strip() and not archivos_legales:
-                st.error("⚠️ Debes escribir los antecedentes o adjuntar al menos un documento.")
+        preguntas_pendientes = st.session_state.get('estrategia_preguntas', [])
+        with st.container(border=True):
+            if preguntas_pendientes:
+                st.markdown("#### ❓ Antes de la Recomendación Final, necesito que me aclares esto:")
+                respuestas_usuario = []
+                for i, pregunta in enumerate(preguntas_pendientes):
+                    respuesta_i = st.text_input(pregunta, key=f"estrategia_resp_{i}")
+                    respuestas_usuario.append((pregunta, respuesta_i))
             else:
-                with st.spinner("🧠 Leyendo documentos y buscando jurisprudencia/normativa aplicable..."):
+                st.info("La IA no necesitó preguntas adicionales para este caso — puedes pasar directo a la Recomendación Final.")
+                respuestas_usuario = []
+            
+            c_atras, c_seguir = st.columns([1, 2])
+            if c_atras.button("🔙 Volver a analizar", use_container_width=True):
+                st.session_state['estrategia_etapa'] = 'analisis'
+                st.rerun()
+            
+            if c_seguir.button("🎯 Ver Recomendación Final", type="primary", use_container_width=True):
+                with st.spinner("🧠 Afinando la recomendación con tus respuestas..."):
                     try:
-                        import PyPDF2, zipfile
+                        bloque_respuestas = "\n".join([f"- {p}: {r if r.strip() else '(sin responder)'}" for p, r in respuestas_usuario]) or "(el abogado no tuvo preguntas pendientes que responder)"
                         
-                        def _extraer_texto_de_un_pdf(archivo_pdf_individual):
-                            texto_uno = ""
-                            try:
-                                lector_uno = PyPDF2.PdfReader(archivo_pdf_individual)
-                                for pagina_uno in lector_uno.pages:
-                                    texto_uno += (pagina_uno.extract_text() or "") + "\n"
-                            except Exception:
-                                pass
-                            return texto_uno
+                        prompt_final_estrategia = f"""
+                        Ya hiciste este análisis de un caso:
                         
-                        texto_pdf = ""
-                        for archivo_subido in (archivos_legales or []):
-                            if archivo_subido.name.lower().endswith(".zip"):
-                                # Se abre el ZIP y se procesa cada PDF que tenga adentro, uno
-                                # por uno — así se pueden analizar muchos documentos de una
-                                # sola vez sin tener que subirlos todos sueltos.
-                                with zipfile.ZipFile(archivo_subido) as zip_abierto:
-                                    for nombre_interno in zip_abierto.namelist():
-                                        if nombre_interno.lower().endswith(".pdf") and not nombre_interno.startswith("__MACOSX"):
-                                            with zip_abierto.open(nombre_interno) as pdf_interno:
-                                                texto_pdf += f"\n--- {nombre_interno} (dentro del ZIP {archivo_subido.name}) ---\n"
-                                                texto_pdf += _extraer_texto_de_un_pdf(io.BytesIO(pdf_interno.read()))
-                            else:
-                                texto_pdf += f"\n--- {archivo_subido.name} ---\n"
-                                texto_pdf += _extraer_texto_de_un_pdf(archivo_subido)
+                        {st.session_state.get('estrategia_analisis_md', '')}
                         
-                        indicacion_materia = (
-                            f"El abogado ya identificó que el caso corresponde al área: {materia}. Concéntrate en esa rama."
-                            if materia != "Que la IA lo determine" else
-                            "El abogado NO indicó la rama del derecho — es tu trabajo identificarla tú mismo a partir de los hechos y documentos. Si el caso involucra MÁS DE UNA rama del derecho a la vez (por ejemplo, un despido que además tiene aristas penales, o una causa civil con implicancias tributarias), identifícalas TODAS, no solo la principal."
-                        )
-                        
-                        prompt_maestro = f"""
-                        Actúa como un Abogado Supervisor experto en litigación en Chile, revisando un caso para tu equipo.
-                        
-                        {indicacion_materia}
-                        
-                        RELATO DEL ABOGADO:
-                        {caso_texto}
-                        
-                        TEXTO DE LOS DOCUMENTOS ADJUNTOS:
-                        {texto_pdf[:25000]}
-                        {"\n(NOTA: había más contenido de los documentos adjuntos que no cupo aquí por su tamaño total; se truncó a las primeras páginas/documentos.)" if len(texto_pdf) > 25000 else ""}
+                        El abogado respondió tus preguntas aclaratorias así:
+                        {bloque_respuestas}
                         
                         {INSTRUCCION_FUNDAMENTACION_JURIDICA}
                         
-                        Estructura tu respuesta así:
-                        
-                        ## 📋 Ramas del Derecho Identificadas
-                        Lista breve de la(s) rama(s) del derecho que aplican a este caso concreto, con una frase de por qué cada una aplica.
-                        
-                        Luego, POR CADA RAMA IDENTIFICADA (repite esta estructura completa una vez por cada una — si solo hay una rama, desarróllala igual con esta misma estructura):
-                        
-                        ## ⚖️ [Nombre de la Rama]
-                        1. **Análisis del Escenario:** Identifica riesgos y plazos procesales relevantes a ESTA rama específica, citando las normas exactas que los rigen.
-                        2. **Estrategia Legal:** Propón acciones, excepciones o incidentes a interponer dentro de ESTA rama, con su fundamento legal (artículos exactos) y, cuando corresponda, el criterio jurisprudencial general aplicable.
-                        3. **Siguientes Pasos:** Tareas inmediatas a ejecutar en esta rama.
-                        4. **Acciones Legales Concretas y Viabilidad:** Lista CADA acción legal específica y viable para este caso en esta rama (ej: "Excepción de prescripción", "Demanda de nulidad de despido", "Tercería de dominio"), y para cada una:
-                           - Una frase de por qué es aplicable a ESTE caso concreto (no una explicación genérica de la acción).
-                           - Una **estimación orientadora de viabilidad** (0-100%), basada en la fuerza de los hechos y antecedentes que SÍ tienes a la vista en este caso (documentos aportados, plazos, prueba disponible). Dejar explícito que es una estimación profesional orientadora del abogado IA, no una cifra estadística real (no existen bases de datos con tasas de éxito reales de acciones judiciales chilenas) — usa una frase como "(estimación orientadora, no una cifra estadística)" junto al porcentaje.
-                           - Ordena esta lista de mayor a menor viabilidad, para que la de arriba sea la más recomendable.
-                        
-                        Al final de TODO (después de haber desarrollado cada rama con sus 4 puntos), agrega esta sección de cierre, una sola vez para todo el caso:
+                        Ahora, con esta información adicional, entrega SOLO la sección de cierre (no repitas el análisis de arriba):
                         
                         ## 🎯 Recomendación Final
-                        Sintetiza todo el análisis anterior en una **decisión clara y directa**, no una lista más para que el abogado siga comparando. Indica explícitamente:
-                        - **La acción que recomiendas tomar primero** (una sola, la más viable de todas las identificadas arriba, sin importar de qué rama sea), en una frase directa: "La acción recomendada es: [acción]."
-                        - El motivo concreto de por qué esa es la mejor jugada ahora, en 2-3 líneas (no repitas todo lo ya dicho arriba, solo la síntesis).
+                        Sintetiza todo en una **decisión clara y directa**, no una lista más para que el abogado siga comparando. Indica explícitamente:
+                        - **La acción que recomiendas tomar primero** (una sola, la más viable de todas, sin importar de qué rama sea), en una frase directa: "La acción recomendada es: [acción]."
+                        - El motivo concreto de por qué esa es la mejor jugada ahora, en 2-3 líneas, incorporando lo que el abogado te respondió si es relevante.
                         - Si hay una segunda acción relevante que además conviene ejecutar en paralelo (no como alternativa, sino como complemento), indícala también, pero deja clarísimo cuál es la prioridad N°1.
                         """
                         
-                        texto_respuesta_estrategia = consultar_groq(prompt_maestro)
-                        st.success("✅ Análisis estratégico formulado con éxito.")
-                        st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>💡 Propuesta de Acción</h4>", unsafe_allow_html=True)
-                        st.write(texto_respuesta_estrategia)
-                        st.markdown("</div>", unsafe_allow_html=True)
-                        
+                        texto_recomendacion_final = consultar_groq(prompt_final_estrategia)
+                        st.session_state['estrategia_recomendacion_final'] = texto_recomendacion_final
+                        st.session_state['estrategia_etapa'] = 'final'
+                        st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Error al conectar con la IA o leer el PDF: {e}")
+                        st.error(f"❌ Error al generar la recomendación final: {e}")
+    
+    # --- ETAPA 3: RECOMENDACIÓN FINAL ---
+    elif st.session_state['estrategia_etapa'] == 'final':
+        st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>💡 Análisis del Caso</h4>", unsafe_allow_html=True)
+        st.write(st.session_state.get('estrategia_analisis_md', ''))
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        st.markdown("<div class='dash-card' style='border-top-color:#1b7a4a;'><h4 style='color:#1b7a4a;'>🎯 Recomendación Final</h4>", unsafe_allow_html=True)
+        st.write(st.session_state.get('estrategia_recomendacion_final', ''))
+        st.markdown("</div>", unsafe_allow_html=True)
+        
+        if st.button("🆕 Analizar un caso nuevo", use_container_width=True):
+            for k in ['estrategia_etapa', 'estrategia_analisis_md', 'estrategia_preguntas', 'estrategia_materia', 'estrategia_caso_texto', 'estrategia_recomendacion_final']:
+                st.session_state.pop(k, None)
+            st.rerun()
 
 # 6. CONTRATOS WORD E IMPORTACIÓN IA
 elif st.session_state['menu_radio'] == "📄 Contratos":
