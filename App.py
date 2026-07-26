@@ -1196,10 +1196,10 @@ def crear_escrito_oposicion_excepciones_word(datos_causa, excepciones_selecciona
     
     doc = Document()
     style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
-    style.paragraph_format.line_spacing = 1.5
-    style.paragraph_format.space_after = Pt(6)
+    style.font.name = CONFIG_FORMATO_ESCRITOS['fuente']
+    style.font.size = Pt(CONFIG_FORMATO_ESCRITOS['tamano_pt'])
+    style.paragraph_format.line_spacing = CONFIG_FORMATO_ESCRITOS['interlineado']
+    style.paragraph_format.space_after = Pt(CONFIG_FORMATO_ESCRITOS['espacio_despues_pt'])
     
     p_suma = doc.add_paragraph()
     p_suma.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -2314,10 +2314,10 @@ def crear_informe_analisis_escritura_word(nombre_escritura_original, texto_anali
     
     doc = Document()
     style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
-    style.paragraph_format.line_spacing = 1.5
-    style.paragraph_format.space_after = Pt(6)
+    style.font.name = CONFIG_FORMATO_ESCRITOS['fuente']
+    style.font.size = Pt(CONFIG_FORMATO_ESCRITOS['tamano_pt'])
+    style.paragraph_format.line_spacing = CONFIG_FORMATO_ESCRITOS['interlineado']
+    style.paragraph_format.space_after = Pt(CONFIG_FORMATO_ESCRITOS['espacio_despues_pt'])
     
     titulo = doc.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -2359,10 +2359,10 @@ def crear_informe_posesion_efectiva_word(datos_causante, df_herederos_calc, masa
     
     doc = Document()
     style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
-    style.paragraph_format.line_spacing = 1.5
-    style.paragraph_format.space_after = Pt(6)
+    style.font.name = CONFIG_FORMATO_ESCRITOS['fuente']
+    style.font.size = Pt(CONFIG_FORMATO_ESCRITOS['tamano_pt'])
+    style.paragraph_format.line_spacing = CONFIG_FORMATO_ESCRITOS['interlineado']
+    style.paragraph_format.space_after = Pt(CONFIG_FORMATO_ESCRITOS['espacio_despues_pt'])
     
     titulo = doc.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -2711,10 +2711,10 @@ def crear_escritura_word(tipo_escritura, datos):
     
     doc = Document()
     style = doc.styles['Normal']
-    style.font.name = 'Calibri'
-    style.font.size = Pt(11)
-    style.paragraph_format.line_spacing = 1.5
-    style.paragraph_format.space_after = Pt(6)
+    style.font.name = CONFIG_FORMATO_ESCRITOS['fuente']
+    style.font.size = Pt(CONFIG_FORMATO_ESCRITOS['tamano_pt'])
+    style.paragraph_format.line_spacing = CONFIG_FORMATO_ESCRITOS['interlineado']
+    style.paragraph_format.space_after = Pt(CONFIG_FORMATO_ESCRITOS['espacio_despues_pt'])
     
     titulo = doc.add_paragraph()
     titulo.alignment = WD_ALIGN_PARAGRAPH.CENTER
