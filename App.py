@@ -442,12 +442,12 @@ def consultar_groq(prompt: str, temperatura: float = 0.2) -> str:
     body = {"model": "llama-3.3-70b-versatile", "messages": [{"role": "user", "content": prompt}], "temperature": temperatura}
     
     import time
-    intentos_maximos = 3
+    intentos_maximos = 4
     for intento in range(intentos_maximos):
         respuesta = requests.post("https://api.groq.com/openai/v1/chat/completions", headers=headers, json=body, timeout=180)
         if respuesta.status_code == 429:
             if intento < intentos_maximos - 1:
-                tiempo_espera = 8 * (intento + 1)  # 8s, luego 16s
+                tiempo_espera = 15 * (intento + 1)  # 15s, 30s, 45s
                 time.sleep(tiempo_espera)
                 continue
             else:
