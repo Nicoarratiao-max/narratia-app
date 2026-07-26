@@ -4592,10 +4592,25 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 st.markdown("#### Módulo 5: Vincular a una Causa (opcional, pero recomendado)")
                 st.caption("Si eliges una causa, la Contabilidad de esa causa se completa sola con estos honorarios y cuotas — no tienes que volver a escribirlo ahí.")
                 df_causas_para_vincular = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
-                opciones_causa_vinculo = ["➕ Ninguna (crear después / sin causa aún)"]
+                opciones_causa_vinculo = ["➕ Ninguna (crear después / sin causa aún)", "🆕 Crear una causa nueva para este cliente ahora"]
                 if not df_causas_para_vincular.empty:
                     opciones_causa_vinculo += [f"{r['ROL']} — {r.get('CARATULADO','')}" for _, r in df_causas_para_vincular.iterrows()]
                 causa_vinculo_sel = st.selectbox("Causa a la que corresponden estos honorarios", opciones_causa_vinculo, key="gen_con_causa_vinculo")
+                
+                datos_causa_nueva_contrato = None
+                if causa_vinculo_sel == "🆕 Crear una causa nueva para este cliente ahora":
+                    st.caption("Se creará esta causa al generar el contrato, y va a aparecer de inmediato en el módulo de Causas, en Contabilidad, y en todo el resto del sistema — como cualquier otra causa.")
+                    cnc1, cnc2 = st.columns(2)
+                    nc_rol = cnc1.text_input("ROL (déjalo en blanco si todavía no lo tienes)", key="nc_rol_contrato")
+                    nc_tribunal = cnc2.text_input("Tribunal", key="nc_trib_contrato")
+                    nc_caratulado = cnc1.text_input("Caratulado", key="nc_carat_contrato")
+                    nc_cliente = cnc2.text_input("Nombre del Cliente", key="nc_cliente_contrato")
+                    nc_rut_cliente = cnc1.text_input("RUT del Cliente", key="nc_rut_contrato")
+                    nc_materia = cnc2.text_input("Materia / Tipo de Gestión", key="nc_materia_contrato", placeholder="Ej: Cobranza pagaré")
+                    datos_causa_nueva_contrato = {
+                        'rol': nc_rol.strip(), 'tribunal': nc_tribunal.strip(), 'caratulado': nc_caratulado.strip(),
+                        'cliente': nc_cliente.strip(), 'rut': nc_rut_cliente.strip(), 'materia': nc_materia.strip()
+                    }
 
             with st.form("form_generador_contratos", clear_on_submit=False):
                 detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100, key="gen_con_detalle", help="Se autocompleta según la acción elegida arriba. Puedes editarla libremente antes de generar el contrato.")
@@ -4684,8 +4699,31 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         # crea automáticamente una causa "placeholder" con estos honorarios y cuotas, para que
                         # la Contabilidad quede lista de inmediato. Cuando presentes la demanda y tengas el
                         # ROL real, solo entras a "Editar Ficha" de esa causa y reemplazas el ROL provisorio.
-                        if causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
+                        if causa_vinculo_sel not in ("➕ Ninguna (crear después / sin causa aún)", "🆕 Crear una causa nueva para este cliente ahora"):
                             rol_vinculado = causa_vinculo_sel.split(" — ")[0].strip()
+                        elif causa_vinculo_sel == "🆕 Crear una causa nueva para este cliente ahora" and datos_causa_nueva_contrato:
+                            # El abogado llenó los datos reales de la causa (Tribunal,
+                            # Caratulado, Cliente, etc.) en el Módulo 5 de arriba — se
+                            # crea con esa información real, no un simple placeholder.
+                            rol_vinculado = datos_causa_nueva_contrato['rol'] or f"PENDIENTE-{str(uuid.uuid4())[:6].upper()}"
+                            df_causas_nueva = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
+                            nueva_causa_desde_contrato = {
+                                'ROL': rol_vinculado,
+                                'TRIBUNAL': datos_causa_nueva_contrato['tribunal'] or '(Pendiente de asignar)',
+                                'CARATULADO': datos_causa_nueva_contrato['caratulado'] or f"{(datos_causa_nueva_contrato['cliente'] or cli_nom).upper()} / {tipo_servicio_final}",
+                                'Cliente': datos_causa_nueva_contrato['cliente'] or cli_nom,
+                                'RUT': datos_causa_nueva_contrato['rut'] or cli_rut,
+                                'Tipo_Negocio': datos_causa_nueva_contrato['materia'] or 'Propio',
+                                'Usuario_Propietario': usuario_actual, 'Estado_Honorarios': 'Pendientes',
+                                'Total_Honorarios': hon_num_int, 'Cuotas_Totales': cuotas_c, 'Cuotas_Pagadas': 0,
+                                'Clave_unica': '', 'SAC': '', 'Sucursal': '', 'Servicio': accion_final,
+                                'Fecha_Inicio': fecha_pago.strftime("%Y-%m-%d")
+                            }
+                            df_causas_nueva = pd.concat([df_causas_nueva, pd.DataFrame([nueva_causa_desde_contrato])], ignore_index=True)
+                            df_causas_nueva.to_csv(ARCHIVO_BD, index=False)
+                            dn_causa_nueva = safe_read_sheet("base_causas", COLS_CAUSAS)
+                            dn_causa_nueva = pd.concat([dn_causa_nueva, pd.DataFrame([nueva_causa_desde_contrato])], ignore_index=True)
+                            safe_update_sheet("base_causas", dn_causa_nueva)
                         else:
                             rol_vinculado = f"PENDIENTE-{str(uuid.uuid4())[:6].upper()}"
                             df_causas_nueva = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
@@ -4721,7 +4759,9 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                                 dn_causa_auto.at[idx_nube, 'Cuotas_Totales'] = cuotas_c
                                 dn_causa_auto.at[idx_nube, 'Cuotas_Pagadas'] = 0
                                 safe_update_sheet("base_causas", dn_causa_auto)
-                            if causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
+                            if causa_vinculo_sel == "🆕 Crear una causa nueva para este cliente ahora":
+                                st.success(f"✅ Contrato generado, y se creó la causa **{rol_vinculado}** de inmediato — ya la puedes ver en Causas, en Contabilidad, y en todo el resto del sistema.")
+                            elif causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
                                 st.success(f"✅ Contrato generado. Cliente y Contabilidad de la causa {rol_vinculado} actualizados automáticamente.")
                             else:
                                 st.success(f"✅ Contrato generado. Cliente creado y Contabilidad completada automáticamente bajo el ROL provisorio **{rol_vinculado}** — reemplázalo por el ROL real desde 'Editar Ficha' apenas presentes la demanda.")
@@ -4857,7 +4897,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
     
     @st.dialog("Editar tarea")
-    def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado, tarea_propietario):
+    def modal_editar_tarea(tarea_id, tarea_titulo, tarea_fecha, tarea_estado, tarea_propietario, tarea_asignados_actual):
         st.write(f"Modificando plazos para: **{tarea_titulo}**")
         st.text_input("Usuario", value=nombre_real_usuario, disabled=True)
         
@@ -4870,6 +4910,13 @@ elif st.session_state['menu_radio'] == "💼 Causas":
         opciones_estado = ["En progreso", "Aprobada", "Rechazada"]
         nuevo_estado = st.selectbox("Estado", opciones_estado, index=opciones_estado.index(tarea_estado) if tarea_estado in opciones_estado else 0)
         
+        st.markdown("---")
+        nombres_ya_asignados = [n.strip() for n in str(tarea_asignados_actual or "").split(",") if n.strip()]
+        st.caption(f"Asignados actualmente: {', '.join(nombres_ya_asignados) if nombres_ya_asignados else 'Nadie más (solo el dueño original)'}")
+        keys_ya_asignados = {k for k, v in NOMBRES_REALES.items() if v in nombres_ya_asignados or k == tarea_propietario}
+        opciones_para_sumar = {k: f"{v} ({k})" for k, v in NOMBRES_REALES.items() if k not in keys_ya_asignados}
+        nuevos_colegas = st.multiselect("➕ Sumar más usuarios a esta tarea", options=list(opciones_para_sumar.keys()), format_func=lambda k: opciones_para_sumar.get(k, k))
+        
         if st.button("Guardar", type="primary", use_container_width=True):
             # Se guarda en el archivo del dueño REAL de la tarea (que puede
             # ser un colega, si se delegó), no siempre el archivo de quien
@@ -4877,10 +4924,34 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             # era de otra persona.
             _actualizar_campo_tarea(tarea_id, tarea_propietario, 'Fecha_Vencimiento', nueva_fecha.strftime("%d/%m/%Y"))
             _actualizar_campo_tarea(tarea_id, tarea_propietario, 'Estado', nuevo_estado)
+            
+            if nuevos_colegas:
+                # A cada usuario nuevo que se suma, se le crea su propia copia
+                # de la tarea (mismo criterio que al asignarla por primera
+                # vez), y se actualiza el texto de "Asignados" en todas las
+                # copias existentes para que quede consistente en todos lados.
+                todos_los_nombres = list(dict.fromkeys(nombres_ya_asignados + [NOMBRES_REALES.get(k, k) for k in nuevos_colegas]))
+                texto_asignados_actualizado = ", ".join(todos_los_nombres)
+                _actualizar_campo_tarea(tarea_id, tarea_propietario, 'Asignados', texto_asignados_actualizado)
+                
+                for nuevo_usr in nuevos_colegas:
+                    archivo_nuevo_usr = f"base_tareas_{nuevo_usr}.csv"
+                    df_nuevo_usr = leer_csv_local(archivo_nuevo_usr, COLS_TAREAS)
+                    nueva_copia_tarea = {
+                        'ID_Tarea': str(uuid.uuid4())[:8], 'ROL': rol_actual, 'Creador': nombre_real_usuario,
+                        'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 'Fecha_Vencimiento': nueva_fecha.strftime("%d/%m/%Y"),
+                        'Titulo': tarea_titulo, 'Descripcion': f"(Sumado a tarea existente) {tarea_titulo}", 'Estado': nuevo_estado,
+                        'Comentarios': '[]', 'Prioridad': 'Media', 'Tipo_Gestion': '',
+                        'Asignados': texto_asignados_actualizado, 'Usuario_Propietario': nuevo_usr
+                    }
+                    df_nuevo_usr = pd.concat([df_nuevo_usr, pd.DataFrame([nueva_copia_tarea])], ignore_index=True)
+                    df_nuevo_usr.to_csv(archivo_nuevo_usr, index=False)
+                    dn_nuevo_usr = safe_read_sheet("base_tareas", COLS_TAREAS)
+                    safe_update_sheet("base_tareas", pd.concat([dn_nuevo_usr, pd.DataFrame([nueva_copia_tarea])], ignore_index=True))
                 
             st.session_state['editando_tarea'] = None
             st.success("✅ Tarea actualizada correctamente.")
-            import time; time.sleep(0.3); st.rerun()
+            st.rerun()
 
     if st.session_state['causa_seleccionada'] is None:
         st.session_state['modo_edicion'] = False
@@ -5251,7 +5322,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                             st.markdown(f"<div style='height: 5px; background-color: {b_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                             
                             if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
-                                modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'], tarea['Usuario_Propietario'])
+                                modal_editar_tarea(tarea['ID_Tarea'], tarea['Titulo'], tarea['Fecha_Vencimiento'], tarea['Estado'], tarea['Usuario_Propietario'], tarea.get('Asignados', ''))
                             else:
                                 autor_real = NOMBRES_REALES.get(tarea['Creador'], tarea['Creador'])
                                 nro_tarea_corto = str(tarea['ID_Tarea']).upper()
