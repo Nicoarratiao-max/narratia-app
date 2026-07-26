@@ -818,7 +818,7 @@ def analizar_excepciones_con_ia(archivos_pdf_subidos, contexto_adicional=""):
     texto_documentos = extraer_texto_pdfs(archivos_pdf_subidos)
     prompt_final = instrucciones_base + f"\n\nTEXTO EXTRAÍDO DE LOS DOCUMENTOS:\n{texto_documentos[:25000]}"
     texto_respuesta = consultar_groq(prompt_final)
-    return json.loads(_limpiar_json_ia(texto_respuesta))
+    return json.loads(_limpiar_json_ia(texto_respuesta), strict=False)
 
 def redactar_escrito_judicial_ia(tipo_escrito, instrucciones_tipo, archivos_pdf_subidos, contexto_adicional):
     """
@@ -4340,7 +4340,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                             """
                             
                             respuesta_analisis_estrategia = consultar_groq(prompt_analisis)
-                            datos_analisis_estrategia = json.loads(_limpiar_json_ia(respuesta_analisis_estrategia))
+                            datos_analisis_estrategia = json.loads(_limpiar_json_ia(respuesta_analisis_estrategia), strict=False)
                             
                             st.session_state['estrategia_analisis_md'] = datos_analisis_estrategia.get('analisis_markdown', '')
                             st.session_state['estrategia_preguntas'] = datos_analisis_estrategia.get('preguntas', [])
@@ -6992,7 +6992,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                             {{"analisis": "resumen de 3-6 líneas de tu lectura del caso: qué etapa procesal parece tener, plazos relevantes si los detectas, riesgos u oportunidades", "tipo_recomendado": "el nombre EXACTO de uno de los tipos de la lista de arriba", "razon_recomendacion": "por qué ese es el escrito adecuado ahora, en 2-4 líneas"}}
                             """
                             respuesta_analisis = modelo.generate_content(prompt_analisis)
-                            datos_analisis = json.loads(_limpiar_json_ia(respuesta_analisis.text))
+                            datos_analisis = json.loads(_limpiar_json_ia(respuesta_analisis.text), strict=False)
                             
                             st.session_state['redactor_analisis'] = datos_analisis.get('analisis', '')
                             st.session_state['redactor_tipo_recomendado'] = datos_analisis.get('tipo_recomendado', list(ESTRUCTURAS_REDACTOR_IA.keys())[0])
@@ -7151,7 +7151,7 @@ elif st.session_state['menu_radio'] == "⚖️ Jurisprudencia":
                         Responde EXCLUSIVAMENTE con un JSON válido (sin bloques de código markdown): {{"tribunal": "...", "rol": "...", "fecha": "...", "materia": "...", "resumen": "..."}}
                         """
                         respuesta_juris_ia = consultar_groq(prompt_juris)
-                        datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia))
+                        datos_juris_ia = json.loads(_limpiar_json_ia(respuesta_juris_ia), strict=False)
                         st.session_state['juris_ia_tribunal'] = datos_juris_ia.get('tribunal', '')
                         st.session_state['juris_ia_rol'] = datos_juris_ia.get('rol', '')
                         st.session_state['juris_ia_fecha'] = datos_juris_ia.get('fecha', '')
