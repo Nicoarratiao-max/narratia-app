@@ -885,6 +885,52 @@ TIPOS_ESCRITOS_JUDICIALES = {
 # para cada tipo de escrito, distinguiendo entre escritos DE FONDO (largos,
 # con fundamentos extensos) y de MERA TRAMITACIÓN (cortos, directos al
 # punto, sin desarrollar fundamentos extensos innecesarios).
+# =====================================================================
+# 🔤 CÓDIGOS BREVES (NOMENCLATURA CORTA) PARA TODOS LOS TIPOS DE ESCRITO
+# =====================================================================
+# Cubre los dos catálogos de tipos de escrito del sistema (ESTRUCTURAS_REDACTOR_IA
+# y TIPOS_ESCRITOS_JUDICIALES), para no tener que escribir el nombre completo
+# cada vez — se usa en nombres de archivo al descargar y como referencia rápida.
+CODIGOS_BREVES_ESCRITOS = {
+    # --- Del Redactor IA ---
+    "Demanda (Ordinaria)": "DDA-ORD",
+    "Demanda Ejecutiva": "DDA-EJE",
+    "Contestación de Demanda (Evacúa Traslado)": "CONT",
+    "Réplica": "REP",
+    "Dúplica": "DUP",
+    "Oposición de Excepciones (Art. 464 CPC)": "OEX",
+    "Recurso de Reposición": "REC-REP",
+    "Recurso de Apelación": "REC-APEL",
+    "Incidente de Nulidad Procesal": "NUL",
+    "Solicitud de Abandono del Procedimiento": "ABAND",
+    "Escrito de Mera Tramitación (Téngase Presente / Acompaña Documentos / Otro trámite simple)": "MT",
+    "Otro (Especificar en instrucciones)": "OTRO",
+    # --- Del generador de Escritos Judiciales / Excepciones ---
+    "Demanda (Ejecutiva u Ordinaria)": "DDA",
+    "Evacúa Traslado (Contestación de Demanda)": "CONT",
+    "Abandono del Procedimiento": "ABAND",
+    "Nulidad Procesal / Incidente de Nulidad": "NUL",
+    "Tercería de Posesión": "TER-POS",
+    "Tercería de Dominio": "TER-DOM",
+    "Tercería de Prelación": "TER-PREL",
+    "Tercería de Pago": "TER-PAGO",
+    "Excepciones Ejecutivas (Art. 464 CPC)": "OEX",
+    "Solicitud de Cúmplase / Cumplimiento Incidental": "CUMPL",
+    "Otro tipo de presentación": "OTRO",
+}
+
+def obtener_codigo_breve(tipo_escrito):
+    """
+    Devuelve el código breve (nomenclatura corta) para un tipo de escrito,
+    ej: "Oposición de Excepciones (Art. 464 CPC)" -> "OEX". Si el tipo no
+    está en el catálogo (por ejemplo, viene de "Otro" con texto libre), arma
+    un código genérico a partir de las iniciales de las primeras palabras.
+    """
+    if tipo_escrito in CODIGOS_BREVES_ESCRITOS:
+        return CODIGOS_BREVES_ESCRITOS[tipo_escrito]
+    palabras = re.findall(r'\w+', tipo_escrito)
+    return "".join(p[0].upper() for p in palabras[:3]) or "ESC"
+
 ESTRUCTURAS_REDACTOR_IA = {
     "Demanda (Ordinaria)": """
     ESTRUCTURA ESPERADA (escrito DE FONDO — extenso y fundamentado):
@@ -5550,7 +5596,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                 buffer_gen = io.BytesIO()
                                 doc_gen.save(buffer_gen)
                                 bytes_gen = buffer_gen.getvalue()
-                                nombre_archivo_gen = f"{tipo_escrito_sel.split(' (')[0].replace(' ', '_')}_{rol_actual.replace('-', '_')}.docx"
+                                nombre_archivo_gen = f"{obtener_codigo_breve(tipo_escrito_sel)}_{rol_actual.replace('-', '_')}.docx"
                                 
                                 drive_id_gen, b64_gen = guardar_archivo_adjunto(nombre_archivo_gen, bytes_gen, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
                                 
@@ -6712,7 +6758,8 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
             st.markdown("#### 🧠 Análisis del caso")
             st.info(st.session_state.get('redactor_analisis', ''))
             
-            st.markdown(f"#### 💡 Escrito recomendado: **{st.session_state.get('redactor_tipo_recomendado', '')}**")
+            _tipo_reco = st.session_state.get('redactor_tipo_recomendado', '')
+            st.markdown(f"#### 💡 Escrito recomendado: **{_tipo_reco}** `{obtener_codigo_breve(_tipo_reco)}`")
             st.caption(st.session_state.get('redactor_razon', ''))
             
             tipo_escrito = st.selectbox(
@@ -6802,7 +6849,7 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                     doc_redactor.save(buffer_redactor)
                     c_desc.download_button(
                         "📥 Descargar en Word", data=buffer_redactor.getvalue(),
-                        file_name=f"{tipo_escrito_final.replace(' ', '_')[:40]}_{rol_red or 'borrador'}.docx",
+                        file_name=f"{obtener_codigo_breve(tipo_escrito_final)}_{rol_red or 'borrador'}.docx",
                         mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                         use_container_width=True
                     )
