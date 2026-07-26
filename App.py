@@ -5136,15 +5136,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     
                 if st.session_state.get('creando_tarea'):
                     with st.form("form_t_interna"):
-                        # La "Nomenclatura Breve" ahora usa los mismos códigos cortos
-                        # del sistema (OEX, DDA, etc.), para no tener que escribirla
-                        # cada vez — con opción de personalizada si no calza ninguna.
-                        opciones_nomenclatura = sorted(set(CODIGOS_BREVES_ESCRITOS.values())) + ["Otra (escribir abajo)"]
-                        nomenclatura_sel = st.selectbox("Nomenclatura Breve", opciones_nomenclatura)
-                        if nomenclatura_sel == "Otra (escribir abajo)":
-                            t_t = st.text_input("Escribe la nomenclatura personalizada")
-                        else:
-                            t_t = nomenclatura_sel
+                        t_t = st.text_input("Nomenclatura Breve")
                         
                         t_d = st.text_area("Descripción de la gestión")
                         t_p = st.selectbox("Prioridad", ["Alta", "Media", "Baja"])
@@ -5177,7 +5169,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                                     'Fecha_Creacion': datetime.now().strftime("%d/%m/%Y"), 
                                     'Fecha_Vencimiento': t_f.strftime("%d/%m/%Y"),
                                     'Titulo': t_t, 'Descripcion': t_d, 'Estado': 'En progreso', 'Comentarios': '[]', 'Prioridad': t_p,
-                                    'Tipo_Gestion': nomenclatura_sel if nomenclatura_sel != "Otra (escribir abajo)" else '',
+                                    'Tipo_Gestion': '',
                                     'Asignados': nombres_asignados_texto,
                                     'Usuario_Propietario': destinatario_usr
                                 }
