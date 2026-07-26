@@ -3312,22 +3312,15 @@ st.markdown("""
        BaseWeb), para que el color llegue sin importar cuál sea la que
        realmente dibuja el borde visible.
        ======================================================================== */
-    [data-testid="stSelectbox"] {
-        border: 1px solid #cbd2d9 !important;
-        border-radius: 6px !important;
-        background-color: #ffffff !important;
-        padding: 2px !important;
-    }
-    [data-testid="stSelectbox"] > div,
     [data-testid="stSelectbox"] > div > div,
     [data-testid="stSelectbox"] [data-baseweb="select"],
     [data-testid="stSelectbox"] [data-baseweb="select"] > div,
     [data-testid="stSelectbox"] [data-baseweb="select"] div[role="button"] {
         background-color: #ffffff !important;
-        border-color: #cbd2d9 !important;
+        border: 1px solid #cbd2d9 !important;
         border-radius: 6px !important;
     }
-    [data-testid="stSelectbox"]:hover {
+    [data-testid="stSelectbox"] [data-baseweb="select"]:hover {
         border-color: #0e6b74 !important;
     }
     .stTextInput input:focus, .stTextArea textarea:focus { border-color: #0e6b74 !important; box-shadow: 0 0 0 1px #0e6b74 !important; }
