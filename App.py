@@ -6929,50 +6929,60 @@ elif st.session_state['menu_radio'] == "📥 Excel":
 elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas y Plazos")
     
-    eventos_calendario = obtener_feriados_chile()
-    df_t = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
-    
-    # PRIVACIDAD: antes esta pantalla mostraba las tareas de TODO el equipo a
-    # cualquier usuario, sin filtrar — un usuario normal veía en su
-    # calendario plazos y causas que no eran suyas. Ahora cada quien ve solo
-    # sus propias tareas; el administrador, además, respeta lo que haya
-    # elegido en el selector "👁️ Ver datos de otro usuario" de la barra
-    # lateral (solo lo suyo por defecto, o exclusivamente de la persona que
-    # elija, o de todo el equipo si así lo pide explícitamente).
-    if not df_t.empty and 'Usuario_Propietario' in df_t.columns:
-        if not _es_admin_usuario(usuario_actual):
-            df_t = df_t[df_t['Usuario_Propietario'] == usuario_actual]
-        else:
-            _filtro_cal = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
-            if _filtro_cal == "Solo mis datos":
+    # Todo este bloque queda blindado: si algo falla (una tarea con datos
+    # raros, un problema de conexión puntual, etc.), en vez de dejar la
+    # pantalla en blanco sin ninguna pista, se muestra un aviso claro con
+    # el detalle técnico — así, si le vuelve a pasar a alguien, va a
+    # aparecer el motivo exacto en vez de una pantalla vacía sin explicación.
+    try:
+        eventos_calendario = obtener_feriados_chile()
+        df_t = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
+        
+        # PRIVACIDAD: antes esta pantalla mostraba las tareas de TODO el
+        # equipo a cualquier usuario, sin filtrar — un usuario normal veía
+        # en su calendario plazos y causas que no eran suyas. Ahora cada
+        # quien ve solo sus propias tareas; el administrador, además,
+        # respeta lo que haya elegido en el selector "👁️ Ver datos de otro
+        # usuario" de la barra lateral.
+        if not df_t.empty and 'Usuario_Propietario' in df_t.columns:
+            if not _es_admin_usuario(usuario_actual):
                 df_t = df_t[df_t['Usuario_Propietario'] == usuario_actual]
-            elif _filtro_cal == "Todo el equipo junto":
-                pass  # se queda como está: todos
             else:
-                df_t = df_t[df_t['Usuario_Propietario'] == _filtro_cal]
-    
-    st.markdown("Revisa visualmente los hitos procesales, plazos fatales y feriados." + (" (viendo todo el equipo)" if _es_admin_usuario(usuario_actual) and st.session_state.get('filtro_vista_admin') == "Todo el equipo junto" else ""))
-    
-    if not df_t.empty:
-        for idx, r in df_t.iterrows():
-            try:
-                # Validamos que la fecha venga bien armada
-                d_obj = datetime.strptime(str(r['Fecha_Vencimiento']).strip(), "%d/%m/%Y")
-                d_str = d_obj.strftime("%Y-%m-%d")
-                bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
-                text_color = "#172b4d"
-                titulo_evento = str(r.get('Titulo', '')).strip()
-                if not titulo_evento or titulo_evento.lower() == 'nan':
-                    titulo_evento = "Tarea sin nombre"
-                eventos_calendario.append({
-                    "title": titulo_evento, 
-                    "start": d_str, 
-                    "backgroundColor": bg_color, 
-                    "borderColor": bg_color,
-                    "textColor": text_color
-                })
-            except Exception: 
-                pass
+                _filtro_cal = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
+                if _filtro_cal == "Solo mis datos":
+                    df_t = df_t[df_t['Usuario_Propietario'] == usuario_actual]
+                elif _filtro_cal == "Todo el equipo junto":
+                    pass  # se queda como está: todos
+                else:
+                    df_t = df_t[df_t['Usuario_Propietario'] == _filtro_cal]
+        
+        st.markdown("Revisa visualmente los hitos procesales, plazos fatales y feriados." + (" (viendo todo el equipo)" if _es_admin_usuario(usuario_actual) and st.session_state.get('filtro_vista_admin') == "Todo el equipo junto" else ""))
+        
+        if not df_t.empty:
+            for idx, r in df_t.iterrows():
+                try:
+                    # Validamos que la fecha venga bien armada
+                    d_obj = datetime.strptime(str(r['Fecha_Vencimiento']).strip(), "%d/%m/%Y")
+                    d_str = d_obj.strftime("%Y-%m-%d")
+                    bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
+                    text_color = "#172b4d"
+                    titulo_evento = str(r.get('Titulo', '')).strip()
+                    if not titulo_evento or titulo_evento.lower() == 'nan':
+                        titulo_evento = "Tarea sin nombre"
+                    eventos_calendario.append({
+                        "title": titulo_evento, 
+                        "start": d_str, 
+                        "backgroundColor": bg_color, 
+                        "borderColor": bg_color,
+                        "textColor": text_color
+                    })
+                except Exception: 
+                    pass
+    except Exception as _error_calendario:
+        st.error(f"⚠️ Hubo un problema cargando el calendario. Detalle técnico: {_error_calendario}")
+        st.info("Prueba recargar la página. Si el problema sigue, avísale a Nicolás con este mensaje de error exacto.")
+        eventos_calendario = []
+        df_t = pd.DataFrame()
     
     # Estilos propios para que el calendario se vea como una grilla limpia,
     # con puntos de color por evento (estilo agenda) en vez de barras sólidas,
