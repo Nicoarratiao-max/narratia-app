@@ -4981,14 +4981,26 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                 st.markdown("#### Módulo 5: Vincular a una Causa (opcional, pero recomendado)")
                 st.caption("Si eliges una causa, la Contabilidad de esa causa se completa sola con estos honorarios y cuotas — no tienes que volver a escribirlo ahí.")
                 df_causas_para_vincular = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
-                opciones_causa_vinculo = ["➕ Ninguna (crear después / sin causa aún)", "🆕 Crear una causa nueva para este cliente ahora"]
+                opciones_causa_vinculo = ["➕ Ninguna (crear después / sin causa aún)", "🆕 Crear una o varias causas nuevas para este cliente ahora"]
                 if not df_causas_para_vincular.empty:
                     opciones_causa_vinculo += [f"{r['ROL']} — {r.get('CARATULADO','')}" for _, r in df_causas_para_vincular.iterrows()]
                 causa_vinculo_sel = st.selectbox("Causa a la que corresponden estos honorarios", opciones_causa_vinculo, key="gen_con_causa_vinculo")
                 
-                datos_causa_nueva_contrato = None
-                if causa_vinculo_sel == "🆕 Crear una causa nueva para este cliente ahora":
-                    st.caption("Se creará esta causa al generar el contrato, y va a aparecer de inmediato en el módulo de Causas, en Contabilidad, y en todo el resto del sistema — como cualquier otra causa.")
+                if 'causas_nuevas_contrato_lista' not in st.session_state:
+                    st.session_state['causas_nuevas_contrato_lista'] = []
+                
+                if causa_vinculo_sel == "🆕 Crear una o varias causas nuevas para este cliente ahora":
+                    st.caption("Estas causas se crearán al generar el contrato, y van a aparecer de inmediato en el módulo de Causas, en Contabilidad, y en todo el resto del sistema — como cualquier otra causa. Si el cliente tiene varias gestiones (varias causas), agrégalas todas aquí antes de generar el contrato.")
+                    
+                    if st.session_state['causas_nuevas_contrato_lista']:
+                        st.markdown("**Causas agregadas hasta ahora:**")
+                        for idx_causa_nueva, causa_agregada in enumerate(st.session_state['causas_nuevas_contrato_lista']):
+                            c_resumen, c_quitar = st.columns([5, 1])
+                            c_resumen.caption(f"{idx_causa_nueva + 1}. {causa_agregada['rol'] or '(sin ROL aún)'} — {causa_agregada['caratulado'] or causa_agregada['materia']}")
+                            if c_quitar.button("🗑️", key=f"quitar_causa_nueva_{idx_causa_nueva}"):
+                                st.session_state['causas_nuevas_contrato_lista'].pop(idx_causa_nueva)
+                                st.rerun()
+                    
                     cnc1, cnc2 = st.columns(2)
                     nc_rol = cnc1.text_input("ROL (déjalo en blanco si todavía no lo tienes)", key="nc_rol_contrato")
                     nc_tribunal = cnc2.text_input("Tribunal", key="nc_trib_contrato")
@@ -4996,10 +5008,13 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                     nc_cliente = cnc2.text_input("Nombre del Cliente", key="nc_cliente_contrato")
                     nc_rut_cliente = cnc1.text_input("RUT del Cliente", key="nc_rut_contrato")
                     nc_materia = cnc2.text_input("Materia / Tipo de Gestión", key="nc_materia_contrato", placeholder="Ej: Cobranza pagaré")
-                    datos_causa_nueva_contrato = {
-                        'rol': nc_rol.strip(), 'tribunal': nc_tribunal.strip(), 'caratulado': nc_caratulado.strip(),
-                        'cliente': nc_cliente.strip(), 'rut': nc_rut_cliente.strip(), 'materia': nc_materia.strip()
-                    }
+                    
+                    if st.button("➕ Agregar esta causa a la lista", key="btn_agregar_causa_nueva_contrato"):
+                        st.session_state['causas_nuevas_contrato_lista'].append({
+                            'rol': nc_rol.strip(), 'tribunal': nc_tribunal.strip(), 'caratulado': nc_caratulado.strip(),
+                            'cliente': nc_cliente.strip(), 'rut': nc_rut_cliente.strip(), 'materia': nc_materia.strip()
+                        })
+                        st.rerun()
 
             with st.form("form_generador_contratos", clear_on_submit=False):
                 detalle_servicio = st.text_area("Cláusula Primera: Acciones Legales Incluidas", height=100, key="gen_con_detalle", help="Se autocompleta según la acción elegida arriba. Puedes editarla libremente antes de generar el contrato.")
@@ -5088,31 +5103,40 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                         # crea automáticamente una causa "placeholder" con estos honorarios y cuotas, para que
                         # la Contabilidad quede lista de inmediato. Cuando presentes la demanda y tengas el
                         # ROL real, solo entras a "Editar Ficha" de esa causa y reemplazas el ROL provisorio.
-                        if causa_vinculo_sel not in ("➕ Ninguna (crear después / sin causa aún)", "🆕 Crear una causa nueva para este cliente ahora"):
+                        if causa_vinculo_sel not in ("➕ Ninguna (crear después / sin causa aún)", "🆕 Crear una o varias causas nuevas para este cliente ahora"):
                             rol_vinculado = causa_vinculo_sel.split(" — ")[0].strip()
-                        elif causa_vinculo_sel == "🆕 Crear una causa nueva para este cliente ahora" and datos_causa_nueva_contrato:
-                            # El abogado llenó los datos reales de la causa (Tribunal,
-                            # Caratulado, Cliente, etc.) en el Módulo 5 de arriba — se
-                            # crea con esa información real, no un simple placeholder.
-                            rol_vinculado = datos_causa_nueva_contrato['rol'] or f"PENDIENTE-{str(uuid.uuid4())[:6].upper()}"
+                        elif causa_vinculo_sel == "🆕 Crear una o varias causas nuevas para este cliente ahora" and st.session_state.get('causas_nuevas_contrato_lista'):
+                            # El abogado llenó los datos reales de una o varias causas
+                            # (Tribunal, Caratulado, Cliente, etc.) en el Módulo 5 de
+                            # arriba — se crean TODAS con esa información real, no un
+                            # simple placeholder. Los honorarios del contrato quedan
+                            # vinculados a la PRIMERA causa de la lista; las demás se
+                            # crean igual, sin honorarios propios asociados.
+                            rol_vinculado = None
                             df_causas_nueva = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
-                            nueva_causa_desde_contrato = {
-                                'ROL': rol_vinculado,
-                                'TRIBUNAL': datos_causa_nueva_contrato['tribunal'] or '(Pendiente de asignar)',
-                                'CARATULADO': datos_causa_nueva_contrato['caratulado'] or f"{(datos_causa_nueva_contrato['cliente'] or cli_nom).upper()} / {tipo_servicio_final}",
-                                'Cliente': datos_causa_nueva_contrato['cliente'] or cli_nom,
-                                'RUT': datos_causa_nueva_contrato['rut'] or cli_rut,
-                                'Tipo_Negocio': datos_causa_nueva_contrato['materia'] or 'Propio',
-                                'Usuario_Propietario': usuario_actual, 'Estado_Honorarios': 'Pendientes',
-                                'Total_Honorarios': hon_num_int, 'Cuotas_Totales': cuotas_c, 'Cuotas_Pagadas': 0,
-                                'Clave_unica': '', 'SAC': '', 'Sucursal': '', 'Servicio': accion_final,
-                                'Fecha_Inicio': fecha_pago.strftime("%Y-%m-%d")
-                            }
-                            df_causas_nueva = pd.concat([df_causas_nueva, pd.DataFrame([nueva_causa_desde_contrato])], ignore_index=True)
+                            causas_nuevas_a_crear = []
+                            for idx_cn, datos_causa_nueva_contrato in enumerate(st.session_state['causas_nuevas_contrato_lista']):
+                                rol_de_esta_causa = datos_causa_nueva_contrato['rol'] or f"PENDIENTE-{str(uuid.uuid4())[:6].upper()}"
+                                if idx_cn == 0:
+                                    rol_vinculado = rol_de_esta_causa
+                                causas_nuevas_a_crear.append({
+                                    'ROL': rol_de_esta_causa,
+                                    'TRIBUNAL': datos_causa_nueva_contrato['tribunal'] or '(Pendiente de asignar)',
+                                    'CARATULADO': datos_causa_nueva_contrato['caratulado'] or f"{(datos_causa_nueva_contrato['cliente'] or cli_nom).upper()} / {tipo_servicio_final}",
+                                    'Cliente': datos_causa_nueva_contrato['cliente'] or cli_nom,
+                                    'RUT': datos_causa_nueva_contrato['rut'] or cli_rut,
+                                    'Tipo_Negocio': datos_causa_nueva_contrato['materia'] or 'Propio',
+                                    'Usuario_Propietario': usuario_actual, 'Estado_Honorarios': 'Pendientes' if idx_cn == 0 else 'Sin honorarios propios',
+                                    'Total_Honorarios': hon_num_int if idx_cn == 0 else 0, 'Cuotas_Totales': cuotas_c if idx_cn == 0 else 0, 'Cuotas_Pagadas': 0,
+                                    'Clave_unica': '', 'SAC': '', 'Sucursal': '', 'Servicio': accion_final,
+                                    'Fecha_Inicio': fecha_pago.strftime("%Y-%m-%d")
+                                })
+                            df_causas_nueva = pd.concat([df_causas_nueva, pd.DataFrame(causas_nuevas_a_crear)], ignore_index=True)
                             df_causas_nueva.to_csv(ARCHIVO_BD, index=False)
                             dn_causa_nueva = safe_read_sheet("base_causas", COLS_CAUSAS)
-                            dn_causa_nueva = pd.concat([dn_causa_nueva, pd.DataFrame([nueva_causa_desde_contrato])], ignore_index=True)
+                            dn_causa_nueva = pd.concat([dn_causa_nueva, pd.DataFrame(causas_nuevas_a_crear)], ignore_index=True)
                             safe_update_sheet("base_causas", dn_causa_nueva)
+                            st.session_state['causas_nuevas_contrato_lista'] = []
                         else:
                             rol_vinculado = f"PENDIENTE-{str(uuid.uuid4())[:6].upper()}"
                             df_causas_nueva = leer_csv_local(ARCHIVO_BD, COLS_CAUSAS)
@@ -5148,8 +5172,12 @@ elif st.session_state['menu_radio'] == "📄 Contratos":
                                 dn_causa_auto.at[idx_nube, 'Cuotas_Totales'] = cuotas_c
                                 dn_causa_auto.at[idx_nube, 'Cuotas_Pagadas'] = 0
                                 safe_update_sheet("base_causas", dn_causa_auto)
-                            if causa_vinculo_sel == "🆕 Crear una causa nueva para este cliente ahora":
-                                st.success(f"✅ Contrato generado, y se creó la causa **{rol_vinculado}** de inmediato — ya la puedes ver en Causas, en Contabilidad, y en todo el resto del sistema.")
+                            if causa_vinculo_sel == "🆕 Crear una o varias causas nuevas para este cliente ahora":
+                                _cantidad_causas_creadas = len(causas_nuevas_a_crear) if 'causas_nuevas_a_crear' in dir() else 1
+                                if _cantidad_causas_creadas > 1:
+                                    st.success(f"✅ Contrato generado, y se crearon **{_cantidad_causas_creadas} causas** de inmediato (empezando por **{rol_vinculado}**, a la que quedaron vinculados los honorarios) — ya las puedes ver en Causas, en Contabilidad, y en todo el resto del sistema.")
+                                else:
+                                    st.success(f"✅ Contrato generado, y se creó la causa **{rol_vinculado}** de inmediato — ya la puedes ver en Causas, en Contabilidad, y en todo el resto del sistema.")
                             elif causa_vinculo_sel != "➕ Ninguna (crear después / sin causa aún)":
                                 st.success(f"✅ Contrato generado. Cliente y Contabilidad de la causa {rol_vinculado} actualizados automáticamente.")
                             else:
