@@ -5665,12 +5665,23 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 # eso no aparecía acá aunque sí en el menú general de Tareas
                 # (que si eres admin, junta todos los archivos). Ahora se
                 # busca la causa en TODOS los archivos de tareas del equipo,
-                # para que se vea sin importar a quién se le haya asignado.
+                # para que se vea sin importar a quién se le haya asignado —
+                # PERO si el administrador eligió ver solo a un usuario
+                # específico en el selector de la barra lateral, se respeta
+                # esa elección acá también (antes esta pantalla en particular
+                # no sabía nada de ese selector y seguía juntando a todos).
+                _es_admin_causa_tareas = _es_admin_usuario(usuario_actual)
+                _filtro_causa_tareas = st.session_state.get('filtro_vista_admin', 'Solo mis datos') if _es_admin_causa_tareas else 'Todo el equipo junto'
                 piezas_tareas_causa = []
-                for arch_tareas_causa in glob.glob("base_tareas_*.csv"):
-                    t_causa_tareas = leer_csv_local(arch_tareas_causa, COLS_TAREAS)
-                    if not t_causa_tareas.empty:
-                        piezas_tareas_causa.append(t_causa_tareas)
+                if _filtro_causa_tareas == "Solo mis datos":
+                    piezas_tareas_causa = [leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)]
+                elif _filtro_causa_tareas == "Todo el equipo junto":
+                    for arch_tareas_causa in glob.glob("base_tareas_*.csv"):
+                        t_causa_tareas = leer_csv_local(arch_tareas_causa, COLS_TAREAS)
+                        if not t_causa_tareas.empty:
+                            piezas_tareas_causa.append(t_causa_tareas)
+                else:
+                    piezas_tareas_causa = [leer_csv_local(f"base_tareas_{_filtro_causa_tareas}.csv", COLS_TAREAS)]
                 df_t_local = pd.concat(piezas_tareas_causa, ignore_index=True) if piezas_tareas_causa else leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
                 # Las tareas más recientes van primero, independiente de su estado
                 # (aprobada/rechazada), en vez del orden de creación original que
@@ -6852,10 +6863,30 @@ elif st.session_state['menu_radio'] == "📥 Excel":
 # 13. CALENDARIO
 elif st.session_state['menu_radio'] == "📅 Calendario":
     st.title("📅 Calendario de Tareas y Plazos")
-    st.markdown("Revisa visualmente los hitos procesales, plazos fatales y feriados de todo el equipo.")
     
     eventos_calendario = obtener_feriados_chile()
     df_t = safe_read_sheet("base_tareas", ['ID_Tarea', 'ROL', 'Creador', 'Fecha_Creacion', 'Fecha_Vencimiento', 'Titulo', 'Descripcion', 'Estado', 'Comentarios', 'Prioridad', 'Usuario_Propietario'])
+    
+    # PRIVACIDAD: antes esta pantalla mostraba las tareas de TODO el equipo a
+    # cualquier usuario, sin filtrar — un usuario normal veía en su
+    # calendario plazos y causas que no eran suyas. Ahora cada quien ve solo
+    # sus propias tareas; el administrador, además, respeta lo que haya
+    # elegido en el selector "👁️ Ver datos de otro usuario" de la barra
+    # lateral (solo lo suyo por defecto, o exclusivamente de la persona que
+    # elija, o de todo el equipo si así lo pide explícitamente).
+    if not df_t.empty and 'Usuario_Propietario' in df_t.columns:
+        if not _es_admin_usuario(usuario_actual):
+            df_t = df_t[df_t['Usuario_Propietario'] == usuario_actual]
+        else:
+            _filtro_cal = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
+            if _filtro_cal == "Solo mis datos":
+                df_t = df_t[df_t['Usuario_Propietario'] == usuario_actual]
+            elif _filtro_cal == "Todo el equipo junto":
+                pass  # se queda como está: todos
+            else:
+                df_t = df_t[df_t['Usuario_Propietario'] == _filtro_cal]
+    
+    st.markdown("Revisa visualmente los hitos procesales, plazos fatales y feriados." + (" (viendo todo el equipo)" if _es_admin_usuario(usuario_actual) and st.session_state.get('filtro_vista_admin') == "Todo el equipo junto" else ""))
     
     if not df_t.empty:
         for idx, r in df_t.iterrows():
@@ -6865,8 +6896,11 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 d_str = d_obj.strftime("%Y-%m-%d")
                 bg_color = "#ff5630" if r.get('Prioridad') == "Alta" else ("#ffc400" if r.get('Prioridad') == "Media" else "#57a15a")
                 text_color = "#172b4d"
+                titulo_evento = str(r.get('Titulo', '')).strip()
+                if not titulo_evento or titulo_evento.lower() == 'nan':
+                    titulo_evento = "Tarea sin nombre"
                 eventos_calendario.append({
-                    "title": f"{r.get('Titulo', 'Tarea')}", 
+                    "title": titulo_evento, 
                     "start": d_str, 
                     "backgroundColor": bg_color, 
                     "borderColor": bg_color,
