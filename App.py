@@ -7038,7 +7038,12 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
     col_cal, col_dia = st.columns([2.4, 1])
     
     with col_cal:
-        calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, custom_css=css_calendario, key="calendario_app_full")
+        try:
+            calendario_estado = calendar(events=eventos_calendario, options=opciones_calendario, custom_css=css_calendario, key="calendario_app_full")
+        except Exception as _error_widget_calendario:
+            calendario_estado = None
+            st.error(f"⚠️ El calendario no se pudo dibujar. Detalle técnico: {_error_widget_calendario}")
+            st.info("Prueba recargar la página (F5). Si sigue pasando, avísale a Nicolás con este mensaje exacto.")
         
     fecha_mostrar = datetime.now().strftime("%Y-%m-%d")
     if calendario_estado and 'dateClick' in calendario_estado and calendario_estado['dateClick']:
@@ -7068,7 +7073,10 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                         <div style="font-size:12px; color:#6b778c;">Causa: {td.get('ROL', '--')}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                    st.button("Ir a Causa", key=f"btn_cal_ir_{td.get('ID_Tarea', uuid.uuid4())}", on_click=ir_a_expediente, args=(td['ROL'],), use_container_width=True)
+                    id_tarea_boton = td.get('ID_Tarea')
+                    if not id_tarea_boton or (isinstance(id_tarea_boton, float) and pd.isna(id_tarea_boton)):
+                        id_tarea_boton = f"sin_id_{_}"
+                    st.button("Ir a Causa", key=f"btn_cal_ir_{id_tarea_boton}", on_click=ir_a_expediente, args=(td['ROL'],), use_container_width=True)
             
             st.markdown("</div>", unsafe_allow_html=True)
         except Exception: 
