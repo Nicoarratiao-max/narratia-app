@@ -3439,6 +3439,29 @@ def _eliminar_tarea_por_id(id_tarea, propietario_tarea):
         dn_t = dn_t[dn_t['ID_Tarea'] != id_tarea]
         safe_update_sheet("base_tareas", dn_t)
 
+def _color_franja_tarea(estado, fecha_vencimiento_str):
+    """
+    Calcula el color de la franja de una tarea según su ESTADO, no su
+    prioridad (que es lo que se usaba antes):
+    - Aprobada -> verde.
+    - Rechazada -> gris (ya no está activa).
+    - En progreso -> amarillo normalmente, pero ROJO si el plazo está
+      encima (vence hoy, ya venció, o vence en los próximos 2 días) —
+      el rojo queda reservado para la urgencia real del plazo, no para
+      cualquier tarea en progreso.
+    """
+    if estado == "Aprobada":
+        return "#57a15a"
+    if estado == "Rechazada":
+        return "#8993a4"
+    try:
+        dias_restantes = (datetime.strptime(str(fecha_vencimiento_str).strip(), "%d/%m/%Y") - datetime.now()).days
+        if dias_restantes <= 2:
+            return "#ff5630"
+    except Exception:
+        pass
+    return "#ffc400"
+
 def ir_a_expediente(rol_causa, propietario=None): 
     st.session_state.menu_radio = "💼 Causas"
     st.session_state.causa_seleccionada = rol_causa
@@ -5725,7 +5748,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                 else:
                     for idx_tarea_bd, tarea in tareas_de_esta_causa.iterrows():
                         with st.container(border=True):
-                            b_prio_color = "#ff5630" if tarea.get('Prioridad') == "Alta" else ("#ffc400" if tarea.get('Prioridad') == "Media" else "#57a15a")
+                            b_prio_color = _color_franja_tarea(tarea.get('Estado'), tarea.get('Fecha_Vencimiento'))
                             st.markdown(f"<div style='height: 5px; background-color: {b_prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                             
                             if st.session_state.get('editando_tarea') == tarea['ID_Tarea']:
@@ -6168,7 +6191,7 @@ elif st.session_state['menu_radio'] == "📋 Agenda":
             
             for _, row in t_hoy.iterrows():
                 with st.container(border=True):
-                    color_p = "#ff5630" if row['Prioridad'] == "Alta" else ("#ffc400" if row['Prioridad'] == "Media" else "#57a15a")
+                    color_p = _color_franja_tarea(row.get('Estado'), row.get('Fecha_Vencimiento'))
                     st.markdown(f"<div style='height: 5px; background-color:{color_p}; margin:-1rem -1rem 1rem -1rem; border-radius:5px 5px 0 0;'></div>", unsafe_allow_html=True)
                     c1, c2, c3 = st.columns([4, 2, 1])
                     with c1:
@@ -6540,7 +6563,21 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 df_clientes_completo_edit = safe_read_sheet("base_clientes", COLS_CLIENTES)
                                 existe_fila_cliente = (not df_clientes_completo_edit.empty) and (df_clientes_completo_edit['RUT'] == rut_actual).any()
                                 if existe_fila_cliente:
-                                    df_clientes_completo_edit.loc[df_clientes_completo_edit['RUT'] == rut_actual, ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']] = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                    # Antes esto fallaba con "Invalid value for dtype" si
+                                    # alguna de estas columnas había quedado inferida como
+                                    # numérica en vez de texto (típico si estaba vacía en
+                                    # todas las filas hasta ahora) — se fuerza cada columna
+                                    # a texto libre antes de escribir, para que acepte
+                                    # cualquier valor sin importar lo que tenía antes.
+                                    mascara_cliente_edit = df_clientes_completo_edit['RUT'] == rut_actual
+                                    columnas_edit_cliente = ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']
+                                    valores_edit_cliente = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                    for col_edit_cli in columnas_edit_cliente:
+                                        if col_edit_cli not in df_clientes_completo_edit.columns:
+                                            df_clientes_completo_edit[col_edit_cli] = ""
+                                        df_clientes_completo_edit[col_edit_cli] = df_clientes_completo_edit[col_edit_cli].astype(object)
+                                    for col_edit_cli, val_edit_cli in zip(columnas_edit_cliente, valores_edit_cliente):
+                                        df_clientes_completo_edit.loc[mascara_cliente_edit, col_edit_cli] = val_edit_cli
                                 else:
                                     # No existía como registro real de Cliente todavía (por
                                     # ejemplo, alguien creado solo a través de un Encargo o una
@@ -6710,7 +6747,7 @@ elif st.session_state['menu_radio'] == "☑️ Tareas":
         for idx, row in df_t_filt.iterrows():
             fila_tarea_propia = row.get('Propietario_Vista', usuario_actual) == usuario_actual
             with st.container(border=True):
-                prio_color = "#ff5630" if row.get('Prioridad') == "Alta" else ("#ffc400" if row.get('Prioridad') == "Media" else "#57a15a")
+                prio_color = _color_franja_tarea(row.get('Estado'), row.get('Fecha_Vencimiento'))
                 st.markdown(f"<div style='height: 5px; background-color: {prio_color}; border-radius: 5px 5px 0 0; margin: -1rem -1rem 1rem -1rem;'></div>", unsafe_allow_html=True)
                 c1, c2, c3 = st.columns([4, 2, 1])
                 with c1:
@@ -7014,7 +7051,7 @@ elif st.session_state['menu_radio'] == "📅 Calendario":
                 st.caption("Sin tareas para este día.")
             else:
                 for _, td in tareas_dia.iterrows():
-                    color_prio = "#ff5630" if td.get('Prioridad') == "Alta" else ("#ffc400" if td.get('Prioridad') == "Media" else "#57a15a")
+                    color_prio = _color_franja_tarea(td.get('Estado'), td.get('Fecha_Vencimiento'))
                     st.markdown(f"""
                     <div style="border-left:3px solid {color_prio}; padding:6px 10px; margin-bottom:8px; background:#f8f9fa; border-radius:6px;">
                         <div style="font-weight:600; font-size:13px; color:#172b4d;">{td.get('Titulo', '--')}</div>
@@ -7196,6 +7233,24 @@ elif st.session_state['menu_radio'] == "👑 Panel Admin" and _es_admin_usuario(
                 st.rerun()
             if usuario_admin_flag == "Narratia":
                 st.caption("ℹ️ 'Narratia' es admin por defecto en el sistema y no se le puede quitar desde acá (es la cuenta principal, por compatibilidad).")
+        
+        with st.container(border=True):
+            st.subheader("👤 Reasignar Dueño de un Cliente")
+            st.caption("Para cuando un cliente quedó guardado con el 'Usuario_Propietario' equivocado (por ejemplo, de cuando hubo confusión con un cambio de nombre de usuario) — así lo corriges desde acá sin entrar a Google Sheets.")
+            df_clientes_reasignar = safe_read_sheet("base_clientes", COLS_CLIENTES)
+            if df_clientes_reasignar.empty:
+                st.info("No hay clientes registrados todavía.")
+            else:
+                opciones_cliente_reasignar = [f"{r.get('Nombre','')} — RUT {r.get('RUT','')} (actualmente: {r.get('Usuario_Propietario','—')})" for _, r in df_clientes_reasignar.iterrows()]
+                cliente_reasignar_sel = st.selectbox("Cliente", opciones_cliente_reasignar, key="sel_cliente_reasignar")
+                idx_cliente_reasignar = opciones_cliente_reasignar.index(cliente_reasignar_sel)
+                rut_cliente_reasignar = df_clientes_reasignar.iloc[idx_cliente_reasignar]['RUT']
+                nuevo_dueno_cliente = st.selectbox("Nuevo dueño", lista_usuarios, key="sel_nuevo_dueno_cliente")
+                if st.button("👤 Reasignar Cliente", key="btn_reasignar_cliente", type="primary"):
+                    df_clientes_reasignar.loc[df_clientes_reasignar['RUT'] == rut_cliente_reasignar, 'Usuario_Propietario'] = nuevo_dueno_cliente
+                    safe_update_sheet("base_clientes", df_clientes_reasignar)
+                    st.success(f"✅ Cliente reasignado a '{nuevo_dueno_cliente}'.")
+                    st.rerun()
 
     with tab_vision:
         st.subheader("Monitoreo Absoluto de la Oficina")
