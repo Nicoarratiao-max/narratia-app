@@ -5630,6 +5630,8 @@ elif st.session_state['menu_radio'] == "💼 Causas":
             if st.session_state['modo_edicion']:
                 with st.form("form_edicion_causa"):
                     st.markdown("#### Datos de Litigación")
+                    n_rol_editar = st.text_input("ROL / RIT de la causa", str(c_data.get('ROL', '')), help="Reemplaza el ROL provisorio ('PENDIENTE-...') por el ROL real apenas se presente la demanda.")
+                    n_caratulado_editar = st.text_input("Caratulado", str(c_data.get('CARATULADO', '')))
                     n_tribunal = selector_tribunal(str(c_data.get('TRIBUNAL','')), key_prefix="editar_causa")
                     n_serv = st.text_input("Servicio Contratado", str(c_data.get('Servicio','')))
                     n_negocio = st.selectbox("Origen de Cartera", ["Externo", "Propio"], index=0 if c_data.get('Tipo_Negocio') == "Externo" else 1)
@@ -5655,13 +5657,53 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                         n_tot_hon, n_cuo_tot, n_cuo_pag = 0, 0, 0
                         
                     if st.form_submit_button("💾 Guardar Cambios", type="primary"):
-                        df_causas.at[idx, 'TRIBUNAL'] = n_tribunal; df_causas.at[idx, 'Servicio'] = n_serv; df_causas.at[idx, 'Tipo_Negocio'] = n_negocio
-                        df_causas.at[idx, 'Clave_unica'] = n_clave; df_causas.at[idx, 'SAC'] = n_sac; df_causas.at[idx, 'Sucursal'] = n_suc
-                        df_causas.at[idx, 'Estado_Honorarios'] = n_estado_hon; df_causas.at[idx, 'Total_Honorarios'] = n_tot_hon
-                        df_causas.at[idx, 'Cuotas_Totales'] = n_cuo_tot; df_causas.at[idx, 'Cuotas_Pagadas'] = n_cuo_pag
-                        df_causas.to_csv(ARCHIVO_BD, index=False)
-                        st.session_state['modo_edicion'] = False
-                        st.rerun()
+                        rol_nuevo_limpio = n_rol_editar.strip()
+                        if not rol_nuevo_limpio:
+                            st.error("⚠️ El ROL no puede quedar vacío.")
+                        elif rol_nuevo_limpio != rol_actual and (df_causas['ROL'] == rol_nuevo_limpio).any():
+                            st.error(f"⚠️ Ya existe otra causa con el ROL '{rol_nuevo_limpio}'.")
+                        else:
+                            df_causas.at[idx, 'ROL'] = rol_nuevo_limpio
+                            df_causas.at[idx, 'CARATULADO'] = n_caratulado_editar.strip()
+                            df_causas.at[idx, 'TRIBUNAL'] = n_tribunal; df_causas.at[idx, 'Servicio'] = n_serv; df_causas.at[idx, 'Tipo_Negocio'] = n_negocio
+                            df_causas.at[idx, 'Clave_unica'] = n_clave; df_causas.at[idx, 'SAC'] = n_sac; df_causas.at[idx, 'Sucursal'] = n_suc
+                            df_causas.at[idx, 'Estado_Honorarios'] = n_estado_hon; df_causas.at[idx, 'Total_Honorarios'] = n_tot_hon
+                            df_causas.at[idx, 'Cuotas_Totales'] = n_cuo_tot; df_causas.at[idx, 'Cuotas_Pagadas'] = n_cuo_pag
+                            df_causas.to_csv(ARCHIVO_BD, index=False)
+                            # Antes esto solo se guardaba en el archivo local, nunca en la
+                            # nube — un reinicio del servidor podía perder el cambio.
+                            dn_causa_edit = safe_read_sheet("base_causas", COLS_CAUSAS)
+                            if not dn_causa_edit.empty:
+                                mask_causa_edit = dn_causa_edit['ROL'] == rol_actual
+                                if mask_causa_edit.any():
+                                    dn_causa_edit.loc[mask_causa_edit, 'ROL'] = rol_nuevo_limpio
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'CARATULADO'] = n_caratulado_editar.strip()
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'TRIBUNAL'] = n_tribunal
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Servicio'] = n_serv
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Tipo_Negocio'] = n_negocio
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Clave_unica'] = n_clave
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'SAC'] = n_sac
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Sucursal'] = n_suc
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Estado_Honorarios'] = n_estado_hon
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Total_Honorarios'] = n_tot_hon
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Cuotas_Totales'] = n_cuo_tot
+                                    dn_causa_edit.loc[dn_causa_edit['ROL'] == rol_nuevo_limpio, 'Cuotas_Pagadas'] = n_cuo_pag
+                                    safe_update_sheet("base_causas", dn_causa_edit)
+                            # Si el ROL cambió, hay que actualizar también las tareas que
+                            # apuntaban al ROL viejo, para que no se "pierdan" de la causa.
+                            if rol_nuevo_limpio != rol_actual:
+                                df_tareas_rol_edit = leer_csv_local(ARCHIVO_TAREAS, COLS_TAREAS)
+                                if not df_tareas_rol_edit.empty and (df_tareas_rol_edit['ROL'] == rol_actual).any():
+                                    df_tareas_rol_edit.loc[df_tareas_rol_edit['ROL'] == rol_actual, 'ROL'] = rol_nuevo_limpio
+                                    df_tareas_rol_edit.to_csv(ARCHIVO_TAREAS, index=False)
+                                dn_tareas_rol_edit = safe_read_sheet("base_tareas", COLS_TAREAS)
+                                if not dn_tareas_rol_edit.empty and (dn_tareas_rol_edit['ROL'] == rol_actual).any():
+                                    dn_tareas_rol_edit.loc[dn_tareas_rol_edit['ROL'] == rol_actual, 'ROL'] = rol_nuevo_limpio
+                                    safe_update_sheet("base_tareas", dn_tareas_rol_edit)
+                            st.session_state['causa_seleccionada'] = rol_nuevo_limpio
+                            st.session_state['modo_edicion'] = False
+                            st.success("✅ Cambios guardados.")
+                            st.rerun()
             else:
                 # --- 🔍 MOTOR DE BÚSQUEDA RELACIONAL DEL CLIENTE ---
                 rut_asociado = str(c_data.get('RUT', ''))
