@@ -4477,6 +4477,17 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
                                 dn_enc.loc[dn_enc['ID_Encargo'] == enc['ID_Encargo'], 'Estado'] = nuevo_estado_enc
                                 safe_update_sheet("base_encargos", dn_enc)
                             st.rerun()
+                        if enc['Usuario_Propietario'] == usuario_actual or ES_ADMIN_ENCARGOS:
+                            if st.button("🗑️ Eliminar", key=f"del_enc_{enc['ID_Encargo']}", use_container_width=True):
+                                df_enc_borrar = leer_csv_local(f"base_encargos_{enc['Usuario_Propietario']}.csv", COLS_ENCARGOS)
+                                df_enc_borrar = df_enc_borrar[df_enc_borrar['ID_Encargo'] != enc['ID_Encargo']]
+                                df_enc_borrar.to_csv(f"base_encargos_{enc['Usuario_Propietario']}.csv", index=False)
+                                dn_enc_borrar = safe_read_sheet("base_encargos", COLS_ENCARGOS)
+                                if not dn_enc_borrar.empty:
+                                    dn_enc_borrar = dn_enc_borrar[dn_enc_borrar['ID_Encargo'] != enc['ID_Encargo']]
+                                    safe_update_sheet("base_encargos", dn_enc_borrar)
+                                st.success("Encargo eliminado.")
+                                st.rerun()
 
 # 5. INFORMES (IA PARA CLIENTES)
 elif st.session_state['menu_radio'] == "📊 Informes":
@@ -7851,8 +7862,8 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
     st.title("📜 Escrituras Públicas")
     st.markdown("Redacción, análisis y gestión de documentos para escrituras públicas.")
     
-    tab_esc_redaccion, tab_esc_analisis, tab_esc_docs = st.tabs([
-        "✍️ Redacción de Escritura", "🔍 Análisis de Escritura (IA)", "📥 Docs Cliente"
+    tab_esc_redaccion, tab_esc_analisis, tab_esc_docs, tab_esc_consulta = st.tabs([
+        "✍️ Redacción de Escritura", "🔍 Análisis de Escritura (IA)", "📥 Docs Cliente", "💡 Consulta de Riesgo (IA)"
     ])
     
     # --- PESTAÑA 1: REDACCIÓN DE ESCRITURA ---
@@ -8102,6 +8113,61 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
                             bytes_doc_esc = obtener_bytes_adjunto(fila_doc_esc, 'Archivo_Drive_ID', 'Archivo_B64')
                             if bytes_doc_esc is not None:
                                 st.download_button("📥", data=bytes_doc_esc, file_name=f"{fila_doc_esc['Documento_Nombre']}.pdf", key=f"dl_docesc_{fila_doc_esc['ID_Req']}")
+    
+    # --- PESTAÑA 4: CONSULTA DE RIESGO (IA) ---
+    with tab_esc_consulta:
+        st.markdown("#### Cuéntame tu caso concreto")
+        st.caption("A diferencia del Análisis de Escritura (que revisa un documento ya escrito), esto es para cuando quieres pensar en voz alta un caso ANTES de mandarlo a firma, o para entender por qué el Conservador podría reparar algo — cuéntame los hechos con el mayor detalle posible.")
+        
+        caso_riesgo_esc = st.text_area(
+            "Describe la situación:", height=180,
+            placeholder="Ej: Redacté una liquidación de sociedad conyugal, ya la mandamos a firmar. Después el cliente me dijo que tenía otra propiedad que no incluimos. ¿Qué puedo hacer para que el Conservador no la repare?"
+        )
+        archivo_riesgo_esc = st.file_uploader("📎 Adjuntar documento relacionado (opcional): la escritura, un certificado, etc.", type=['pdf'], key="archivo_riesgo_esc_uploader")
+        
+        if st.button("💡 Consultar", type="primary", use_container_width=True):
+            if not caso_riesgo_esc.strip():
+                st.error("⚠️ Cuéntame la situación primero.")
+            else:
+                with st.spinner("Analizando el caso..."):
+                    try:
+                        texto_doc_riesgo_esc = ""
+                        if archivo_riesgo_esc:
+                            import PyPDF2
+                            lector_riesgo_esc = PyPDF2.PdfReader(archivo_riesgo_esc)
+                            for pag_riesgo_esc in lector_riesgo_esc.pages:
+                                texto_doc_riesgo_esc += (pag_riesgo_esc.extract_text() or "") + "\n"
+                        
+                        prompt_riesgo_esc = f"""
+                        Actúa como un abogado chileno experto en derecho notarial y registral, con amplia experiencia en qué es lo que un Conservador de Bienes Raíces o un Notario suele reparar u objetar en una escritura pública.
+                        
+                        SITUACIÓN CONCRETA DEL ABOGADO:
+                        {caso_riesgo_esc}
+                        
+                        {f"TEXTO DEL DOCUMENTO ADJUNTO: {_texto_priorizando_final(texto_doc_riesgo_esc)}" if texto_doc_riesgo_esc.strip() else ""}
+                        
+                        {INSTRUCCION_FUNDAMENTACION_JURIDICA}
+                        
+                        Responde de forma directa y práctica, estructurado así:
+                        
+                        ## ⚠️ El Riesgo Concreto
+                        Explica en 2-4 líneas qué es lo que específicamente podría objetar o reparar el Conservador/Notario en ESTE caso puntual, y por qué (con el fundamento legal exacto si corresponde).
+                        
+                        ## ✅ Qué Puedes Hacer
+                        Lista las opciones CONCRETAS y prácticas para resolver la situación (ej: escritura complementaria/rectificatoria, nueva escritura, aclaración, etc.), ordenadas de la más simple/rápida a la más compleja, explicando en qué consiste cada una y cuándo conviene usar cada opción.
+                        
+                        ## 🎯 Recomendación
+                        Cuál de esas opciones recomiendas seguir primero en este caso concreto, y por qué.
+                        """
+                        
+                        respuesta_riesgo_esc = consultar_ia_inteligente(prompt_riesgo_esc)
+                        st.success("✅ Análisis listo.")
+                        st.markdown("<div class='dash-card'><h4 style='color:#0e6b74;'>💡 Recomendación</h4>", unsafe_allow_html=True)
+                        st.write(respuesta_riesgo_esc)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                        _mostrar_motor_ia_usado()
+                    except Exception as e:
+                        st.error(f"❌ Error al consultar: {e}")
 
 # =====================================================================
 # 📋 MÓDULO: POSESIÓN EFECTIVA
