@@ -6723,9 +6723,23 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                     # una fila que no existía. Ahora, si no existe, se crea.
                                     fila_nueva_cliente = {'Nombre': n_nom, 'RUT': n_rut, 'Telefono': n_tel, 'Correo': n_cor, 'Clave_unica': n_cla, 'Direccion': n_dom, 'Usuario_Propietario': usuario_actual, 'Usuarios_Compartidos': ",".join(n_compartidos)}
                                     df_clientes_completo_edit = pd.concat([df_clientes_completo_edit, pd.DataFrame([fila_nueva_cliente])], ignore_index=True)
-                                safe_update_sheet("base_clientes", df_clientes_completo_edit)
-                                st.session_state['editando_cli'] = False
-                                st.rerun()
+                                guardado_exitoso_cli = safe_update_sheet("base_clientes", df_clientes_completo_edit)
+                                
+                                if guardado_exitoso_cli:
+                                    # Verificación real: se vuelve a leer la nube (ya sin caché,
+                                    # porque safe_update_sheet la limpió) para confirmar que el
+                                    # dato realmente quedó ahí, en vez de solo asumir que se
+                                    # guardó porque la función no lanzó un error.
+                                    df_verificacion_cli = safe_read_sheet("base_clientes", COLS_CLIENTES)
+                                    fila_verificada = df_verificacion_cli[df_verificacion_cli['RUT'].astype(str) == str(n_rut)]
+                                    if not fila_verificada.empty and str(fila_verificada.iloc[0].get('Nombre', '')) == n_nom.strip():
+                                        st.session_state['editando_cli'] = False
+                                        st.success("✅ Cambios guardados y verificados en la nube.")
+                                        import time; time.sleep(0.6); st.rerun()
+                                    else:
+                                        st.error("⚠️ Se intentó guardar, pero al verificar la nube el cambio no aparece reflejado. No cierres esta pantalla — mándale a Nicolás una captura de este mensaje.")
+                                else:
+                                    st.error("⚠️ El guardado falló (revisa el mensaje de error de arriba). El cambio NO quedó registrado.")
                     else:
                         st.write(f"**Nombre:** {datos_cli.get('Nombre', '--')}")
                         st.write(f"**RUT:** {datos_cli.get('RUT', '--')}")
