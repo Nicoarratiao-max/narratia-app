@@ -6699,6 +6699,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 # borrar los clientes del resto del equipo.
                                 df_clientes_completo_edit = safe_read_sheet("base_clientes", COLS_CLIENTES)
                                 existe_fila_cliente = (not df_clientes_completo_edit.empty) and (df_clientes_completo_edit['RUT'] == rut_actual).any()
+                                aviso_auto_compartido = False
                                 if existe_fila_cliente:
                                     # Antes esto fallaba con "Invalid value for dtype" si
                                     # alguna de estas columnas había quedado inferida como
@@ -6707,8 +6708,21 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                     # a texto libre antes de escribir, para que acepte
                                     # cualquier valor sin importar lo que tenía antes.
                                     mascara_cliente_edit = df_clientes_completo_edit['RUT'] == rut_actual
+
+                                    # Si el cliente es de OTRO usuario (o no tiene dueño) y no
+                                    # está compartido con quien edita, el filtro de privacidad de
+                                    # la pantalla lo oculta de vuelta apenas se guarda: la persona
+                                    # ve que "no cambió nada" aunque el guardado sí funcionó. Para
+                                    # evitarlo, se agrega automáticamente a quien edita a
+                                    # Usuarios_Compartidos (sin tocar el dueño original).
+                                    dueno_actual_fila = str(df_clientes_completo_edit.loc[mascara_cliente_edit, 'Usuario_Propietario'].iloc[0]) if 'Usuario_Propietario' in df_clientes_completo_edit.columns else ''
+                                    lista_compartidos_final = list(n_compartidos)
+                                    if dueno_actual_fila.strip() and dueno_actual_fila != usuario_actual and usuario_actual not in lista_compartidos_final:
+                                        lista_compartidos_final.append(usuario_actual)
+                                        aviso_auto_compartido = True
+
                                     columnas_edit_cliente = ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion', 'Usuarios_Compartidos']
-                                    valores_edit_cliente = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom, ",".join(n_compartidos)]
+                                    valores_edit_cliente = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom, ",".join(lista_compartidos_final)]
                                     for col_edit_cli in columnas_edit_cliente:
                                         if col_edit_cli not in df_clientes_completo_edit.columns:
                                             df_clientes_completo_edit[col_edit_cli] = ""
@@ -6734,7 +6748,10 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                     fila_verificada = df_verificacion_cli[df_verificacion_cli['RUT'].astype(str) == str(n_rut)]
                                     if not fila_verificada.empty and str(fila_verificada.iloc[0].get('Nombre', '')) == n_nom.strip():
                                         st.session_state['editando_cli'] = False
-                                        st.success("✅ Cambios guardados y verificados en la nube.")
+                                        if aviso_auto_compartido:
+                                            st.success("✅ Cambios guardados y verificados en la nube. Este cliente era de otro usuario del equipo — se te agregó automáticamente a 'Compartido con' para que sigas viendo los datos actualizados.")
+                                        else:
+                                            st.success("✅ Cambios guardados y verificados en la nube.")
                                         import time; time.sleep(0.6); st.rerun()
                                     else:
                                         st.error("⚠️ Se intentó guardar, pero al verificar la nube el cambio no aparece reflejado. No cierres esta pantalla — mándale a Nicolás una captura de este mensaje.")
