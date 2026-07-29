@@ -1690,7 +1690,7 @@ def generar_contenido_gemini(prompt_texto, archivos_pdf=None):
 
 # --- DEFINICIÓN DE COLUMNAS MAESTRAS ---
 COLS_USUARIOS = ['Usuario', 'Password', 'Nombre_Real', 'Correo', 'Debe_Cambiar_Clave', 'Plan', 'Es_Admin']
-COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion', 'Usuario_Propietario']
+COLS_CLIENTES = ['RUT', 'Nombre', 'Telefono', 'Correo', 'Clave_unica', 'Direccion', 'Usuario_Propietario', 'Usuarios_Compartidos']
 COLS_CAUSAS = ['ROL', 'TRIBUNAL', 'CARATULADO', 'Cliente', 'RUT', 'Tipo_Negocio', 'Usuario_Propietario', 'Estado_Honorarios', 'Total_Honorarios', 'Cuotas_Totales', 'Cuotas_Pagadas', 'Clave_unica', 'SAC', 'Sucursal', 'Servicio']
 
 # =====================================================================
@@ -6394,22 +6394,31 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     st.rerun()
     
 
-    # PRIVACIDAD: cada abogado ve solo SUS PROPIOS clientes. El administrador
+    # PRIVACIDAD: cada abogado ve sus PROPIOS clientes, y también los que
+    # otro colega haya compartido con él explícitamente (campo
+    # "Usuarios_Compartidos" al crear/editar el cliente). El administrador
     # ve además los de otros según lo que haya elegido en el selector "👁️ Ver
     # datos de otro usuario" de la barra lateral — de forma EXCLUSIVA (si
     # elige a alguien específico, ve solo esa persona, sin mezclar con lo
-    # propio, para no confundirse).
+    # propio, para no confundirse) — salvo que ese cliente también esté
+    # compartido con el admin, en cuyo caso igual se ve.
+    def _cliente_es_mio_o_compartido(fila_cli_priv, usuario_objetivo):
+        if fila_cli_priv.get('Usuario_Propietario') == usuario_objetivo:
+            return True
+        compartidos_txt = str(fila_cli_priv.get('Usuarios_Compartidos', '') or '')
+        return usuario_objetivo in [u.strip() for u in compartidos_txt.split(',') if u.strip()]
+    
     if not df_clientes.empty and 'Usuario_Propietario' in df_clientes.columns:
         if not ES_ADMIN_CLIENTES_TOP:
-            df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
+            df_clientes = df_clientes[df_clientes.apply(lambda f: _cliente_es_mio_o_compartido(f, usuario_actual), axis=1)]
         else:
             _filtro_cli_admin = st.session_state.get('filtro_vista_admin', 'Solo mis datos')
             if _filtro_cli_admin == "Solo mis datos":
-                df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == usuario_actual]
+                df_clientes = df_clientes[df_clientes.apply(lambda f: _cliente_es_mio_o_compartido(f, usuario_actual), axis=1)]
             elif _filtro_cli_admin == "Todo el equipo junto":
                 pass  # se queda como está: todos
             else:
-                df_clientes = df_clientes[df_clientes['Usuario_Propietario'] == _filtro_cli_admin]
+                df_clientes = df_clientes[df_clientes.apply(lambda f: _cliente_es_mio_o_compartido(f, _filtro_cli_admin), axis=1)]
 
     if ES_ADMIN_CLIENTES_TOP:
         with st.expander("🔍 Buscador de Conflictos de Interés (revisa antes de aceptar un caso nuevo)"):
@@ -6462,6 +6471,15 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     n_cli_cor = c2.text_input("Correo Electrónico")
                     n_cli_cla = c1.text_input("Clave Única")
                     n_cli_dom = c2.text_input("Domicilio")
+                    
+                    st.markdown("---")
+                    opciones_compartir_cliente = {u: f"{real} ({u})" for u, real in NOMBRES_REALES.items() if u != usuario_actual}
+                    n_cli_compartir = st.multiselect(
+                        "👥 Compartir este cliente con (opcional)",
+                        options=list(opciones_compartir_cliente.keys()),
+                        format_func=lambda k: opciones_compartir_cliente.get(k, k),
+                        help="Los usuarios que elijas van a poder ver este cliente, sus causas y su contabilidad, igual que tú."
+                    )
 
                     if st.form_submit_button("💾 Guardar Cliente en la Nube", type="primary"):
                         if not n_cli_nom or not n_cli_rut:
@@ -6474,7 +6492,8 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                 'Correo': n_cli_cor.strip(),
                                 'Clave_unica': n_cli_cla.strip(),
                                 'Direccion': n_cli_dom.strip(),
-                                'Usuario_Propietario': usuario_actual
+                                'Usuario_Propietario': usuario_actual,
+                                'Usuarios_Compartidos': ",".join(n_cli_compartir)
                             }
                             # Se guarda sobre la hoja COMPLETA (releída de nuevo), no sobre la
                             # versión ya filtrada por privacidad, para no borrar los clientes
@@ -6619,6 +6638,19 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                             n_cor = st.text_input("Correo", datos_cli.get('Correo', ''))
                             n_cla = st.text_input("Clave Única", datos_cli.get('Clave_unica', ''))
                             n_dom = st.text_input("Domicilio", datos_cli.get('Direccion', ''))
+                            
+                            st.markdown("---")
+                            _compartidos_actuales_txt = str(datos_cli.get('Usuarios_Compartidos', '') or '')
+                            _compartidos_actuales_lista = [u.strip() for u in _compartidos_actuales_txt.split(',') if u.strip()]
+                            _opciones_compartir_edit = {u: f"{real} ({u})" for u, real in NOMBRES_REALES.items() if u != usuario_actual}
+                            n_compartidos = st.multiselect(
+                                "👥 Compartir este cliente con",
+                                options=list(_opciones_compartir_edit.keys()),
+                                default=[u for u in _compartidos_actuales_lista if u in _opciones_compartir_edit],
+                                format_func=lambda k: _opciones_compartir_edit.get(k, k),
+                                help="Los usuarios que elijas van a poder ver este cliente, sus causas y su contabilidad, igual que tú."
+                            )
+                            
                             if st.form_submit_button("💾 Guardar"):
                                 # Mismo cuidado que en Eliminar: se relee la hoja completa
                                 # sin el filtro de privacidad antes de guardar, para no
@@ -6633,8 +6665,8 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                     # a texto libre antes de escribir, para que acepte
                                     # cualquier valor sin importar lo que tenía antes.
                                     mascara_cliente_edit = df_clientes_completo_edit['RUT'] == rut_actual
-                                    columnas_edit_cliente = ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion']
-                                    valores_edit_cliente = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom]
+                                    columnas_edit_cliente = ['Nombre', 'RUT', 'Telefono', 'Correo', 'Clave_unica', 'Direccion', 'Usuarios_Compartidos']
+                                    valores_edit_cliente = [n_nom, n_rut, n_tel, n_cor, n_cla, n_dom, ",".join(n_compartidos)]
                                     for col_edit_cli in columnas_edit_cliente:
                                         if col_edit_cli not in df_clientes_completo_edit.columns:
                                             df_clientes_completo_edit[col_edit_cli] = ""
@@ -6647,7 +6679,7 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                                     # causa antigua) — antes esto hacía que "Guardar" no
                                     # guardara nada, en silencio, porque intentaba actualizar
                                     # una fila que no existía. Ahora, si no existe, se crea.
-                                    fila_nueva_cliente = {'Nombre': n_nom, 'RUT': n_rut, 'Telefono': n_tel, 'Correo': n_cor, 'Clave_unica': n_cla, 'Direccion': n_dom, 'Usuario_Propietario': usuario_actual}
+                                    fila_nueva_cliente = {'Nombre': n_nom, 'RUT': n_rut, 'Telefono': n_tel, 'Correo': n_cor, 'Clave_unica': n_cla, 'Direccion': n_dom, 'Usuario_Propietario': usuario_actual, 'Usuarios_Compartidos': ",".join(n_compartidos)}
                                     df_clientes_completo_edit = pd.concat([df_clientes_completo_edit, pd.DataFrame([fila_nueva_cliente])], ignore_index=True)
                                 safe_update_sheet("base_clientes", df_clientes_completo_edit)
                                 st.session_state['editando_cli'] = False
@@ -6659,6 +6691,10 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                         st.write(f"**Correo:** {datos_cli.get('Correo', '--')}")
                         st.write(f"**Clave Única:** {datos_cli.get('Clave_unica', '--')}")
                         st.write(f"**Domicilio:** {datos_cli.get('Direccion', '--')}")
+                        _compartidos_mostrar = str(datos_cli.get('Usuarios_Compartidos', '') or '')
+                        if _compartidos_mostrar.strip():
+                            _nombres_compartidos_mostrar = ", ".join(NOMBRES_REALES.get(u.strip(), u.strip()) for u in _compartidos_mostrar.split(',') if u.strip())
+                            st.write(f"**👥 Compartido con:** {_nombres_compartidos_mostrar}")
                         if st.button("✏️ Editar Datos"): st.session_state['editando_cli'] = True; st.rerun()
             
             with col_d:
