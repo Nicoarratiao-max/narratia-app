@@ -464,17 +464,14 @@ CATALOGO_EXCEPCIONES_464 = {
     18: "La cosa juzgada",
 }
 
-def extraer_texto_pdfs(archivos_pdf_subidos):
-    """Extrae el texto de una lista de PDFs subidos, para enviárselo a Groq (no lee PDFs de forma nativa como Gemini)."""
-    import PyPDF2
-    texto_total = ""
-    for archivo in archivos_pdf_subidos:
-        try:
-            lector = PyPDF2.PdfReader(archivo)
-            texto_total += f"\n--- {archivo.name} ---\n" + "\n".join([p.extract_text() or "" for p in lector.pages])
-        except Exception:
-            texto_total += f"\n--- {archivo.name} (no se pudo leer, posiblemente escaneado sin OCR) ---\n"
-    return texto_total
+def extraer_texto_pdfs(archivos_subidos):
+    """
+    Extrae el texto de una lista de documentos subidos (PDF, Word, texto
+    plano, o un .zip con cualquier combinación de esos adentro). El nombre
+    de la función quedó igual por compatibilidad con todo el sistema, pero
+    ya no se limita solo a PDFs.
+    """
+    return _extraer_texto_varios_archivos_y_zip(archivos_subidos)
 
 def _mostrar_motor_ia_usado():
     """Muestra una etiqueta discreta indicando qué IA respondió la última consulta (Gemini, Groq, Cerebras o Mistral)."""
@@ -1091,6 +1088,65 @@ CODIGOS_BREVES_ESCRITOS = {
     "Solicitud de Cúmplase / Cumplimiento Incidental": "CUMPL",
     "Otro tipo de presentación": "OTRO",
 }
+
+def _extraer_texto_un_archivo(archivo_subido):
+    """
+    Extrae el texto de UN solo archivo, detectando su tipo por la
+    extensión: PDF, Word (.docx), texto plano (.txt). Si el tipo no se
+    reconoce, devuelve un aviso en vez de fallar en silencio.
+    """
+    nombre_lower = archivo_subido.name.lower()
+    try:
+        if nombre_lower.endswith(".pdf"):
+            import PyPDF2
+            lector = PyPDF2.PdfReader(archivo_subido)
+            return "\n".join([p.extract_text() or "" for p in lector.pages])
+        elif nombre_lower.endswith(".docx"):
+            doc_word = Document(archivo_subido)
+            return "\n".join([p.text for p in doc_word.paragraphs])
+        elif nombre_lower.endswith(".txt"):
+            return archivo_subido.read().decode("utf-8", errors="ignore")
+        else:
+            return f"[No se pudo leer '{archivo_subido.name}': formato no soportado — solo se leen PDF, Word (.docx) y texto plano (.txt), dentro de un .zip o sueltos]"
+    except Exception as e:
+        return f"[Error leyendo '{archivo_subido.name}': {e}]"
+
+def _extraer_texto_varios_archivos_y_zip(archivos_subidos):
+    """
+    Extrae y combina el texto de una lista de archivos subidos, que pueden
+    ser PDF, Word, texto plano sueltos, o un .zip con cualquier combinación
+    de esos adentro (se procesa cada uno por separado, con su nombre de
+    origen, para que la IA sepa de qué documento viene cada cosa).
+    """
+    import zipfile
+    texto_total = ""
+    for archivo_subido in (archivos_subidos or []):
+        if archivo_subido.name.lower().endswith(".zip"):
+            with zipfile.ZipFile(archivo_subido) as zip_abierto:
+                for nombre_interno in zip_abierto.namelist():
+                    if nombre_interno.startswith("__MACOSX") or nombre_interno.endswith("/"):
+                        continue
+                    if not nombre_interno.lower().endswith((".pdf", ".docx", ".txt")):
+                        continue
+                    with zip_abierto.open(nombre_interno) as archivo_interno:
+                        contenido_bytes = archivo_interno.read()
+                    texto_total += f"\n--- {nombre_interno} (dentro de {archivo_subido.name}) ---\n"
+                    try:
+                        if nombre_interno.lower().endswith(".pdf"):
+                            import PyPDF2
+                            lector_zip = PyPDF2.PdfReader(io.BytesIO(contenido_bytes))
+                            texto_total += "\n".join([p.extract_text() or "" for p in lector_zip.pages])
+                        elif nombre_interno.lower().endswith(".docx"):
+                            doc_zip = Document(io.BytesIO(contenido_bytes))
+                            texto_total += "\n".join([p.text for p in doc_zip.paragraphs])
+                        else:
+                            texto_total += contenido_bytes.decode("utf-8", errors="ignore")
+                    except Exception as e:
+                        texto_total += f"[Error leyendo '{nombre_interno}': {e}]"
+        else:
+            texto_total += f"\n--- {archivo_subido.name} ---\n"
+            texto_total += _extraer_texto_un_archivo(archivo_subido)
+    return texto_total
 
 def _texto_priorizando_final(texto, limite=20000):
     """
@@ -4568,8 +4624,8 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
             caso_texto = st.text_area("📝 Relato adicional o instrucciones:", height=100, placeholder="Ej: Cliente notificado hace 3 días. Revisa si hay prescripción o vicios formales...")
             
             archivos_legales = st.file_uploader(
-                "📎 Adjuntar documentos del caso (varios PDFs sueltos, o un .zip con muchos documentos adentro)",
-                type=['pdf', 'zip'], accept_multiple_files=True
+                "📎 Adjuntar documentos del caso (PDF, Word o texto plano, varios a la vez, o un .zip con muchos documentos adentro)",
+                type=['pdf', 'docx', 'txt', 'zip'], accept_multiple_files=True
             )
             st.caption("⚠️ Si el total de texto de todos los documentos es muy grande, el sistema toma solo la primera parte (equivalente a unas 15-20 páginas de texto en total) — para casos con muchísimos documentos, prioriza los más relevantes para el análisis (la demanda, el título, la resolución clave) en vez de adjuntar el expediente completo.")
             
@@ -4579,20 +4635,7 @@ elif st.session_state['menu_radio'] == "🧠 Estrategia":
                 else:
                     with st.spinner("🧠 Leyendo documentos y buscando jurisprudencia/normativa aplicable..."):
                         try:
-                            import zipfile
-                            
-                            texto_pdf = ""
-                            for archivo_subido in (archivos_legales or []):
-                                if archivo_subido.name.lower().endswith(".zip"):
-                                    with zipfile.ZipFile(archivo_subido) as zip_abierto:
-                                        for nombre_interno in zip_abierto.namelist():
-                                            if nombre_interno.lower().endswith(".pdf") and not nombre_interno.startswith("__MACOSX"):
-                                                with zip_abierto.open(nombre_interno) as pdf_interno:
-                                                    texto_pdf += f"\n--- {nombre_interno} (dentro del ZIP {archivo_subido.name}) ---\n"
-                                                    texto_pdf += _extraer_texto_de_un_pdf(io.BytesIO(pdf_interno.read()))
-                                else:
-                                    texto_pdf += f"\n--- {archivo_subido.name} ---\n"
-                                    texto_pdf += _extraer_texto_de_un_pdf(archivo_subido)
+                            texto_pdf = _extraer_texto_varios_archivos_y_zip(archivos_legales)
                             
                             indicacion_materia = (
                                 f"El abogado ya identificó que el caso corresponde al área: {materia}. Concéntrate en esa rama."
@@ -5994,7 +6037,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     modo_excepciones = st.radio("¿Cómo quieres trabajar?", ["📄 Subir PDFs (la IA analiza)", "✍️ Ingresar datos manualmente"], horizontal=True, key=f"pe_modo_exc_{rol_actual}")
                     
                     if modo_excepciones == "📄 Subir PDFs (la IA analiza)":
-                        archivos_exc = st.file_uploader("Sube el pagaré, mandato, demanda, resoluciones, personería y demás documentos de la causa", type=["pdf"], accept_multiple_files=True, key=f"exc_pdfs_{rol_actual}")
+                        archivos_exc = st.file_uploader("Sube el pagaré, mandato, demanda, resoluciones, personería y demás documentos de la causa (PDF, Word o texto)", type=["pdf", "docx", "txt", "zip"], accept_multiple_files=True, key=f"exc_pdfs_{rol_actual}")
                         contexto_exc = st.text_area("Contexto adicional para la IA (opcional)", key=f"exc_contexto_{rol_actual}", placeholder="Ej: El pagaré fue suscrito por un apoderado, revisar si tenía facultades suficientes.")
                         
                         if st.button("🔍 Analizar Documentos", type="primary", use_container_width=True, key=f"exc_btn_analizar_{rol_actual}"):
@@ -6123,7 +6166,7 @@ elif st.session_state['menu_radio'] == "💼 Causas":
                     # --- FLUJO GENERAL: cualquier otro tipo de escrito (demandas, traslados,
                     # abandonos, nulidades, tercerías, recursos, etc.) ---
                     st.markdown(f"#### {tipo_escrito_sel}")
-                    archivos_gen = st.file_uploader("Documentos de respaldo (opcional)", type=["pdf"], accept_multiple_files=True, key=f"gen_pdfs_{rol_actual}")
+                    archivos_gen = st.file_uploader("Documentos de respaldo (opcional, PDF, Word o texto)", type=["pdf", "docx", "txt", "zip"], accept_multiple_files=True, key=f"gen_pdfs_{rol_actual}")
                     contexto_gen = st.text_area("Hechos e instrucciones para la IA", height=120, key=f"gen_contexto_{rol_actual}",
                                                  placeholder="Describe los hechos relevantes, lo que quieres alegar y cualquier dato específico que deba incluir el escrito.")
                     
@@ -7475,8 +7518,8 @@ elif st.session_state['menu_radio'] == "📝 Redactor IA":
                                               placeholder="Ej: Tengo un pagaré donde la mora es el 15/03/2024. La demanda se presentó el 02/06/2024...",
                                               key="redactor_instrucciones_key")
             documentos_red = st.file_uploader(
-                "📎 Documentos de respaldo (opcional): resoluciones, el expediente, actuaciones de Receptor, el pagaré, etc.",
-                type=["pdf"], accept_multiple_files=True, key="redactor_docs_key"
+                "📎 Documentos de respaldo (opcional): resoluciones, el expediente, actuaciones de Receptor, el pagaré, etc. (PDF, Word o texto)",
+                type=["pdf", "docx", "txt", "zip"], accept_multiple_files=True, key="redactor_docs_key"
             )
             st.caption("Mientras más contexto real le des (documentos y/o hechos por escrito), más preciso queda tanto el análisis como el borrador final.")
             
@@ -7978,7 +8021,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
         st.caption("La IA revisa la redacción considerando los requisitos formales del Código Orgánico de Tribunales (Arts. 403 a 408 y 415) y las reglas generales de técnica notarial y civil chilena. Es un apoyo de revisión, no reemplaza el criterio profesional del abogado.")
         
         archivo_escritura_analizar = st.file_uploader("Escritura a analizar (PDF)", type=["pdf"], key="esc_analisis_pdf")
-        docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios)", type=["pdf"], accept_multiple_files=True, key="esc_analisis_respaldo")
+        docs_respaldo_analizar = st.file_uploader("Documentos de respaldo (opcional, puedes subir varios, PDF, Word o texto)", type=["pdf", "docx", "txt", "zip"], accept_multiple_files=True, key="esc_analisis_respaldo")
         contexto_adicional_esc = st.text_area("Contexto adicional para la IA (opcional)", placeholder="Ej: Es una compraventa de un bien raíz en Providencia, verificar especialmente la cláusula de saneamiento.")
         
         if st.button("🔍 Analizar Escritura", type="primary", use_container_width=True):
@@ -8123,7 +8166,10 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
             "Describe la situación:", height=180,
             placeholder="Ej: Redacté una liquidación de sociedad conyugal, ya la mandamos a firmar. Después el cliente me dijo que tenía otra propiedad que no incluimos. ¿Qué puedo hacer para que el Conservador no la repare?"
         )
-        archivo_riesgo_esc = st.file_uploader("📎 Adjuntar documento relacionado (opcional): la escritura, un certificado, etc.", type=['pdf'], key="archivo_riesgo_esc_uploader")
+        archivos_riesgo_esc = st.file_uploader(
+            "📎 Adjuntar documentos relacionados (opcional, varios a la vez): PDF, Word o texto plano — o un .zip con muchos documentos adentro",
+            type=['pdf', 'docx', 'txt', 'zip'], accept_multiple_files=True, key="archivo_riesgo_esc_uploader"
+        )
         
         if st.button("💡 Consultar", type="primary", use_container_width=True):
             if not caso_riesgo_esc.strip():
@@ -8131,12 +8177,7 @@ elif st.session_state['menu_radio'] == "📜 Escrituras Públicas":
             else:
                 with st.spinner("Analizando el caso..."):
                     try:
-                        texto_doc_riesgo_esc = ""
-                        if archivo_riesgo_esc:
-                            import PyPDF2
-                            lector_riesgo_esc = PyPDF2.PdfReader(archivo_riesgo_esc)
-                            for pag_riesgo_esc in lector_riesgo_esc.pages:
-                                texto_doc_riesgo_esc += (pag_riesgo_esc.extract_text() or "") + "\n"
+                        texto_doc_riesgo_esc = _extraer_texto_varios_archivos_y_zip(archivos_riesgo_esc)
                         
                         prompt_riesgo_esc = f"""
                         Actúa como un abogado chileno experto en derecho notarial y registral, con amplia experiencia en qué es lo que un Conservador de Bienes Raíces o un Notario suele reparar u objetar en una escritura pública.
