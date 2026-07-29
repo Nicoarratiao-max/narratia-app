@@ -4359,6 +4359,9 @@ elif st.session_state['menu_radio'] == "📆 Estado diario":
 elif st.session_state['menu_radio'] == "📇 Encargos":
     st.title("📇 Encargos")
     
+    if st.session_state.get('_diagnostico_ultimo_encargo'):
+        st.info(f"🔧 Diagnóstico técnico (temporal): {st.session_state.pop('_diagnostico_ultimo_encargo')}")
+    
     ES_ADMIN_ENCARGOS = _es_admin_usuario(usuario_actual)
     df_encargos = leer_csv_local(ARCHIVO_ENCARGOS, COLS_ENCARGOS)
     if ES_ADMIN_ENCARGOS:
@@ -4387,6 +4390,12 @@ elif st.session_state['menu_radio'] == "📇 Encargos":
                     st.error("⚠️ Debes indicar al menos el nombre de quien encarga y qué se encarga.")
                 else:
                     monto_limpio_encargo = parsear_monto_clp(monto_encargo) if monto_encargo.strip() else 0
+                    # DIAGNÓSTICO TEMPORAL: para encontrar por qué a veces el monto no
+                    # se está reflejando en Contabilidad, aunque se haya escrito uno.
+                    # Se guarda en session_state para que sobreviva al rerun de más
+                    # abajo y de verdad se pueda ver. Se puede quitar una vez
+                    # confirmado qué está pasando.
+                    st.session_state['_diagnostico_ultimo_encargo'] = f"Texto crudo recibido en el campo 'Monto': {repr(monto_encargo)} | Monto interpretado: {monto_limpio_encargo}"
                     id_encargo_nuevo = str(uuid.uuid4())[:8]
                     
                     nuevo_encargo = {
