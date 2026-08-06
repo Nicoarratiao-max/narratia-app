@@ -4042,6 +4042,21 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                 _filas_mias_extra = _t_extra[_t_extra['Usuario_Propietario'] == usuario_actual]
                 if not _filas_mias_extra.empty:
                     df_c = pd.concat([df_c, _filas_mias_extra], ignore_index=True)
+    # El disco de Streamlit Cloud es EFÍMERO: se borra en cada redeploy o
+    # reinicio del contenedor. Hasta ahora, esta pantalla de Contabilidad
+    # solo miraba los archivos CSV locales — si una causa o encargo se
+    # guardó bien (quedó en Google Sheets), pero el contenedor se reinició
+    # después, el CSV local ya no la tenía y desaparecía de Contabilidad,
+    # aunque el dato seguía intacto en la nube. Las pantallas de Causas y
+    # la ficha del cliente ya se traían de la nube como respaldo; esta
+    # pantalla nunca lo hacía. Ahora se fusiona siempre con la nube (no
+    # solo cuando lo local está vacío), para que ninguna causa/encargo se
+    # pierda de vista por esto.
+    df_c_nube_conta = safe_read_sheet("base_causas", COLS_CAUSAS)
+    if not df_c_nube_conta.empty and 'Usuario_Propietario' in df_c_nube_conta.columns:
+        df_c_nube_propias = df_c_nube_conta[df_c_nube_conta['Usuario_Propietario'] == usuario_actual]
+        if not df_c_nube_propias.empty:
+            df_c = pd.concat([df_c, df_c_nube_propias], ignore_index=True)
     if not df_c.empty and 'ROL' in df_c.columns:
         df_c = df_c.drop_duplicates(subset=['ROL'])
     
@@ -4105,6 +4120,18 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                         df_c['Fecha_Inicio'] = df_c['Fecha_Inicio'].astype(object)
                         df_c.loc[df_c['ROL'] == rol_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
                         df_c.to_csv(ARCHIVO_BD, index=False)
+                        # Antes esto solo se guardaba en el CSV local — con el
+                        # disco efímero de Streamlit Cloud, un reinicio del
+                        # contenedor lo perdía aunque el resto de la causa
+                        # siguiera intacto en la nube. Se sincroniza también
+                        # la fila real en Google Sheets.
+                        dn_causas_fecha = safe_read_sheet("base_causas", COLS_CAUSAS)
+                        if not dn_causas_fecha.empty and 'ROL' in dn_causas_fecha.columns and (dn_causas_fecha['ROL'] == rol_sel).any():
+                            if 'Fecha_Inicio' not in dn_causas_fecha.columns:
+                                dn_causas_fecha['Fecha_Inicio'] = ""
+                            dn_causas_fecha['Fecha_Inicio'] = dn_causas_fecha['Fecha_Inicio'].astype(object)
+                            dn_causas_fecha.loc[dn_causas_fecha['ROL'] == rol_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
+                            safe_update_sheet("base_causas", dn_causas_fecha)
                         st.rerun()
 
                 c_f1, c_f2, c_f3 = st.columns(3)
@@ -4142,6 +4169,15 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                         if df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
                             df_c.loc[df_c['ROL'] == rol_sel, 'Estado_Honorarios'] = "Pagados"
                         df_c.to_csv(ARCHIVO_BD, index=False)
+                        # Igual que con la Fecha de Inicio: se sincroniza la
+                        # causa/encargo en Google Sheets, no solo el CSV local,
+                        # para que el avance de cuotas no se pierda si el
+                        # contenedor se reinicia.
+                        dn_causas_pago = safe_read_sheet("base_causas", COLS_CAUSAS)
+                        if not dn_causas_pago.empty and 'ROL' in dn_causas_pago.columns and (dn_causas_pago['ROL'] == rol_sel).any():
+                            dn_causas_pago.loc[dn_causas_pago['ROL'] == rol_sel, 'Cuotas_Pagadas'] = df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'].values[0]
+                            dn_causas_pago.loc[dn_causas_pago['ROL'] == rol_sel, 'Estado_Honorarios'] = df_c.loc[df_c['ROL'] == rol_sel, 'Estado_Honorarios'].values[0]
+                            safe_update_sheet("base_causas", dn_causas_pago)
                         
                         # Se registra el pago en el historial, para poder calcular
                         # ingresos reales (por fecha y por mes) en Contabilidad General,
@@ -4163,6 +4199,13 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                         df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'] -= 1
                         df_c.loc[df_c['ROL'] == rol_sel, 'Estado_Honorarios'] = "Pendientes"
                         df_c.to_csv(ARCHIVO_BD, index=False)
+                        # Mismo motivo que en Registrar Pago: sincronizar la
+                        # causa/encargo en la nube, no solo el CSV local.
+                        dn_causas_revertir = safe_read_sheet("base_causas", COLS_CAUSAS)
+                        if not dn_causas_revertir.empty and 'ROL' in dn_causas_revertir.columns and (dn_causas_revertir['ROL'] == rol_sel).any():
+                            dn_causas_revertir.loc[dn_causas_revertir['ROL'] == rol_sel, 'Cuotas_Pagadas'] = df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'].values[0]
+                            dn_causas_revertir.loc[dn_causas_revertir['ROL'] == rol_sel, 'Estado_Honorarios'] = df_c.loc[df_c['ROL'] == rol_sel, 'Estado_Honorarios'].values[0]
+                            safe_update_sheet("base_causas", dn_causas_revertir)
                         
                         # Se elimina el último pago registrado de ESTA causa/encargo
                         # (por ROL) del historial, para que Contabilidad General no
