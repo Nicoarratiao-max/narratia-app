@@ -4072,8 +4072,26 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
             col_l, col_c, col_r = st.columns([0.2, 8, 0.2])
             
             with col_c:
-                cliente_sel = st.selectbox("Selecciona un Cliente para gestionar su ficha:", df_activos['Cliente'].unique())
-                datos_cli = df_activos[df_activos['Cliente'] == cliente_sel].iloc[0]
+                # ANTES: el selector mostraba nombres de Cliente únicos
+                # (df_activos['Cliente'].unique()) y luego tomaba .iloc[0] de
+                # todas las filas con ese nombre. Si un mismo cliente tenía
+                # dos encargos/causas distintos con honorarios pendientes
+                # (ej. dos encargos con precios distintos), el segundo
+                # quedaba invisible: no aparecía como opción aparte, y los
+                # botones de Registrar/Revertir Pago actualizaban las DOS
+                # filas a la vez por compartir el mismo nombre de Cliente.
+                # Ahora se identifica cada opción por ROL (única por causa o
+                # encargo), mostrando el nombre del cliente junto al detalle
+                # para diferenciarlas.
+                df_activos['_etiqueta_sel'] = df_activos.apply(
+                    lambda f: f"{f['Cliente']} — {f.get('CARATULADO') or f.get('Tipo_Negocio') or 'Sin detalle'} ({f['ROL']})",
+                    axis=1
+                )
+                mapa_etiqueta_rol = dict(zip(df_activos['_etiqueta_sel'], df_activos['ROL']))
+                etiqueta_sel = st.selectbox("Selecciona un Cliente/Encargo para gestionar:", list(mapa_etiqueta_rol.keys()))
+                rol_sel = mapa_etiqueta_rol[etiqueta_sel]
+                datos_cli = df_activos[df_activos['ROL'] == rol_sel].iloc[0]
+                cliente_sel = datos_cli['Cliente']
                 
                 with st.expander("⚙️ Ajustar Fecha de Inicio de Pagos"):
                     fecha_actual_cli = fecha_segura(datos_cli.get('Fecha_Inicio'))
@@ -4085,7 +4103,7 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                         if 'Fecha_Inicio' not in df_c.columns:
                             df_c['Fecha_Inicio'] = ""
                         df_c['Fecha_Inicio'] = df_c['Fecha_Inicio'].astype(object)
-                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
+                        df_c.loc[df_c['ROL'] == rol_sel, 'Fecha_Inicio'] = nueva_fecha.strftime("%Y-%m-%d")
                         df_c.to_csv(ARCHIVO_BD, index=False)
                         st.rerun()
 
@@ -4120,9 +4138,9 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                 if c_b1.button("📥 Registrar Pago", type="primary", use_container_width=True):
                     if datos_cli['Cuotas_Pagadas'] < datos_cli['Cuotas_Totales']:
                         nueva_cuota_num = int(datos_cli['Cuotas_Pagadas']) + 1
-                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] += 1
-                        if df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
-                            df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pagados"
+                        df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'] += 1
+                        if df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'].values[0] >= datos_cli['Cuotas_Totales']:
+                            df_c.loc[df_c['ROL'] == rol_sel, 'Estado_Honorarios'] = "Pagados"
                         df_c.to_csv(ARCHIVO_BD, index=False)
                         
                         # Se registra el pago en el historial, para poder calcular
@@ -4142,22 +4160,24 @@ elif st.session_state['menu_radio'] == "💰 Contabilidad":
                         st.rerun()
                 if c_b2.button("⏪ Revertir Pago", use_container_width=True):
                     if datos_cli['Cuotas_Pagadas'] > 0:
-                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Cuotas_Pagadas'] -= 1
-                        df_c.loc[df_c['Cliente'] == cliente_sel, 'Estado_Honorarios'] = "Pendientes"
+                        df_c.loc[df_c['ROL'] == rol_sel, 'Cuotas_Pagadas'] -= 1
+                        df_c.loc[df_c['ROL'] == rol_sel, 'Estado_Honorarios'] = "Pendientes"
                         df_c.to_csv(ARCHIVO_BD, index=False)
                         
-                        # Se elimina el último pago registrado de este cliente del
-                        # historial, para que Contabilidad General no quede
-                        # sobrevalorada tras revertir.
+                        # Se elimina el último pago registrado de ESTA causa/encargo
+                        # (por ROL) del historial, para que Contabilidad General no
+                        # quede sobrevalorada tras revertir. Antes filtraba solo por
+                        # nombre de Cliente, así que si el mismo cliente tenía dos
+                        # causas/encargos, podía borrar el pago del OTRO por error.
                         df_pagos_revertir = leer_csv_local(ARCHIVO_PAGOS_HONORARIOS, COLS_PAGOS_HONORARIOS)
-                        pagos_cliente = df_pagos_revertir[df_pagos_revertir['Cliente'] == cliente_sel]
+                        pagos_cliente = df_pagos_revertir[df_pagos_revertir['ROL'] == rol_sel]
                         if not pagos_cliente.empty:
                             idx_ultimo_pago = pagos_cliente.index[-1]
                             df_pagos_revertir = df_pagos_revertir.drop(idx_ultimo_pago)
                             df_pagos_revertir.to_csv(ARCHIVO_PAGOS_HONORARIOS, index=False)
                             dn_pagos_rev = safe_read_sheet("base_pagos_honorarios", COLS_PAGOS_HONORARIOS)
                             if not dn_pagos_rev.empty:
-                                coincidencia_rev = dn_pagos_rev[(dn_pagos_rev['Cliente'] == cliente_sel) & (dn_pagos_rev['Usuario_Propietario'] == usuario_actual)]
+                                coincidencia_rev = dn_pagos_rev[(dn_pagos_rev['ROL'] == rol_sel) & (dn_pagos_rev['Usuario_Propietario'] == usuario_actual)]
                                 if not coincidencia_rev.empty:
                                     dn_pagos_rev = dn_pagos_rev.drop(coincidencia_rev.index[-1])
                                     safe_update_sheet("base_pagos_honorarios", dn_pagos_rev)
@@ -6812,17 +6832,30 @@ elif st.session_state['menu_radio'] == "👥 Clientes":
                     df_causas_nube_ficha = safe_read_sheet("base_causas", COLS_CAUSAS)
                     if not df_causas_nube_ficha.empty and 'Usuario_Propietario' in df_causas_nube_ficha.columns:
                         df_causas = df_causas_nube_ficha[df_causas_nube_ficha['Usuario_Propietario'] == usuario_actual]
+                if not df_causas.empty and 'ROL' in df_causas.columns:
+                    # Mismo blindaje que ya existe en el módulo de Contabilidad
+                    # (línea ~4046): si el archivo local quedó con una fila
+                    # duplicada para el mismo ROL (por ejemplo, un guardado que
+                    # se ejecutó dos veces), esta pantalla no lo filtraba y
+                    # generaba dos botones "Ir al Expediente" con la misma key,
+                    # lo que hacía crashear la app entera con
+                    # StreamlitDuplicateElementKey.
+                    df_causas = df_causas.drop_duplicates(subset=['ROL'])
                 if not df_causas.empty:
                     causas_cli = df_causas[df_causas['RUT'].astype(str) == str(rut_actual)]
                     if causas_cli.empty:
                         st.write("Este cliente no tiene causas vinculadas todavía.")
                     else:
-                        for _, c in causas_cli.iterrows():
+                        for _idx_causa_cli, c in enumerate(causas_cli.itertuples()):
                             with st.container(border=True):
                                 c1, c2 = st.columns([3, 1])
-                                c1.markdown(f"**Rol:** {c['ROL']} | **Caratulado:** {c.get('CARATULADO', '--')}")
-                                if c2.button("📂 Ir al Expediente", key=f"btn_ir_{c['ROL']}"):
-                                    ir_a_expediente(c['ROL']); st.rerun()
+                                c1.markdown(f"**Rol:** {c.ROL} | **Caratulado:** {getattr(c, 'CARATULADO', '--') or '--'}")
+                                # Se agrega el índice de la fila a la key como
+                                # segunda capa de seguridad: aunque el dedup de
+                                # arriba debería bastar, así ninguna combinación
+                                # de datos repetidos puede volver a tumbar la app.
+                                if c2.button("📂 Ir al Expediente", key=f"btn_ir_{c.ROL}_{_idx_causa_cli}"):
+                                    ir_a_expediente(c.ROL); st.rerun()
                 else:
                     st.write("Base de causas vacía.")
 
